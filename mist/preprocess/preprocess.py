@@ -1,3 +1,5 @@
+
+
 # Create a CSV with file paths for a dataset
 def get_paths_csv(base_dir, name_dict, output_csv):
     def get_files(path):
