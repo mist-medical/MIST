@@ -36,6 +36,10 @@ class Metrics(object):
         # You can also get JaccardCoefficient or VolumeSimilarity by changing the method
         # https://simpleitk.org/doxygen/latest/html/classitk_1_1simple_1_1LabelOverlapMeasuresImageFilter.html
         dice = overlapFilter.GetDiceCoefficient()
+        
+        if dice == float('inf'):
+            dice = 1.0
+        
         return dice
 
     def hausdorff_sitk(self, truth, pred, mode = 'max'):

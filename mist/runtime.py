@@ -23,6 +23,7 @@ from model import *
 from loss import *
 from preprocess import *
 from metrics import *
+from utils import *
 
 import warnings
 warnings.simplefilter(action = 'ignore', 
@@ -31,27 +32,6 @@ warnings.simplefilter(action = 'ignore',
 warnings.simplefilter(action = 'ignore', 
                       category = FutureWarning)
 import pdb
-
-# Set seed for reproducibility
-seed = 42
-random.seed(seed)
-np.random.seed(seed)
-tf.random.set_seed(seed)
-
-# Set HDF file locking to use model checkpoint
-os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'
-
-# Set mixed precision policy
-# TODO: check compute capacity before we set this
-policy = mixed_precision.Policy('mixed_float16')
-mixed_precision.set_global_policy(policy)
-
-# For tensorflow 2.x.x allow memory growth on GPU
-###################################
-gpus = tf.config.list_physical_devices('GPU')
-for gpu in gpus:
-    tf.config.experimental.set_memory_growth(gpu, True)
-###################################
 
 class RunTime(object):
     
@@ -381,6 +361,7 @@ class RunTime(object):
                 
                 row_dict['{}_dice'.format(key)] = self.metrics.dice_sitk(pred_temp_filename, mask_temp_filename)
                 row_dict['{}_haus95'.format(key)] = self.metrics.hausdorff(pred_temp_filename, mask_temp_filename, '95')
+                row_dict['{}_avg_surf'.format(key)] = self.metrics.surface_hausdorff(pred_temp_filename, mask_temp_filename, 'mean')
                 
             self.results_df = self.results_df.append(row_dict, ignore_index = True)
             
@@ -396,6 +377,7 @@ class RunTime(object):
     def compute_val_loss(self, model, ds):
         val_loss = list()           
         iterator = ds.as_numpy_iterator()
+        pred_time = list()
         for element in iterator:            
             image = element[0]
             truth = element[1]
@@ -427,8 +409,6 @@ class RunTime(object):
                                       j:(j + self.inferred_params['patch_size'][1]), 
                                       k:(k + self.inferred_params['patch_size'][2]), ...]
                         patch = patch.reshape((1, *patch.shape))
-                        
-                        # Prediction on patch
                         prediction[i:(i + self.inferred_params['patch_size'][0]), 
                                    j:(j + self.inferred_params['patch_size'][1]), 
                                    k:(k + self.inferred_params['patch_size'][2]), ...] = model.predict(patch)
@@ -450,6 +430,22 @@ class RunTime(object):
         del iterator
         gc.collect()
         return np.mean(val_loss)
+    
+    def get_nearest_power(self, n):
+        lower_power = 2**np.floor(np.log2(n))
+        higher_power = 2**np.ceil(np.log2(n))
+        
+        lower_diff = np.abs(n - lower_power)
+        higher_diff = np.abs(n - higher_power)
+        
+        if lower_diff > higher_diff:
+            nearest_power = higher_power
+        elif lower_diff < higher_diff:
+            nearest_power = lower_power
+        else:
+            nearest_power = lower_power
+        
+        return int(nearest_power)
             
     def alpha_schedule(self, step): 
         #TODO: Make a step-function scheduler and an adaptive option
@@ -461,6 +457,8 @@ class RunTime(object):
         tfrecords = [os.path.join(self.params['processed_data_dir'], 
                                   '{}.tfrecord'.format(self.df.iloc[i]['id'])) for i in range(len(self.df))]
         splits = kfold.split(tfrecords)
+        
+        available_mem = psutil.virtual_memory().available
                 
         split_cnt = 1
         for split in splits:
@@ -470,7 +468,7 @@ class RunTime(object):
             # Get validation tfrecords from training split
             train_tfr_list, val_tfr_list, _, _ = train_test_split(train_tfr_list, 
                                                                   train_tfr_list, 
-                                                                  test_size = 0.1, 
+                                                                  test_size = 0.05, 
                                                                   random_state = 42)
             
             # Prepare test set
@@ -501,14 +499,13 @@ class RunTime(object):
 
                 if i == 0:
                     # Get image cache size from available system memory
-                    available_mem = psutil.virtual_memory().available
                     if (self.params['loss'] == 'dice') or (self.params['loss'] == 'gdl'):
                         image_buffer_size = 4 * (np.prod(self.inferred_params['median_image_size']) * (self.n_channels + len(self.params['labels'])))
                     else:
                         image_buffer_size = 4 * (np.prod(self.inferred_params['median_image_size']) * (self.n_channels + (2 * len(self.params['labels']))))
 
-                    # Set cache size so that we do not exceed 10% of available memory
-                    cache_size = int(np.ceil((0.005 * available_mem) / image_buffer_size))
+                    # Set cache size so that we do not exceed 5% of available memory
+                    cache_size = int(np.ceil((0.05 * available_mem) / image_buffer_size))
                     if cache_size < len(self.df):
                         # Initialize training cache and pool in first epoch
                         train_cache = random.sample(train_tfr_list, cache_size)
@@ -517,50 +514,61 @@ class RunTime(object):
                         random.shuffle(cache_pool)
                     else:
                         train_cache = train_tfr_list
+                        
+                    if split_cnt == 1:
+                        # Compute patch size
+                        patch_size = [self.get_nearest_power(self.inferred_params['median_image_size'][i]) for i in range(3)]
+                        patch_size = [int(patch_size[i]) for i in range(3)]
+                        
+                        gpu_memory_needed = np.Inf
+                        _, gpu_memory_available = auto_select_gpu()
+                        patch_reduction_switch = 1
 
-                    # Compute network depth
-                    depth = depth = int(np.log(np.min(self.inferred_params['patch_size']) / 4) / np.log(2))
-                    
-                    # Build model from scratch in first epoch    
-                    if self.params['model'] == 'unet':
-                        model = UNet(input_shape = tuple(self.inferred_params['patch_size']), 
-                                     num_channels = self.n_channels,
-                                     num_class = self.n_classes, 
-                                     init_filters = 32, 
-                                     depth = depth, 
-                                     pocket = self.params['pocket']).build_model()
+                        while gpu_memory_needed >= gpu_memory_available:
+                            # Compute network depth
+                            depth = int(np.log(np.min(patch_size) / 4) / np.log(2))
 
-                    if self.params['model'] == 'resnet':
-                        model = ResNet(input_shape = tuple(self.inferred_params['patch_size']), 
-                                       num_channels = self.n_channels,
-                                       num_class = self.n_classes, 
-                                       init_filters = 32, 
-                                       depth = depth, 
-                                       pocket = self.params['pocket']).build_model()
+                            # Build model from scratch in first epoch
+                            model = get_model(self.params['model'], 
+                                              patch_size = tuple(patch_size), 
+                                              num_channels = self.n_channels,
+                                              num_class = self.n_classes, 
+                                              init_filters = 32, 
+                                              depth = depth, 
+                                              pocket = self.params['pocket'])
+                            
+                            gpu_memory_needed = get_model_memory_usage(2, model)
 
-                    if self.params['model'] == 'densenet':
-                        model = DenseNet(input_shape = tuple(self.inferred_params['patch_size']), 
-                                         num_channels = self.n_channels,
-                                         num_class = self.n_classes, 
-                                         init_filters = 32, 
-                                         depth = depth, 
-                                         pocket = self.params['pocket']).build_model()
+                            if gpu_memory_needed > gpu_memory_available:
+                                if patch_reduction_switch == 1:
+                                    patch_size[2] /= 2
+                                    patch_size = [int(patch_size[i]) for i in range(3)]
+                                    patch_reduction_switch = 2
+                                else:
+                                    patch_size[0] /= 2
+                                    patch_size[1] /= 2
+                                    patch_size = [int(patch_size[i]) for i in range(3)]
+                                    patch_reduction_switch = 1
 
-                    if self.params['model'] == 'multiresnet':
-                        model = MultiResNet(input_shape = tuple(self.inferred_params['patch_size']), 
-                                            num_channels = self.n_channels,
-                                            num_class = self.n_classes, 
-                                            init_filters = 32, 
-                                            depth = depth, 
-                                            pocket = self.params['pocket']).build_model()
-
-                    if self.params['model'] == 'hrnet':
-                        model = HRNet(input_shape = tuple(self.inferred_params['patch_size']), 
-                                      num_channels = self.n_channels,
-                                      num_class = self.n_classes, 
-                                      init_filters = 32,                                      
-                                      pocket = self.params['pocket']).build_model()
-
+                        ### End of while loop ###
+                        patch_size = [int(patch_size[i]) for i in range(3)]
+                        print('Using patch size {}'.format(patch_size))
+                        self.inferred_params['patch_size'] = patch_size
+                        
+                        # Save inferred parameters as json file
+                        inferred_params_json_file = os.path.abspath(self.params['inferred_params'])
+                        with open(inferred_params_json_file, 'w') as outfile: 
+                            json.dump(self.inferred_params, outfile)
+                    else:
+                        depth = int(np.log(np.min(self.inferred_params['patch_size']) / 4) / np.log(2))
+                        model = get_model(self.params['model'], 
+                                          patch_size = tuple(self.inferred_params['patch_size']), 
+                                          num_channels = self.n_channels,
+                                          num_class = self.n_classes, 
+                                          init_filters = 32, 
+                                          depth = depth, 
+                                          pocket = self.params['pocket'])
+                                                
                 else:
                     if cache_size < len(self.df):
                         # Pick n_replacement new patients from pool and remove the same number from the current cache
@@ -584,7 +592,7 @@ class RunTime(object):
                                                    compression_type = 'GZIP', 
                                                    num_parallel_reads = tf.data.AUTOTUNE)
 
-                if cache_size < 10:
+                if cache_size < 5:
                     train_ds = train_ds.map(self.decode, num_parallel_calls = tf.data.AUTOTUNE)
                 else:
                     train_ds = train_ds.map(self.decode, num_parallel_calls = tf.data.AUTOTUNE).cache()
@@ -606,7 +614,8 @@ class RunTime(object):
                     plateau_cnt = 1
                     print('Decreasing learning rate to {}'.format(learning_rate))
 
-                opt = tf.keras.optimizers.Adam(learning_rate = learning_rate)
+                opt = tf.keras.optimizers.Adam(learning_rate = learning_rate,
+                                               global_clipnorm = 0.1)
                 model.compile(optimizer = opt, loss = [self.loss.loss_wrapper(alpha)])
 
                 # Train model
@@ -652,6 +661,18 @@ class RunTime(object):
                 
     def run(self, run_preprocess = True):
         
+        # Set up GPU for run
+        # Set seed for reproducibility
+        seed = 42
+        random.seed(seed)
+        np.random.seed(seed)
+        tf.random.set_seed(seed)
+
+        # Set HDF file locking to use model checkpoint
+        os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
+        os.environ['TF_CPP_MIN_VLOG_LEVEL'] = '3'
+        
         if run_preprocess:
             # Preprocess data if running for the first time
             self.preprocess.run()
@@ -661,17 +682,54 @@ class RunTime(object):
         with open(self.params['inferred_params'], 'r') as file:
             self.inferred_params = json.load(file)
                         
-        self.inferred_params['patch_size'] = [int(patch_dim) for patch_dim in self.inferred_params['patch_size']]
-        
         # Initialize results dataframe
-        metrics = ['dice', 'haus95']
+        metrics = ['dice', 'haus95', 'avg_surf']
         results_cols = ['id']
         for metric in metrics: 
             for key in self.params['final_classes'].keys():
                 results_cols.append('{}_{}'.format(key, metric))
                 
         self.results_df = pd.DataFrame(columns = results_cols)
+
+        print('Setting up GPU...')
+        # Select GPU for training
+        # TODO: Make multi gpu training and option
+        if 'gpu' in self.params.keys():
+            if self.params['gpu'] == 'auto':
+                # Auto select GPU if using single GPU
+                gpu_id, available_mem = auto_select_gpu()
+                os.environ['CUDA_VISIBLE_DEVICES'] = gpu_id
+            elif isinstance(self.params['gpu'], int):
+                # Use user specified gpu
+                os.environ['CUDA_VISIBLE_DEVICES'] = str(self.params['gpu'])
+        else:
+            # If no gpu is specified, default to auto selection
+            gpu_id, available_mem = auto_select_gpu()
+            os.environ['CUDA_VISIBLE_DEVICES'] = gpu_id
+
+        # Get GPUs
+        gpus = tf.config.list_physical_devices('GPU')
+
+        # Set mixed precision policy if compute capability >= 7.0
+        use_mixed_policy = True
+        for gpu in gpus:
+            details = tf.config.experimental.get_device_details(gpu)
+            compute_capability = details['compute_capability'][0]
+            if compute_capability < 7:
+                use_mixed_policy = False
+                break
         
+        if use_mixed_policy:
+            policy = mixed_precision.Policy('mixed_float16')
+            mixed_precision.set_global_policy(policy)
+
+        # For tensorflow 2.x.x allow memory growth on GPU
+        ###################################
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        ###################################
+
+        # Run training pipeline
         self.train()
         
         # Get final statistics
@@ -693,4 +751,5 @@ class RunTime(object):
         self.results_df = self.results_df.append(percentile50_row, ignore_index = True)
         self.results_df = self.results_df.append(percentile75_row, ignore_index = True)
         
+        # Write results to csv file
         self.results_df.to_csv(self.params['results_csv'], index = False)

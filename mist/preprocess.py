@@ -116,7 +116,7 @@ class Preprocess(object):
             for i in range(1, len(cluster_labels)):
                 cluster_sizes.append(np.sum(clusters == cluster_labels[i]))
                 
-        min_component_size = np.ceil(0.5 * np.percentile(cluster_sizes, 5))
+        min_component_size = np.ceil(0.05 * np.median(cluster_sizes))
         
         return min_component_size
         
@@ -195,21 +195,30 @@ class Preprocess(object):
                     
         return target_spacing
     
-    def get_next_power_of_two(self, n):
-        n = n - 1
-        while n & n - 1:
-            n = n & n - 1
-        return n << 1
+    def get_nearest_power(self, n):
+        lower_power = 2**np.floor(np.log2(n))
+        higher_power = 2**np.ceil(np.log2(n))
+        
+        lower_diff = np.abs(n - lower_power)
+        higher_diff = np.abs(n - higher_power)
+        
+        if lower_diff > higher_diff:
+            nearest_power = higher_power
+        elif lower_diff < higher_diff:
+            nearest_power = lower_power
+        else:
+            nearest_power = lower_power
+        
+        return int(nearest_power)
     
-    def get_patch_size(self):
+    def get_median_dims(self):
         '''
         Determine patch size from resampled data.
         '''
         
-        print('Getting patch size...')
+        print('Getting median resampled dimensions...')
         
         resampled_dims = np.zeros((len(self.df), 3))
-        patch_size = [128, 128, 128]
         max_buffer_size = 1.5e9
         cnt = 0
                 
@@ -264,24 +273,10 @@ class Preprocess(object):
         ### End of while loop ###
 
         # Get patch size after finalizing target image spacing
-        
         median_resampled_dims = list(np.median(resampled_dims, axis = 0))
         median_resampled_dims = [int(np.floor(median_resampled_dims[i])) for i in range(3)]
                 
-        # Get patch size according to median image shape
-        for i in range(3):
-            if median_resampled_dims[i] < patch_size[i]:
-                # If median length at this axis is less than the 128,
-                # then find nearest power of 2
-                next_power = self.get_next_power_of_two(median_resampled_dims[i])
-                
-                # If next power of 2 is less than 32, then set to 32
-                if next_power < 32:
-                    patch_size[i] = 32
-                else:
-                    patch_size[i] = next_power
-                
-        return patch_size, median_resampled_dims
+        return median_resampled_dims
         
     def get_ct_norm_parameters(self):
             '''
@@ -401,8 +396,8 @@ class Preprocess(object):
         self.anisotropic = self.check_anisotropic()
         
         # Start getting parameters from dataset
-        min_component_size = self.get_min_component_size()
         use_nz_mask = self.check_nz_mask()
+        min_component_size = self.get_min_component_size()
         target_spacing = self.get_target_image_spacing()
 
         if self.params['modality'] == 'ct':
@@ -425,8 +420,7 @@ class Preprocess(object):
                                     'window_range': [0.5, 99.5], 
                                     'min_component_size': float(min_component_size)}
             
-        patch_size, median_dims = self.get_patch_size()
-        self.inferred_params['patch_size'] = [int(patch_size[i]) for i in range(3)]
+        median_dims = self.get_median_dims()
         self.inferred_params['median_image_size'] = [int(median_dims[i]) for i in range(3)]
                             
     def run(self):
@@ -549,6 +543,16 @@ class Preprocess(object):
                 img = images[j].numpy()
                 img = self.window(img)
                 img = self.normalize(img)
+                
+                # Bug fix. Sometimes the dimensions of the resampled images
+                # are off by 1. 
+                temp_dims = [np.max([img.shape[i], dims[i]]) for i in range(3)]
+                img_temp = np.zeros(tuple(temp_dims))
+                img_temp[0:img.shape[0], 
+                         0:img.shape[1], 
+                         0:img.shape[2], ...] = img
+                img = img_temp[0:dims[0], 0:dims[1], 0:dims[2]]
+                
                 image_npy[..., j] = img
                                 
             # Get points in mask associated with each label
