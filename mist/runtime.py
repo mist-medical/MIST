@@ -518,6 +518,7 @@ class RunTime(object):
                     if split_cnt == 1:
                         # Compute patch size
                         patch_size = [self.get_nearest_power(self.inferred_params['median_image_size'][i]) for i in range(3)]
+                        patch_size = [np.min([128, patch_size[i]]) for i in range(3)]
                         patch_size = [int(patch_size[i]) for i in range(3)]
                         
                         gpu_memory_needed = np.Inf
