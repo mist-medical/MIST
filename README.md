@@ -1,4 +1,4 @@
-# MIST: Medical Imaging Segmentation Toolkit
+# Medical Imaging Segmentation Toolkit
 
 Work in progress. MIST is a simple 3D medical image segmentation framework for TensorFlow.
 
