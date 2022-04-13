@@ -8,3 +8,4 @@ TODO:
 - Create a MIST pypi package
 - Add command line support
 - Create documentation
+- Benchmark against nnUNet for accuracy, speed, and resource consumption
