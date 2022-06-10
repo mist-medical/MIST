@@ -1,8 +1,10 @@
 # Medical Imaging Segmentation Toolkit
 
-Work in progress. MIST is a simple 3D medical image segmentation framework for TensorFlow.
+Work in progress. MIST is a simple and fully automated 3D medical image segmentation framework built for TensorFlow. To initiate the MIST pipeline, you need to provide it a JSON file with some parameters (i.e., path to data, modality, class labels, etc.). The `example.ipynb` notebook provides a use case for MIST on the LiTS dataset. 
 
 ### Inputs
+Below is a table of all possible inputs to the MIST pipeline. Note that not all of these inputs are required.
+
 | Input                | Type                    | Required? | Default                        | Description                                                                                                                                                                                                                                                                                            |
 |----------------------|-------------------------|:---------:|--------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `raw_data_dir`       | `str`                   |     *     |                                | Path to directory containing raw nifti files                                                                                                                                                                                                                                                           |
