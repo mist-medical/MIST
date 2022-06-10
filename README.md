@@ -4,6 +4,7 @@ Work in progress. MIST is a simple, fully automated 3D medical image segmentatio
 
 ### Getting Started
 Before starting with MIST, please ensure that your data is structured as follows:
+
     your_data/
     │   └── patient_1
     │       └── mask.nii.gz
@@ -20,6 +21,7 @@ Before starting with MIST, please ensure that your data is structured as follows
     |       └── image_n.nii.gz
     |   ...
     └── 
+    
 
 To initiate the MIST pipeline, you need to provide it a JSON file with some parameters (i.e., path to data, modality, class labels, etc.). The `example.ipynb` notebook provides a use case for MIST on the LiTS dataset. 
 
