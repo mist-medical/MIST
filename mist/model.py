@@ -1,6 +1,40 @@
+import os
 import tensorflow as tf
 from tensorflow.keras import layers
-from tensorflow.keras.models import Model
+from tensorflow.keras.models import Model, load_model
+import tensorflow_addons as tfa
+
+from normalizations import *
+from loss import *
+
+class PretrainedUNet(object):
+    
+    def __init__(self, input_shape, num_channels, num_class, json_file, model_path):
+    
+        # User defined inputs
+        self.input_shape = input_shape
+        self.num_channels = num_channels
+        self.num_class = num_class
+        self.json_file = json_file
+        self.model_path = model_path
+                 
+    def build_model(self):
+        # Load pretrained model
+        loss = Loss(self.json_file)
+        pretrained = load_model(self.model_path, custom_objects = {'loss': loss.loss_wrapper(1)})
+        
+        # Use everything but the final layer
+        layer_outputs = [layer.output for layer in [pretrained.layers[-2]]]
+        activation_model = Model(inputs = pretrained.input, outputs = layer_outputs)
+        
+        # Create new model 
+        inputs = layers.Input((*self.input_shape, self.num_channels))
+        x = activation_model(inputs)
+        outputs = layers.Conv3D(self.num_class, 1, activation = 'softmax', dtype = 'float32')(x)
+        model = Model(inputs = [inputs], outputs = [outputs])
+        
+        return model
+        
 
 class UNet(object):
 
@@ -23,13 +57,6 @@ class UNet(object):
         if self.pocket:
             self.mul_on_downsample = 1
 
-        # Parameters for each keras layer that we use.
-        # I like to keep them all in one place (i.e., a params dictionary)
-        self.params = dict()
-        self.params['conv'] = dict(kernel_size = 3, activation = 'relu', padding = 'same')
-        self.params['maxpool3d'] = dict(pool_size = (2, 2, 2), strides = (2, 2, 2))
-        self.params['trans_conv'] = dict(kernel_size = 2, strides = 2)
-
     def conv(self, x, filters):
         x = layers.Conv3D(filters = filters, kernel_size = 3, padding = 'same')(x)
         x = layers.BatchNormalization()(x)
@@ -44,209 +71,24 @@ class UNet(object):
     def encoder(self, x):
         skips = list()
         for i in range(self.depth):
-            filters = self.init_filters * (self.mul_on_downsample) ** i
+            filters = np.min([self.init_filters * (self.mul_on_downsample) ** i, 256])
             skips.append(self.block(x, filters))
-            x = layers.MaxPooling3D(**self.params['maxpool3d'])(skips[i])
-
-        # Bottleneck
-        x = self.block(x, self.init_filters * (self.mul_on_downsample) ** self.depth)
-        skips.append(x)
-        return skips
-
-    def decoder(self, skips):
-        x = skips[-1]
-        skips = skips[:-1]
-        for i in range(self.depth - 1, -1, -1):
-            filters = self.init_filters * (self.mul_on_downsample) ** i
-            x = layers.Conv3DTranspose(filters, **self.params['trans_conv'])(x)
-
-            x = layers.concatenate([x, skips[i]])
-            x = self.block(x, filters)
-        return x
-
-    def softmax_output(self, x):
-        x = layers.Conv3D(self.num_class, 1, activation = 'softmax', dtype = 'float32')(x)
-        return x
-
-    def build_model(self):
-        inputs = layers.Input((*self.input_shape, self.num_channels))
-
-        skips = self.encoder(inputs)
-        outputs = self.decoder(skips)
-        outputs = self.softmax_output(outputs)
-
-        model = Model(inputs = [inputs], outputs = [outputs])
-        return model
-    
-class UNetAblation(object):
-    def __init__(self, input_shape, num_channels, num_class, init_filters, depth, ablation_level):
-
-        # User defined inputs
-        self.input_shape = input_shape
-        self.num_channels = num_channels
-        self.num_class = num_class
-        self.init_filters = init_filters
-        self.depth = depth
-        self.ablation_level = ablation_level
-        
-        # Auxiliary variable
-        self.init_filters_original = init_filters
-
-        # Two convolution layers per block. I can play with this later to see if 3 or 4 improves
-        # performance
-        self.convs_per_block = 2
-
-        # If pocket network, do not double feature maps after downsampling
-        self.mul_on_downsample = 2
-
-        # Parameters for each keras layer that we use.
-        # I like to keep them all in one place (i.e., a params dictionary)
-        self.params = dict()
-        self.params['conv'] = dict(kernel_size = 3, activation = 'relu', padding = 'same')
-        self.params['maxpool3d'] = dict(pool_size = (2, 2, 2), strides = (2, 2, 2))
-        self.params['trans_conv'] = dict(kernel_size = 2, strides = 2)
-
-    def conv(self, x, filters):
-        x = layers.Conv3D(filters = filters, kernel_size = 3, padding = 'same')(x)
-        x = layers.BatchNormalization()(x)
-        x = layers.Activation('relu')(x)
-        return x
-
-    def block(self, x, filters):
-        for _ in range(self.convs_per_block):
-            x = self.conv(x, filters)
-        return x
-
-    def encoder(self, x):
-        skips = list()
-        for i in range(self.depth):
-            # For ablation study, stop doubling after specified depth
-            if i > self.ablation_level:
-                self.mul_on_downsample = 1
-            else:
-                self.mul_on_downsample = 2
-                
-            filters = self.init_filters * (self.mul_on_downsample) ** i
-            
-            if i == self.ablation_level:
-                self.init_filters = filters
-                
-            skips.append(self.block(x, filters))
-            x = layers.MaxPooling3D(**self.params['maxpool3d'])(skips[i])
-
-        # Bottleneck
-        if self.depth > self.ablation_level:
-            self.mul_on_downsample = 1
-        else:
-            self.mul_on_downsample = 2
-        x = self.block(x, self.init_filters * (self.mul_on_downsample) ** self.depth)
-        skips.append(x)
-        return skips
-
-    def decoder(self, skips):
-        x = skips[-1]
-        skips = skips[:-1]
-        for i in range(self.depth - 1, -1, -1):
-            # For ablation study, stop doubling after specified depth
-            if i > self.ablation_level:
-                self.mul_on_downsample = 1
-            else:
-                self.mul_on_downsample = 2
-                
-            if i <= self.ablation_level:
-                self.init_filters = self.init_filters_original
-                
-            filters = self.init_filters * (self.mul_on_downsample) ** i
-            x = layers.Conv3DTranspose(filters, **self.params['trans_conv'])(x)
-
-            x = layers.concatenate([x, skips[i]])
-            x = self.block(x, filters)
-        return x
-
-    def softmax_output(self, x):
-        x = layers.Conv3D(self.num_class, 1, activation = 'softmax', dtype = 'float32')(x)
-        return x
-
-    def build_model(self):
-        inputs = layers.Input((*self.input_shape, self.num_channels))
-
-        skips = self.encoder(inputs)
-        outputs = self.decoder(skips)
-        outputs = self.softmax_output(outputs)
-
-        model = Model(inputs = [inputs], outputs = [outputs])
-        return model
-    
-class UNetSE(object):
-    def __init__(self, input_shape, num_channels, num_class, init_filters, depth, pocket):
-
-        # User defined inputs
-        self.input_shape = input_shape
-        self.num_channels = num_channels
-        self.num_class = num_class
-        self.init_filters = init_filters
-        self.depth = depth
-        self.pocket = pocket
-
-        # Two convolution layers per block. I can play with this later to see if 3 or 4 improves
-        # performance
-        self.convs_per_block = 2
-
-        # If pocket network, do not double feature maps after downsampling
-        self.mul_on_downsample = 2
-        if self.pocket:
-            self.mul_on_downsample = 1
-
-    def conv(self, x, filters):
-        x = layers.Conv3D(filters = filters, kernel_size = 3, padding = 'same')(x)
-        x = layers.BatchNormalization()(x)
-        x = layers.Activation('relu')(x)
-        return x
-
-    def block(self, x, filters):
-        for _ in range(self.convs_per_block):
-            x = self.conv(x, filters)
-        return x
-    
-    def squeeze_excite_block(self, x, filters):
-        '''
-        Squeeze-Excitation Block from:
-        https://arxiv.org/pdf/1709.01507.pdf
-        Code adapted from:
-        https://github.com/titu1994/keras-squeeze-excite-network
-        '''
-        se_shape = (1, 1, filters)
-        ratio = 16
-        se = layers.GlobalAveragePooling3D()(x)
-        se = layers.Reshape(se_shape)(se)
-        se = layers.Dense(filters // ratio, activation = 'relu', use_bias = False)(se)
-        se = layers.Dense(filters, activation = 'sigmoid', use_bias = False)(se)
-
-        x = layers.Add()([layers.multiply([x, se]), x])
-        return x
-
-    def encoder(self, x):
-        skips = list()
-        for i in range(self.depth):
-            filters = self.init_filters * (self.mul_on_downsample) ** i
-            skips.append(self.squeeze_excite_block(self.block(x, filters), filters))
             x = layers.MaxPooling3D(pool_size = (2, 2, 2), strides = (2, 2, 2))(skips[i])
 
         # Bottleneck
-        filters = self.init_filters * (self.mul_on_downsample) ** self.depth
-        skips.append(self.squeeze_excite_block(self.block(x, filters), filters))
+        x = self.block(x, np.min([self.init_filters * (self.mul_on_downsample) ** i, 256]))
+        skips.append(x)
         return skips
 
     def decoder(self, skips):
         x = skips[-1]
         skips = skips[:-1]
         for i in range(self.depth - 1, -1, -1):
-            filters = self.init_filters * (self.mul_on_downsample) ** i
-            x = layers.Conv3DTranspose(filters, kernel_size = 2, strides = 2)(x)
+            filters = np.min([self.init_filters * (self.mul_on_downsample) ** i, 256])
+            x = layers.Conv3DTranspose(filters = filters, kernel_size = 2, strides = 2)(x)
 
             x = layers.concatenate([x, skips[i]])
             x = self.block(x, filters)
-            x = self.squeeze_excite_block(x, filters)
         return x
 
     def softmax_output(self, x):
@@ -356,10 +198,14 @@ class DenseNet(object):
         self.mul_on_downsample = 2
         if self.pocket:
             self.mul_on_downsample = 1
-
+            
     def conv(self, x, filters):
         x = layers.Conv3D(filters = filters, kernel_size = 3, padding = 'same')(x)
-        x = layers.BatchNormalization()(x)
+        x = InstanceNormalization(axis = -1, 
+                                  center = True, 
+                                  scale = True,
+                                  beta_initializer = 'random_uniform',
+                                  gamma_initializer = 'random_uniform')(x)
         x = layers.PReLU(shared_axes=[1, 2, 3])(x)
         return x
 
@@ -368,35 +214,78 @@ class DenseNet(object):
             y = self.conv(x, filters)
             x = layers.concatenate([x, y])
 
-        x = layers.Conv3D(filters = filters, kernel_size = 1)(x)
+        x = layers.Conv3D(filters, kernel_size = 1)(x)
         x = layers.PReLU(shared_axes=[1, 2, 3])(x)
         return x
+    
+    def squeeze_excite_block(self, x, filters):
+        
+        '''
+        Squeeze-Excitation Block from:
+        https://arxiv.org/pdf/1709.01507.pdf
+        
+        Code adapted from:
+        https://github.com/titu1994/keras-squeeze-excite-network
+        '''
+        
+        se_shape = (1, 1, filters)
+        ratio = 4
+        se = layers.GlobalAveragePooling3D()(x)
+        se = layers.Reshape(se_shape)(se)
+        se = layers.Dense(filters // ratio, activation = 'relu', use_bias = False)(se)
+        se = layers.Dense(filters, activation = 'sigmoid', use_bias = False)(se)
 
+        x = layers.Add()([layers.multiply([x, se]), x])
+        return x
+    
     def encoder(self, x):
         skips = list()
         for i in range(self.depth):
             filters = self.init_filters * (self.mul_on_downsample) ** i
-            skips.append(self.block(x, filters))
+            skips.append(self.squeeze_excite_block(self.block(x, filters), filters))
             x = layers.Conv3D(filters, kernel_size = 2, strides = 2)(skips[i])
+            x = InstanceNormalization(axis = -1, 
+                                      center = True, 
+                                      scale = True,
+                                      beta_initializer = 'random_uniform',
+                                      gamma_initializer = 'random_uniform')(x)
+            x = layers.PReLU(shared_axes=[1, 2, 3])(x)
 
         # Bottleneck
-        x = self.block(x, self.init_filters * (self.mul_on_downsample) ** self.depth)
-        skips.append(x)
+        filters = self.init_filters * (self.mul_on_downsample) ** self.depth
+        skips.append(self.squeeze_excite_block(self.block(x, filters), filters))
         return skips
     
     def decoder(self, skips):
         x = skips[-1]
         skips = skips[:-1]
+        deepsuper_blocks = list()
         for i in range(self.depth - 1, -1, -1):
             filters = self.init_filters * (self.mul_on_downsample) ** i
-            x = layers.Conv3DTranspose(filters, kernel_size = 2, strides = 2)(x)
+            x = layers.Conv3DTranspose(filters = filters, kernel_size = 2, strides = 2)(x)
+            x = InstanceNormalization(axis = -1, 
+                                      center = True, 
+                                      scale = True,
+                                      beta_initializer = 'random_uniform',
+                                      gamma_initializer = 'random_uniform')(x)
+            x = layers.PReLU(shared_axes=[1, 2, 3])(x)
 
             x = layers.concatenate([x, skips[i]])
             x = self.block(x, filters)
-        return x
-
-    def softmax_output(self, x):
-        x = layers.Conv3D(self.num_class, 1, activation = 'softmax', dtype = 'float32')(x)
+            x = self.squeeze_excite_block(x, filters)
+            deepsuper_blocks.append(x)
+            
+        # Use deep supervision 
+        d = layers.Conv3D(self.num_class, kernel_size = 1)(deepsuper_blocks[0])
+        d = layers.UpSampling3D(size = (2, 2, 2))(d)
+        for i in range(1, len(deepsuper_blocks) - 1):
+            d_next = layers.Conv3D(self.num_class, kernel_size = 1)(deepsuper_blocks[i])
+            d = layers.Add()([d, d_next])
+            d = layers.UpSampling3D(size = (2, 2, 2))(d)
+            
+        x = layers.Conv3D(self.num_class, 1)(x)
+        x = layers.Add()([x, d])
+        x = layers.Activation('softmax', dtype = 'float32')(x) 
         return x
 
     def build_model(self):
@@ -404,9 +293,9 @@ class DenseNet(object):
 
         skips = self.encoder(inputs)
         outputs = self.decoder(skips)
-        outputs = self.softmax_output(outputs)
 
         model = Model(inputs = [inputs], outputs = [outputs])
+
         return model
     
 class MultiResNet(object):
@@ -690,8 +579,16 @@ class HRNet(object):
 
         model = Model(inputs = [inputs], outputs = [outputs])
         return model
+
+def get_model(model_name, patch_size, num_channels, num_class, init_filters, depth, pocket, **kwargs):
     
-def get_model(model_name, patch_size, num_channels, num_class, init_filters, depth, pocket):
+    if os.path.exists(model_name):
+        model = PretrainedUNet(input_shape = tuple(patch_size), 
+                               num_channels = num_channels,
+                               num_class = num_class,
+                               json_file = kwargs['json_file'], 
+                               model_path = model_name).build_model()
+        
     if model_name == 'unet':
         model = UNet(input_shape = tuple(patch_size), 
                      num_channels = num_channels,

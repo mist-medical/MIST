@@ -1,4 +1,6 @@
 import json
+import numpy as np
+import tensorflow as tf
 import tensorflow.keras.backend as K
 
 class Loss(object):
@@ -6,6 +8,11 @@ class Loss(object):
     def __init__(self, json_file):
         with open(json_file, 'r') as file:
             self.params = json.load(file)
+
+        with open(self.params['inferred_params'], 'r') as file:
+            self.inferred_params = json.load(file)
+
+        self.class_weights = tf.constant(np.array(self.inferred_params['class_weights'], dtype=np.float32))
             
         self.num_classes = len(self.params['labels'])
         self.smooth = 0.0000001
@@ -27,13 +34,14 @@ class Loss(object):
     
         y_true = y_true[..., 0:self.num_classes]
 
-        Wk = K.sum(y_true, axis = axes)
-        Wk = 1. / (K.square(Wk) + 1.)
-
         num = K.sum(K.square(y_true - y_pred), axis = axes)
-        den = K.sum(K.square(y_true), axis = axes) + K.sum(K.square(y_pred), axis = axes) + self.smooth
+        num *= self.class_weights
 
-        return K.sum(Wk * num, axis = -1) / K.sum(Wk * den, axis = -1)
+        den = K.sum(K.square(y_true), axis = axes) + K.sum(K.square(y_pred), axis = axes)
+        den *= self.class_weights
+        den += self.smooth
+
+        return K.sum(num, axis = -1) / K.sum(den, axis = -1)
     
     def bl(self, y_true, y_pred):    
         dtm = y_true[..., self.num_classes:(2 * self.num_classes)]
@@ -57,15 +65,15 @@ class Loss(object):
         dtm = y_true[..., self.num_classes:(2 * self.num_classes)]
         y_true_labels = y_true[..., 0:self.num_classes]
 
-        # Add weight for each class
-        Wk = K.sum(y_true_labels, axis = axes)
-        Wk = 1. / (K.square(Wk) + 1.)
-
         num = K.sum(K.square(dtm * (y_worst - y_pred)), axis = axes)
-        den = K.sum(K.square(dtm * (y_worst - y_true_labels)), axis = axes) + self.smooth
+        num *= self.class_weights
 
-        return 1 - (K.sum(Wk * num, axis = -1) / K.sum(Wk * den, axis = -1))
-        
+        den = K.sum(K.square(dtm * (y_worst - y_true_labels)), axis = axes)
+        den *= self.class_weights
+        den += self.smooth
+
+        return 1 - (K.sum(num, axis = -1) / K.sum(den, axis = -1))
+
     def loss_wrapper(self, alpha):
         if self.params['loss'] == 'dice':
             def loss(y_true, y_pred):
@@ -77,15 +85,15 @@ class Loss(object):
             
         elif self.params['loss'] == 'hdos':
             def loss(y_true, y_pred):
-                return self.gdl(y_true, y_pred) + (1.0 - alpha) * self.hdos(y_true, y_pred)
+                return alpha * self.gdl(y_true, y_pred) + (1.0 - alpha) * self.hdos(y_true, y_pred)
             
         elif self.params['loss'] == 'bl':
             def loss(y_true, y_pred):
-                return self.gdl(y_true, y_pred) + (1.0 - alpha) * self.bl(y_true, y_pred)
+                return alpha * self.gdl(y_true, y_pred) + (1.0 - alpha) * self.bl(y_true, y_pred)
             
         elif self.params['loss'] == 'wnbl':
             def loss(y_true, y_pred):
-                return self.gdl(y_true, y_pred) + (1.0 - alpha) * self.wnbl(y_true, y_pred)
+                return alpha * self.gdl(y_true, y_pred) + (1.0 - alpha) * self.wnbl(y_true, y_pred)
             
         else:
             def loss(y_true, y_pred):
