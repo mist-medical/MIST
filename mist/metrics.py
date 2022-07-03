@@ -25,6 +25,10 @@ class Metrics(object):
         # Read images
         pred = sitk.ReadImage(pred, sitk.sitkUInt8)
         truth = sitk.ReadImage(truth, sitk.sitkUInt8)
+        
+        # Big fix -- Make sure prediction and truth are in same physical space
+        # Writing with ANTs can cause strange interactions with SimpleITK
+        pred.CopyInformation(truth)
 
         # Create instance of SimpleITK overlap measures filter
         overlapFilter = sitk.LabelOverlapMeasuresImageFilter()
@@ -46,6 +50,8 @@ class Metrics(object):
         # Read images
         pred = sitk.ReadImage(pred, sitk.sitkUInt8)
         truth = sitk.ReadImage(truth, sitk.sitkUInt8)
+        
+        pred.CopyInformation(truth)
 
         try:
             # Create instance of SimpleITK Hausdorff filter
@@ -61,7 +67,11 @@ class Metrics(object):
                 hausdorffDistance = hausdorffFilter.GetHausdorffDistance()
             return hausdorffDistance
         except:
-            return np.nan
+            spacing = truth.GetSpacing()
+            width = truth.GetWidth() * spacing[1]
+            height = truth.GetHeight() * spacing[2]
+            depth = truth.GetDepth() * spacing[0]
+            return np.sqrt(width ** 2 + height ** 2 + depth ** 2)
     
     def surface_hausdorff(self, truth, pred, mode):
         '''
@@ -86,6 +96,8 @@ class Metrics(object):
             # Read in nifti files
             truth = sitk.ReadImage(truth, sitk.sitkUInt8)
             pred = sitk.ReadImage(pred, sitk.sitkUInt8)
+            
+            pred.CopyInformation(truth)
 
             truthDistanceMap = sitk.Abs(sitk.SignedMaurerDistanceMap(truth, squaredDistance = False, useImageSpacing=True))
             truthSurface = sitk.LabelContour(truth)
@@ -130,7 +142,11 @@ class Metrics(object):
             return hausdorffSurface
         
         except:
-            return np.nan
+            spacing = truth.GetSpacing()
+            width = truth.GetWidth() * spacing[1]
+            height = truth.GetHeight() * spacing[2]
+            depth = truth.GetDepth() * spacing[0]
+            return np.sqrt(width ** 2 + height ** 2 + depth ** 2)
 
     def hausdorff(self, truth, pred, mode):
         '''
@@ -154,6 +170,8 @@ class Metrics(object):
         try: 
             truth = sitk.ReadImage(truth, sitk.sitkUInt8)
             pred = sitk.ReadImage(pred, sitk.sitkUInt8)
+            
+            pred.CopyInformation(truth)
 
             # Get the number of pixels in the reference surface by counting all pixels that are 1.
             statistics_image_filter = sitk.StatisticsImageFilter()
@@ -191,4 +209,8 @@ class Metrics(object):
             return hausdorffDistance
         
         except:
-            return 343.17
+            spacing = truth.GetSpacing()
+            width = truth.GetWidth() * spacing[1]
+            height = truth.GetHeight() * spacing[2]
+            depth = truth.GetDepth() * spacing[0]
+            return np.sqrt(width ** 2 + height ** 2 + depth ** 2)

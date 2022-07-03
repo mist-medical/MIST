@@ -9,7 +9,8 @@ import psutil
 import scipy
 import pandas as pd
 import numpy as np
-from tqdm import trange
+from tqdm import trange, tqdm
+from numba import cuda
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import KFold
 from scipy.ndimage.filters import gaussian_filter
@@ -17,15 +18,17 @@ from scipy.ndimage.filters import gaussian_filter
 import tensorflow as tf
 from tensorflow.keras import layers, metrics, mixed_precision
 from tensorflow.keras.models import Model, load_model
-from tensorflow.keras.callbacks import ModelCheckpoint
+from tensorflow.keras.callbacks import TensorBoard
 import tensorflow.keras.backend as K
+import tensorflow_addons as tfa
 
-from model import *
-from loss import *
-from preprocess import *
-from postprocess import *
-from metrics import *
-from utils import *
+from mist.model import *
+from mist.loss import *
+from mist.preprocess import *
+from mist.inference import *
+from mist.postprocess import *
+from mist.metrics import *
+from mist.utils import *
 
 import warnings
 warnings.simplefilter(action = 'ignore', 
@@ -219,7 +222,10 @@ class RunTime(object):
     def val_inference(self, model, df, ds):
         cnt = 0
         gaussian_map = self.get_gaussian()
-                
+        
+        num_patients = len(df)
+        pbar = tqdm(total = num_patients)    
+            
         iterator = ds.as_numpy_iterator()
         for element in iterator:
             
@@ -302,52 +308,60 @@ class RunTime(object):
             # Make sure that labels are correct in prediction
             for j in range(self.n_classes):
                 prediction[prediction == j] = self.params['labels'][j]
-                
+
             prediction = prediction.astype('float32')
-                
-            if self.inferred_params['use_nz_mask']:
-                prediction = original_cropped.new_image_like(data = prediction)
-                prediction = ants.decrop_image(prediction, original_image)
-            else:
-                # Put prediction back into original image space
-                prediction = ants.from_numpy(prediction)
-                
+
+            # Put prediction back into original image space
+            prediction = ants.from_numpy(prediction)
+
             prediction.set_spacing(self.inferred_params['target_spacing'])
-                        
-            if np.linalg.norm(np.array(prediction.direction) - np.eye(3)) > 0:
+
+            if np.linalg.norm(np.array(original_image.direction) - np.eye(3)) > 0:
                 prediction.set_direction(original_image.direction)
-            
+
             if np.linalg.norm(np.array(prediction.spacing) - np.array(original_image.spacing)) > 0:
                 prediction = ants.resample_image(prediction, 
                                                  resample_params = list(original_image.spacing), 
                                                  use_voxels = False, 
                                                  interp_type = 1)
-            
+
             prediction = prediction.numpy()
-            
-            # Bug fix: ants.decrop_image can leave some strange artifacts in your final prediction
-            prediction[prediction > np.max(self.params['labels'])] = 0.
-            prediction[prediction < np.min(self.params['labels'])] = 0.
-            
+
+            # Set correct dimensions for resampled prediction
             prediction_dims = prediction.shape
-            orignal_dims = original_image.numpy().shape
-            prediction_final_dims = [np.max([prediction_dims[i], orignal_dims[i]]) for i in range(3)]
-            
+            if self.inferred_params['use_nz_mask']:
+                original_dims = original_cropped.numpy().shape
+            else:
+                original_dims = original_image.numpy().shape
+
+            prediction_final_dims = [np.max([prediction_dims[i], original_dims[i]]) for i in range(3)]
+
             prediction_final = np.zeros(tuple(prediction_final_dims))
             prediction_final[0:prediction.shape[0], 
                              0:prediction.shape[1], 
                              0:prediction.shape[2], ...] = prediction
-            
-            prediction_final = prediction_final[0:orignal_dims[0], 
-                                                0:orignal_dims[1],
-                                                0:orignal_dims[2], ...]
-            
+
+            prediction_final = prediction_final[0:original_dims[0], 
+                                                0:original_dims[1],
+                                                0:original_dims[2], ...]
+
+
+            if self.inferred_params['use_nz_mask']:
+                prediction_final = original_cropped.new_image_like(data = prediction_final)
+                prediction_final = ants.decrop_image(prediction_final, nzmask)
+
+                # Bug fix: ants.decrop_image can leave some strange artifacts in your final prediction
+                prediction_final = prediction_final.numpy()
+                prediction_final[prediction_final > np.max(self.params['labels'])] = 0.
+                prediction_final[prediction_final < np.min(self.params['labels'])] = 0.
+
+            # Write final prediction in same space is original image
             prediction_final = original_image.new_image_like(data = prediction_final)
 
             # Write prediction mask to nifti file and save to disk
             prediction_filename = '{}.nii.gz'.format(patient['id'])
             ants.image_write(prediction_final, 
-                             os.path.join(self.params['prediction_dir'], 'raw', prediction_filename))
+                             os.path.join(self.params['prediction_dir'], 'train', 'raw', prediction_filename))
             
             # Get dice and hausdorff distance for final prediction
             row_dict = dict.fromkeys(list(self.results_df.columns))
@@ -367,25 +381,27 @@ class RunTime(object):
                     pred_temp += pred_label
                     mask_temp += mask_label
                     
-                pred_temp = prediction_final.new_image_like(pred_temp)
+                pred_temp = original_mask.new_image_like(pred_temp)
                 mask_temp = original_mask.new_image_like(mask_temp)
                 
-                pred_temp_filename = os.path.join(self.params['prediction_dir'], 'raw', 'pred_temp.nii.gz')
+                pred_temp_filename = os.path.join(self.params['prediction_dir'], 'train', 'raw', 'pred_temp.nii.gz')
                 ants.image_write(pred_temp, pred_temp_filename)
                 
-                mask_temp_filename = os.path.join(self.params['prediction_dir'], 'raw', 'mask_temp.nii.gz')
+                mask_temp_filename = os.path.join(self.params['prediction_dir'], 'train', 'raw', 'mask_temp.nii.gz')
                 ants.image_write(mask_temp, mask_temp_filename)
                 
                 row_dict['{}_dice'.format(key)] = self.metrics.dice_sitk(pred_temp_filename, mask_temp_filename)
                 row_dict['{}_haus95'.format(key)] = self.metrics.hausdorff(pred_temp_filename, mask_temp_filename, '95')
-#                 row_dict['{}_avg_surf'.format(key)] = self.metrics.surface_hausdorff(pred_temp_filename, mask_temp_filename, 'mean')
+                row_dict['{}_avg_surf'.format(key)] = self.metrics.surface_hausdorff(pred_temp_filename, mask_temp_filename, 'mean')
                 
             self.results_df = self.results_df.append(row_dict, ignore_index = True)
             
             gc.collect()
             cnt += 1
+            pbar.update(1)
             
         # Delete temporary files and iterator to reduce memory consumption
+        pbar.close()
         del iterator
         os.remove(pred_temp_filename)
         os.remove(mask_temp_filename)
@@ -452,6 +468,40 @@ class RunTime(object):
     def alpha_schedule(self, step):
         #TODO: Make a step-function scheduler and an adaptive option
         return (-1. / self.epochs) * step + 1
+    
+    def get_learning_rate(self, epoch):
+        initial_learning_rate = 0.001
+        first_decay_steps = 50
+        t_mul = 2.0
+        m_mul = 1.0
+        alpha = 0.0
+
+        global_step_recomp = epoch
+        completed_fraction = global_step_recomp / first_decay_steps
+
+        def compute_step(completed_fraction, geometric = False):
+            if geometric:
+                i_restart = np.floor(np.log(1.0 - completed_fraction * (1.0 - t_mul)) / np.log(t_mul))
+                sum_r = (1.0 - t_mul**i_restart) / (1.0 - t_mul)
+                completed_fraction = (completed_fraction - sum_r) / t_mul**i_restart
+            else:
+                i_restart = np.floor(completed_fraction)
+                completed_fraction -= i_restart
+
+            return i_restart, completed_fraction
+
+
+        if t_mul == 1.0:
+            i_restart, completed_fraction = compute_step(completed_fraction, geometric = False)
+        else:
+            i_restart, completed_fraction = compute_step(completed_fraction, geometric = True)
+
+        m_fac = m_mul ** i_restart
+        cosine_decayed = 0.5 * m_fac * (1.0 + np.cos(np.pi * completed_fraction))
+        decayed = (1 - alpha) * cosine_decayed + alpha
+
+        learning_rate = initial_learning_rate * decayed
+        return learning_rate
 
     def train(self):
         # Get folds for k-fold cross validation
@@ -474,7 +524,7 @@ class RunTime(object):
         else:
             image_buffer_size = 4 * (np.prod(self.inferred_params['median_image_size']) * (self.n_channels + (2 * len(self.params['labels']))))
 
-        # Set cache size so that we do not exceed 2.5% of available memory
+        # Set cache size so that we do not exceed 5% of available memory
         cache_size = int(np.ceil((0.05 * available_mem) / image_buffer_size))
         cache_replacement_rate = 0.2
 
@@ -531,19 +581,8 @@ class RunTime(object):
             gc.collect()
             
         self.inferred_params['patch_size'] = patch_size
-
-        # Save inferred parameters as json file
-        inferred_params_json_file = os.path.abspath(self.params['inferred_params'])
-        with open(inferred_params_json_file, 'w') as outfile:
-            json.dump(self.inferred_params, outfile)
-
-        # Default case if folds are not specified by user
-        if not('folds' in self.params.keys()):
-            self.params['folds'] = [i for i in range(self.n_folds)]
-
-        # Convert folds input to list if it is not already one
-        if not(isinstance(self.params['folds'], list)):
-            self.params['folds'] = [int(self.params['folds'])]
+        with open(self.params['inferred_params'], 'w') as outfile:
+            json.dump(self.inferred_params, outfile, indent = 2)
 
         # Oversample patches centered at foreground voxels
         fg_prob = 0.85
@@ -558,8 +597,13 @@ class RunTime(object):
         if self.multi_gpu:
             strategy = tf.distribute.MirroredStrategy()
             
+        # Tensorboard
+        # tensorboard_cbk = TensorBoard(log_dir = self.params['log_dir'], 
+        #                               histogram_freq = 1, 
+        #                               update_freq = 250)
+            
         ### Start training loop ###
-        split_cnt = 1
+        split_cnt = 1        
         for fold in self.params['folds']:
             print('Starting fold {}...'.format(fold))
             train_tfr_list = [tfrecords[idx] for idx in train_splits[fold]]
@@ -592,7 +636,7 @@ class RunTime(object):
             plateau_cnt = 1
             learning_rate = 0.001
             for i in range(self.epochs):
-                print('Epoch {}/{}'.format(i + 1, self.epochs))
+                print('Fold {}: Epoch {}/{}'.format(fold, i + 1, self.epochs))
 
                 # Prepare training set
                 train_ds = tf.data.TFRecordDataset(train_cache,
@@ -617,9 +661,21 @@ class RunTime(object):
 
                 # Set up optimizer and compile model
                 opt = tf.optimizers.Adam(learning_rate = learning_rate)
+                if self.use_mixed_policy:
+                    opt = tf.keras.mixed_precision.LossScaleOptimizer(opt, dynamic = True)
                 alpha = self.alpha_schedule(i)
                 
                 if i == 0:
+                    # lr_schedule = tf.keras.optimizers.schedules.CosineDecayRestarts(initial_learning_rate = 0.001,
+                    #                                                                 first_decay_steps = 1000,
+                    #                                                                 t_mul = 2.0,
+                    #                                                                 m_mul = 1.0,
+                    #                                                                 alpha = 0.0)
+                    # opt = tf.optimizers.Adam(learning_rate = lr_schedule)
+                    # opt = tfa.optimizers.Lookahead(opt)
+                    # if self.use_mixed_policy:
+                    #     opt = tf.keras.mixed_precision.LossScaleOptimizer(opt, dynamic = True)
+                    
                     if self.multi_gpu:
                         with strategy.scope():
                             # Get model for this fold
@@ -676,7 +732,7 @@ class RunTime(object):
                 # Comput loss for validation patients
                 val_loss = self.compute_val_loss(current_model_name, val_ds)
                 if val_loss < best_val_loss:
-                    print('Val loss IMPROVED from {:.4f} to {:.4f}'.format(best_val_loss, val_loss))
+                    print('*** Val loss IMPROVED from {:.4f} to {:.4f} ***'.format(best_val_loss, val_loss))
                     best_val_loss = val_loss
                     model.save(best_model_name)
                     plateau_cnt = 1
@@ -719,6 +775,8 @@ class RunTime(object):
             test_ds = test_ds.map(self.decode_val, num_parallel_calls = tf.data.AUTOTUNE)
 
             model = load_model(best_model_name, custom_objects = {'loss': self.loss.loss_wrapper(alpha)})
+            
+            print('Running inference on validation set...')
             self.val_inference(model, test_df, test_ds)
 
             split_cnt += 1
@@ -734,26 +792,12 @@ class RunTime(object):
 
         ### End train function ###
 
-    def run(self, run_preprocess = True):
+    def run(self):
         
-        # Check if necessary directories exists, create them if not
-        if not(os.path.exists(self.params['raw_data_dir'])):
-            raise Exception('{} does not exist'.format(self.params['raw_data_dir']))
-            
-        if not(os.path.exists(self.params['processed_data_dir'])):
-            os.mkdir(self.params['processed_data_dir'])
-            
-        if not(os.path.exists(self.params['model_dir'])):
-            os.mkdir(self.params['model_dir'])
-            
-        if not(os.path.exists(self.params['prediction_dir'])):
-            os.mkdir(self.params['prediction_dir'])
-
-        if not(os.path.exists(os.path.join(self.params['prediction_dir'], 'raw'))):
-            os.mkdir(os.path.join(self.params['prediction_dir'], 'raw'))
-            
-        if not(os.path.exists(os.path.join(self.params['prediction_dir'], 'postprocess'))):
-            os.mkdir(os.path.join(self.params['prediction_dir'], 'postprocess'))
+        # Check inputs
+        self.params = parse_inputs(self.params)        
+        with open(self.json_file, 'w') as outfile:
+            json.dump(self.params, outfile, indent = 2)
             
         # Set up GPU for run
         # Set seed for reproducibility
@@ -767,10 +811,6 @@ class RunTime(object):
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
         os.environ['TF_CPP_MIN_VLOG_LEVEL'] = '3'
         logging.getLogger('tensorflow').disabled = True
-        
-        if run_preprocess:
-            # Preprocess data if running for the first time
-            self.preprocess.run()
 
         self.df = pd.read_csv(self.params['raw_paths_csv'])
 
@@ -786,11 +826,13 @@ class RunTime(object):
                 os.environ['CUDA_VISIBLE_DEVICES'] = gpu_id
                 self.n_gpus = 1
                 self.multi_gpu = False
+                self.params['gpu'] = [gpu_id]
             elif isinstance(self.params['gpu'], int):
                 # Use user specified gpu
                 os.environ['CUDA_VISIBLE_DEVICES'] = str(self.params['gpu'])
                 self.n_gpus = 1
                 self.multi_gpu = False
+                self.params['gpu'] = [self.params['gpu']]
             elif isinstance(self.params['gpu'], list):
                 if len(self.params['gpu']) > 1:
                     self.multi_gpu = True
@@ -808,20 +850,21 @@ class RunTime(object):
             os.environ['CUDA_VISIBLE_DEVICES'] = gpu_id
             self.n_gpus = 1
             self.multi_gpu = False
+            self.params['gpu'] = [gpu_id]
 
         # Get GPUs
         gpus = tf.config.list_physical_devices('GPU')
 
         # Set mixed precision policy if compute capability >= 7.0
-        use_mixed_policy = True
+        self.use_mixed_policy = True
         for gpu in gpus:
             details = tf.config.experimental.get_device_details(gpu)
             compute_capability = details['compute_capability'][0]
             if compute_capability < 7:
-                use_mixed_policy = False
+                self.use_mixed_policy = False
                 break
 
-        if use_mixed_policy:
+        if self.use_mixed_policy:
             policy = mixed_precision.Policy('mixed_float16')
             mixed_precision.set_global_policy(policy)
             
@@ -832,7 +875,7 @@ class RunTime(object):
         ###################################
 
         # Initialize results dataframe
-        metrics = ['dice', 'haus95']
+        metrics = ['dice', 'haus95', 'avg_surf']
         results_cols = ['id']
         for metric in metrics:
             for key in self.params['final_classes'].keys():
@@ -842,9 +885,8 @@ class RunTime(object):
 
         # Run training pipeline
         self.loss = Loss(self.json_file)
-        self.postprocess = Postprocess(self.json_file)
         self.train()
-
+                
         # Get final statistics
         mean_row = {'id': 'Mean'}
         std_row = {'id': 'Std'}
@@ -867,6 +909,21 @@ class RunTime(object):
         # Write results to csv file
         self.results_df.to_csv(self.params['results_csv'], index = False)
 
-        # TODO: Figure out post-processing
         # Run post-processing
-        # self.postprocess.run()
+        self.postprocess = Postprocess(self.json_file)
+        self.postprocess.run()
+        
+        # Run inference on test set if it is provided
+        if 'test_data_dir' in self.params.keys():
+            print('Running inference on test set...')
+            test_df = get_files_df(self.params, 'test')
+            inference = Inference(self.json_file)
+            inference.run(test_df, 
+                          os.path.join(self.params['prediction_dir'], 'test'), 
+                          fast = False, 
+                          gpu_num = self.params['gpu'][0])        
+            
+        K.clear_session
+        gc.collect()
+        
+        ### End of function ###

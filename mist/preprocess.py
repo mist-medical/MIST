@@ -5,9 +5,9 @@ import tensorflow as tf
 import SimpleITK as sitk
 import pandas as pd
 import numpy as np
-from tqdm import trange
+from tqdm import trange, tqdm
 
-from utils import *
+from mist.utils import *
 
 import pdb
 
@@ -17,37 +17,12 @@ warnings.simplefilter(action = 'ignore',
 
 class Preprocess(object):
 
-    def __init__(self, input_params):
+    def __init__(self, json_file):
+        
+        self.json_file = json_file
         # Get user defined parameters
-        with open(input_params, 'r') as file:
+        with open(self.json_file, 'r') as file:
             self.params = json.load(file)
-
-    def get_files_df(self):
-        base_dir = os.path.abspath(self.params['raw_data_dir'])
-        names_dict = dict()
-        names_dict['mask'] = self.params['mask']
-        for key in self.params['images'].keys():
-            names_dict[key] = self.params['images'][key]
-            
-        cols = ['id'] + list(names_dict.keys())
-        df = pd.DataFrame(columns = cols)
-        row_dict = dict.fromkeys(cols)
-
-        ids = os.listdir(base_dir)
-
-        for i in ids:
-            row_dict['id'] = i
-            path = os.path.join(base_dir, i)
-            files = get_files_list(path)
-
-            for file in files:
-                for img_type in names_dict.keys():
-                    for img_string in names_dict[img_type]:
-                        if img_string in file:
-                            row_dict[img_type] = file
-
-            df = df.append(row_dict, ignore_index = True)
-        return df
 
     def check_nz_mask(self):
         '''
@@ -100,14 +75,20 @@ class Preprocess(object):
         patient = self.df.iloc[0].to_dict()
         spacing_fixed = np.array(ants.image_read(patient['mask']).spacing)
 
+        pbar = tqdm(total = len(self.df) - 1)
         for i in range(1, len(self.df)):
             patient = self.df.iloc[i].to_dict()
             current_spacing = np.array(ants.image_read(patient['mask']).spacing)
 
             if np.linalg.norm(spacing_fixed - current_spacing) > 0.:
                 nonuniform = True
+                pbar.refresh()
+                pbar.close()
                 break
+            else:
+                pbar.update(1)
 
+        pbar.close()
         return nonuniform
 
     def get_target_image_spacing(self):
@@ -118,8 +99,9 @@ class Preprocess(object):
         '''
 
         print('Getting target image spacing...')
-
+        
         if self.nonuniform:
+            
             # Initialize target spacing
             target_spacing = [1., 1., 1.]
 
@@ -164,7 +146,7 @@ class Preprocess(object):
         
     def get_median_dims(self):
         '''
-        Determine patch size from resampled data.
+        Determine dims from resampled data.
         '''
 
         print('Getting median resampled dimensions...')
@@ -172,6 +154,7 @@ class Preprocess(object):
         resampled_dims = np.zeros((len(self.df), 3))
         max_buffer_size = 1.5e9
         cnt = 0
+        pbar = tqdm(total = len(self.df))
 
         while cnt < len(self.df):
             patient = self.df.iloc[cnt].to_dict()
@@ -220,11 +203,15 @@ class Preprocess(object):
                         self.inferred_params['target_spacing'][i] *= 2
 
                 cnt = 0
+                pbar.refresh()
+                pbar.reset()
             else:
                 resampled_dims[cnt, :] = dims
                 cnt += 1
+                pbar.update(1)
 
         ### End of while loop ###
+        pbar.close()
 
         # Get patch size after finalizing target image spacing
         median_resampled_dims = list(np.median(resampled_dims, axis = 0))
@@ -366,12 +353,18 @@ class Preprocess(object):
         self.inferred_params['median_image_size'] = [int(median_dims[i]) for i in range(3)]
 
     def run(self):
+                
+        # Check inputs
+        self.params = parse_inputs(self.params)        
+        with open(self.json_file, 'w') as outfile:
+            json.dump(self.params, outfile, indent = 2)
+        
         print('Analyzing dataset...')
-        self.df = self.get_files_df()
+        self.df = get_files_df(self.params, 'train')
 
         print('Verifying dataset integrity...')
         bad_data = list()
-        for i in range(len(self.df)):
+        for i in trange(len(self.df)):
             patient = self.df.iloc[i].to_dict()
             mask_header = ants.image_header_info(patient['mask'])
 
@@ -395,7 +388,7 @@ class Preprocess(object):
         # Save inferred parameters as json file
         inferred_params_json_file = os.path.abspath(self.params['inferred_params'])
         with open(inferred_params_json_file, 'w') as outfile:
-            json.dump(self.inferred_params, outfile)
+            json.dump(self.inferred_params, outfile, indent = 2)
 
         class_weights = [0. for i in range(len(self.params['labels']))]
         print('Preprocessing dataset...')
@@ -471,7 +464,7 @@ class Preprocess(object):
 
                     # Only compute DTM if class exists in image
                     if np.sum(mask_onehot[..., j]) > 0:
-                        dtm_j = mask_onehot[..., j].reshape((*dims))
+                        dtm_j = mask_onehot[..., j].reshape(dims)
                         dtm_j = mask.new_image_like(data = dtm_j)
                         dtm_j = ants.iMath(dtm_j, 'MaurerDistance')
                         mask_onehot[..., j + len(self.params['labels'])] = dtm_j.numpy()
@@ -487,8 +480,7 @@ class Preprocess(object):
                 img = self.window(img)
                 img = self.normalize(img)
 
-                # Bug fix. Sometimes the dimensions of the resampled images
-                # are off by 1.
+                # Bug fix. Sometimes the dimensions of the resampled images are off by 1.
                 temp_dims = [np.max([img.shape[i], dims[i]]) for i in range(3)]
                 img_temp = np.zeros(tuple(temp_dims))
                 img_temp[0:img.shape[0],
@@ -568,4 +560,4 @@ class Preprocess(object):
 
         self.inferred_params['class_weights'] = class_weights
         with open(inferred_params_json_file, 'w') as outfile:
-            json.dump(self.inferred_params, outfile)
+            json.dump(self.inferred_params, outfile, indent = 2)

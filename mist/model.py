@@ -4,8 +4,8 @@ from tensorflow.keras import layers
 from tensorflow.keras.models import Model, load_model
 import tensorflow_addons as tfa
 
-from normalizations import *
-from loss import *
+from mist.normalizations import *
+from mist.loss import *
 
 class PretrainedUNet(object):
     
