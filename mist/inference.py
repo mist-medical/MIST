@@ -140,7 +140,7 @@ class Inference(object):
 
         return gaussian_importance_map
 
-    def run(self, patients, dest, fast = False, gpu_num = 0):
+    def run(self, patients, dest, fast = False, gpu_num = 0, **kwargs):
         
         '''
         Run inference on single or mutliple test cases.
@@ -283,7 +283,10 @@ class Inference(object):
 
             models = [os.path.join(self.params['model_dir'], '{}_best_model_split_{}'.format(self.params['base_model_name'], fold)) for fold in self.params['folds']]
             if fast:
-                models = [models[0]]
+                if 'model_num' in kwargs.keys():
+                    models = [models[kwargs['model_num']]]
+                else:
+                    models = [models[0]]
 
             for model_path in models:
                 model = load_model(model_path, custom_objects = {'loss': self.loss.loss_wrapper(1.0)})
@@ -392,7 +395,10 @@ class Inference(object):
                 prediction_final = prediction_final.numpy()
                 prediction_final[prediction_final > np.max(self.params['labels'])] = 0.
                 prediction_final[prediction_final < np.min(self.params['labels'])] = 0.
-
+                
+                # Multiply prediction by nonzero mask
+                prediction_final *= nzmask.numpy()
+                
             # Write final prediction in same space is original image
             prediction_final = original_image.new_image_like(data = prediction_final)
             
