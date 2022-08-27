@@ -18,7 +18,6 @@ def get_predict_args():
     p.boolean_flag("--amp", default=False, help="Use automatic mixed precision")
     p.boolean_flag("--xla", default=False, help="Use XLA")
 
-    p.boolean_flag("--fast", defult=False, help="Use only one model for inference")
     p.arg("--sw-overlap",
           type=float_0_1,
           default=0.5,
