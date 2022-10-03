@@ -1,1 +1,0 @@
-{"modality": "ct", "use_nz_mask": false, "target_spacing": [0.78515625, 0.78515625, 2.4956521511077883], "window_range": [-1024.0, 325.0], "global_z_score_mean": -159.20713806152344, "global_z_score_std": 325.1393737792969, "min_component_size": 48.0, "patch_size": [128.0, 128.0, 128.0], "median_image_size": [512.0, 512.0, 126.0]}
