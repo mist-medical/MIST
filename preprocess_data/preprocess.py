@@ -9,7 +9,7 @@ from tqdm import trange
 warnings.simplefilter(action='ignore',
                       category=FutureWarning)
 
-from runtime.utils import create_empty_dir
+from runtime.utils import create_empty_dir, resize_image_with_crop_or_pad
 
 
 def get_mask_and_nonzeros(image):
@@ -156,10 +156,11 @@ def preprocess_example(config, image_list, mask):
         img = normalize(config, img)
 
         # Bug fix. Sometimes the dimensions of the resampled images are off by 1.
-        temp_dims = [np.max([img.shape[i], dims[i]]) for i in range(3)]
-        img_temp = np.zeros(tuple(temp_dims))
-        img_temp[0:img.shape[0], 0:img.shape[1], 0:img.shape[2], ...] = img
-        img = img_temp[0:dims[0], 0:dims[1], 0:dims[2]]
+        img = resize_image_with_crop_or_pad(img, dims)
+        # temp_dims = [np.max([img.shape[i], dims[i]]) for i in range(3)]
+        # img_temp = np.zeros(tuple(temp_dims))
+        # img_temp[0:img.shape[0], 0:img.shape[1], 0:img.shape[2], ...] = img
+        # img = img_temp[0:dims[0], 0:dims[1], 0:dims[2]]
 
         image_npy[..., j] = img
 

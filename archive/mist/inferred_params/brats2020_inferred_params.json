@@ -1,0 +1,1 @@
+{"modality": "mr", "use_nz_mask": true, "target_spacing": [1.0, 1.0, 1.0], "window_range": [0.5, 99.5], "min_component_size": 32.0, "median_image_size": [137, 170, 139], "patch_size": [128, 128, 128]}

@@ -1,6 +1,8 @@
 import os
 import gc
 import json
+import pdb
+
 import ants
 import pandas as pd
 import numpy as np
@@ -10,7 +12,7 @@ import tensorflow as tf
 from tensorflow.keras.models import load_model
 import tensorflow.keras.backend as K
 
-from runtime.utils import convert_dict_to_df, get_flip_axes, create_empty_dir
+from runtime.utils import convert_dict_to_df, get_flip_axes, create_empty_dir, resize_image_with_crop_or_pad
 from inference.sliding_window import sliding_window_inference
 from preprocess_data.preprocess import preprocess_example
 from postprocess_preds.postprocess import get_majority_label, apply_clean_mask, apply_largest_component
@@ -84,11 +86,12 @@ def back_to_original_space(prediction, inferred_params, original_image, nzmask, 
     else:
         original_dims = original_image.numpy().shape
 
-    prediction_final_dims = [np.max([prediction_dims[i], original_dims[i]]) for i in range(3)]
-
-    prediction_final = np.zeros(tuple(prediction_final_dims))
-    prediction_final[0:prediction.shape[0], 0:prediction.shape[1], 0:prediction.shape[2], ...] = prediction
-    prediction_final = prediction_final[0:original_dims[0], 0:original_dims[1], 0:original_dims[2], ...]
+    prediction_final = resize_image_with_crop_or_pad(prediction, original_dims)
+    # prediction_final_dims = [np.max([prediction_dims[i], original_dims[i]]) for i in range(3)]
+    #
+    # prediction_final = np.zeros(tuple(prediction_final_dims))
+    # prediction_final[0:prediction.shape[0], 0:prediction.shape[1], 0:prediction.shape[2], ...] = prediction
+    # prediction_final = prediction_final[0:original_dims[0], 0:original_dims[1], 0:original_dims[2], ...]
 
     if inferred_params['use_nz_mask']:
         prediction_final = original_cropped.new_image_like(data=prediction_final)
@@ -151,9 +154,10 @@ def predict_single_example(image,
 
 def load_test_time_models(models_dir, fast):
     model_list = os.listdir(models_dir)
+    model_list.sort()
 
     if fast:
-        model_list = model_list[0]
+        model_list = [model_list[0]]
 
     models = [load_model(os.path.join(models_dir, model), compile=False) for model in model_list]
     return models

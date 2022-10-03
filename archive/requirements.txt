@@ -1,0 +1,13 @@
+absl_py==0.12.0
+antspyx==0.3.2
+numpy>=1.20.1
+pandas>=1.2.4
+psutil>=5.8.0
+pynvml>=11.4.1
+scikit_learn>=1.1.1
+scipy>=1.6.2
+SimpleITK==2.1.1
+tensorflow>=2.6
+tensorflow_addons>=0.13.0
+tqdm>=4.60.0
+typeguard==2.13.3

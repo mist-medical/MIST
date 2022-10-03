@@ -100,7 +100,7 @@ def get_main_args():
 
     # UNet architecture
     p.arg("--model", type=str, default="nnunet", choices=["nnunet", "unet", "resnet", "densenet", "hrnet"])
-    p.arg('--depth', type=non_negative_int, default=3, help='Depth of U-Net')
+    p.arg('--depth', type=non_negative_int, help='Depth of U-Net')
     p.arg('--init-filters', type=non_negative_int, default=32, help='Number of filters to start U-Net')
     p.boolean_flag('--pocket', default=False, help='Use pocket U-Net')
 
@@ -141,10 +141,18 @@ def get_main_args():
           default='gaussian',
           help='How to blend output of overlapping windows')
 
+    # Postprocessing
+    p.boolean_flag("--post-no-morph",
+                   default=False,
+                   help="Do not try morphological smoothing for postprocessing")
+    p.boolean_flag("--post-no-largest",
+                   default=False,
+                   help="Do not run connected components analysis for postprocessing")
+
     # Validation
     p.arg('--nfolds', type=positive_int, default=5, help='Number of cross-validation folds')
     p.arg('--folds', nargs='+', default=[0, 1, 2, 3, 4], type=int, help='Which folds to run')
-    p.arg('--epochs', type=positive_int, default=1000, help='Number of epochs')
+    p.arg('--epochs', type=positive_int, default=300, help='Number of epochs')
     p.arg('--steps-per-epoch',
           type=positive_int,
           help='Steps per epoch. By default ceil(training_dataset_size / batch_size / gpus)')

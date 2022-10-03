@@ -295,7 +295,7 @@ class RunTime:
                                           num_workers=8)
 
             test_df_ids = [pat.split('/')[-1].split('.')[0] for pat in test_images]
-            test_df = self.df.loc[self.df['id'].isin(test_df_ids)]
+            test_df = self.df.loc[self.df['id'].astype(str).isin(test_df_ids)]
             test_df = test_df.sort_values(by=['id']).reset_index(drop=True)
 
             # print('Running inference on validation set...')

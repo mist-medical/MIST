@@ -96,7 +96,11 @@ class Postprocess:
                                                  self.config['class_weights'])
 
         # Get paths csv
-        self.paths = pd.read_csv(os.path.join(self.args.results, 'train_paths.csv'))
+        # Get paths to dataset
+        if self.args.paths is None:
+            self.paths = pd.read_csv(os.path.join(self.args.results, 'train_paths.csv'))
+        else:
+            self.paths = pd.read_csv(self.args.paths)
 
     def use_clean_mask(self):
 
@@ -115,7 +119,7 @@ class Postprocess:
             # Get true mask and original_prediction
             patient_id = predictions[j].split('.')[0]
             raw_pred = ants.image_read(os.path.join(self.source_dir, predictions[j]))
-            original_mask = ants.image_read(self.paths.loc[self.paths['id'] == patient_id].iloc[0]['mask'])
+            original_mask = ants.image_read(self.paths.loc[self.paths['id'].astype(str) == patient_id].iloc[0]['mask'])
 
             new_pred = apply_clean_mask(raw_pred, original_mask, self.majority_label)
 
@@ -172,7 +176,7 @@ class Postprocess:
                 # Get true mask and original_prediction
                 patient_id = predictions[j].split('.')[0]
                 raw_pred = ants.image_read(os.path.join(self.source_dir, predictions[j]))
-                original_mask = ants.image_read(self.paths.loc[self.paths['id'] == patient_id].iloc[0]['mask'])
+                original_mask = ants.image_read(self.paths.loc[self.paths['id'].astype(str) == patient_id].iloc[0]['mask'])
 
                 new_pred = apply_largest_component(raw_pred,
                                                    original_mask,
@@ -215,8 +219,15 @@ class Postprocess:
         return use_postprocessing
 
     def run(self):
-        clean_mask = self.use_clean_mask()
-        use_postprocessing = self.connected_components_analysis()
+        if not(self.args.post_no_morph):
+            clean_mask = self.use_clean_mask()
+        else:
+            clean_mask = False
+
+        if not(self.args.post_no_largest):
+            use_postprocessing = self.connected_components_analysis()
+        else:
+            use_postprocessing = []
 
         # Copy best results to final predictions folder
         cp_best_cmd = 'cp -a {}/. {}'.format(self.source_dir,
