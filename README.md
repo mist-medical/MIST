@@ -23,12 +23,12 @@ The Medical Imaging Segmentation Toolkit (MIST) is a simple 3D medical imaging s
 
 The following features are supported by MIST: 
 
-| Feature               | MIST               
-|-----------------------|--------------------------   
-|[NVIDIA Data Loading Library (DALI)](https://docs.nvidia.com/deeplearning/dali/user-guide/docs/) | Yes
-|[Automatic mixed precision (AMP)]([https://www.tensorflow.org/guide/mixed_precision)| Yes   
-|[Accelerated Linear Algebra (XLA)](https://www.tensorflow.org/xla) | Yes
-|[Horovod Multi-GPU (NCCL)](https://horovod.ai/) | No |
+| Feature                                                                                          | MIST |
+|--------------------------------------------------------------------------------------------------|------|
+| [NVIDIA Data Loading Library (DALI)](https://docs.nvidia.com/deeplearning/dali/user-guide/docs/) | Yes  |
+| [Automatic mixed precision (AMP)]([https://www.tensorflow.org/guide/mixed_precision)             | Yes  |
+| [Accelerated Linear Algebra (XLA)](https://www.tensorflow.org/xla)                               | Yes  |
+| [Horovod Multi-GPU (NCCL)](https://horovod.ai/)                                                  | No   |
 
 Support for Horovod Multi-GPU (NCCL) is an upcoming feature.
     
@@ -67,16 +67,16 @@ MIST offers support for MSD and CSV formatted datasets. For more details, please
 
 Once your dataset is in the correct format, the final step is to prepare a small JSON file containing the details of the dataset. We specifically ask for the following key-value pairs.
 
-| Key               | Value               
-|-----------------------|--------------------------   
-|```task```| Name of task (i.e., brats, lits, etc.). |
-|```modality``` | Options are ``ct``, ``mr``, or ``other``.|
-|```train-data``` | Path to training data. |
-|```test-data``` | Path to test data (optional). |
-|```mask```| List containing identifying strings for mask or ground truth images in dataset.|
-|```images```| Dictionary where each key is an image type (i.e., T1, T2, CT, etc.) and each value is a list containing identifying strings for that image type.|
-|```labels```| List of labels in dataset (must include 0).|
-|```final_classes```| Dictionary where each key is the name of the final segmentation class (i.e., WT, ET, TC for BraTS) and each value is a list of the labels corresponding to that class.|
+| Key                 | Value                                                                                                                                                                  |
+|---------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ```task```          | Name of task (i.e., brats, lits, etc.).                                                                                                                                |
+| ```modality```      | Options are ``ct``, ``mr``, or ``other``.                                                                                                                              |
+| ```train-data```    | Path to training data.                                                                                                                                                 |
+| ```test-data```     | Path to test data (optional).                                                                                                                                          |
+| ```mask```          | List containing identifying strings for mask or ground truth images in dataset.                                                                                        |
+| ```images```        | Dictionary where each key is an image type (i.e., T1, T2, CT, etc.) and each value is a list containing identifying strings for that image type.                       |
+| ```labels```        | List of labels in dataset (must include 0).                                                                                                                            |
+| ```final_classes``` | Dictionary where each key is the name of the final segmentation class (i.e., WT, ET, TC for BraTS) and each value is a list of the labels corresponding to that class. |
 
 An example of the BraTS dataset is given below.
 
@@ -257,9 +257,9 @@ python predict.py --models /workspace/data/mist-examples/brats/results/models --
 
 MIST supports two formats for test data: CSV and JSON. For CSV formatted data, the CSV file must have an ```id`` column with the new patient IDs and one column for each image type. For example, for the BraTS dataset, our CSV header would look like the following.
 
-| id               | t1         | t2        | tc       | fl |
-|-----------------------|-------------------------- |-------------------------- |-------------------------- |--------------------------   
-|Patient ID| Full path to t1 image | Full path to t2 image | Full path to tc image | Full path to fl image | 
+| id         | t1                    | t2                    | tc                    | fl                    |
+|------------|-----------------------|-----------------------|-----------------------|-----------------------|
+| Patient ID | Full path to t1 image | Full path to t2 image | Full path to tc image | Full path to fl image | 
 
 Similaryly, for JSON fomratted data, we would have the following.
 ```
