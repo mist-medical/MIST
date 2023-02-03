@@ -1,4 +1,8 @@
 # Medical Imaging Segmentation Toolkit
+Please cite the following if you use this code for your work:
+
+> A. Celaya et al., "PocketNet: A Smaller Neural Network For Medical Image Analysis," in IEEE Transactions on Medical Imaging, doi: 10.1109/TMI.2022.3224873.
+
 ## Table of Contents
 
 - [Overview](#overview)
