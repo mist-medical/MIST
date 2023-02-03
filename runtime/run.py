@@ -1,6 +1,8 @@
 import os
 import gc
 import json
+import pdb
+
 import ants
 import ctypes
 import pandas as pd
@@ -23,7 +25,7 @@ from inference.sliding_window import sliding_window_inference
 from postprocess_preds.postprocess import Postprocess
 from runtime.utils import get_files_df, get_lr_schedule, get_optimizer, get_flip_axes, \
     evaluate_prediction, compute_results_stats, init_results_df, set_seed, set_tf_flags, set_visible_devices, \
-    set_memory_growth, set_amp, set_xla, hvd_init
+    set_memory_growth, set_amp, set_xla, hvd_init, get_test_df
 from data_loading.dali_loader import get_data_loader
 
 
@@ -179,7 +181,12 @@ class RunTime:
             optimizer = get_optimizer(self.args)
 
             # Get loss function
-            loss_fn = get_loss(self.args, class_weights=self.config['class_weights'])
+            if self.args.use_precomputed_weights:
+                class_weights = self.config['class_weights']
+            else:
+                class_weights = None
+
+            loss_fn = get_loss(self.args, class_weights=class_weights)
 
             # Get model
             model = get_model(self.args.model,
@@ -267,7 +274,7 @@ class RunTime:
                     progress_bar.reset()
                     current_epoch += 1
                     local_step = 1
-                    # gc.collect()
+                    gc.collect()
 
             # End of training for fold
 
@@ -294,9 +301,9 @@ class RunTime:
                                           seed=42,
                                           num_workers=8)
 
+            # Bug fix: Strange behavior with numerical ids
             test_df_ids = [pat.split('/')[-1].split('.')[0] for pat in test_images]
-            test_df = self.df.loc[self.df['id'].astype(str).isin(test_df_ids)]
-            test_df = test_df.sort_values(by=['id']).reset_index(drop=True)
+            test_df = get_test_df(self.df, test_df_ids)
 
             # print('Running inference on validation set...')
             self.predict_and_evaluate_val(best_model_path, test_df, test_loader)

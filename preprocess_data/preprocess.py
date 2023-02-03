@@ -91,11 +91,11 @@ def preprocess_example(config, image_list, mask):
 
     if training:
         # Reorient mask to RAI if not already in RAI
-        if np.linalg.norm(mask.direction - np.eye(3)) > 0:
-            mask.set_direction(np.eye(3))
+        mask = ants.reorient_image2(mask, "RAI")
+        mask.set_direction(np.eye(3))
 
         # Resample mask to target spacing if dataset is anisotropic
-        if np.linalg.norm(np.array(mask.spacing) - np.array(config['target_spacing'])) > 0:
+        if not(np.array_equal(np.array(mask.spacing), np.array(config['target_spacing']))):
             mask = ants.resample_image(mask,
                                        resample_params=config['target_spacing'],
                                        use_voxels=False,
@@ -116,11 +116,11 @@ def preprocess_example(config, image_list, mask):
         image = ants.image_read(image_path)
 
         # Reorient image to RAI if not already in RAI
-        if np.linalg.norm(image.direction - np.eye(3)) > 0:
-            image.set_direction(np.eye(3))
+        image = ants.reorient_image2(image, "RAI")
+        image.set_direction(np.eye(3))
 
         # Resample image to target spacing using spline interpolation
-        if np.linalg.norm(np.array(image.spacing) - np.array(config['target_spacing'])) > 0:
+        if not(np.array_equal(np.array(image.spacing), np.array(config['target_spacing']))):
             image = ants.resample_image(image,
                                         resample_params=config['target_spacing'],
                                         use_voxels=False,
@@ -157,10 +157,6 @@ def preprocess_example(config, image_list, mask):
 
         # Bug fix. Sometimes the dimensions of the resampled images are off by 1.
         img = resize_image_with_crop_or_pad(img, dims)
-        # temp_dims = [np.max([img.shape[i], dims[i]]) for i in range(3)]
-        # img_temp = np.zeros(tuple(temp_dims))
-        # img_temp[0:img.shape[0], 0:img.shape[1], 0:img.shape[2], ...] = img
-        # img = img_temp[0:dims[0], 0:dims[1], 0:dims[2]]
 
         image_npy[..., j] = img
 
@@ -197,8 +193,6 @@ def preprocess_dataset(args):
         compute_weights = True
     else:
         class_weights = args.class_weights
-        assert len(config['labels']) == len(class_weights)
-
         compute_weights = False
 
     print('Preprocessing dataset...')
@@ -238,6 +232,8 @@ def preprocess_dataset(args):
     if compute_weights:
         den = (1. / len(config['labels'])) * (np.sum(1. / np.array(class_weights)))
         class_weights = [(1. / class_weights[j]) / den for j in range(len(config['labels']))]
+        max_weight = np.max(class_weights)
+        class_weights = [weight / max_weight for weight in class_weights]
 
     # Save class weights to config file for later
     config['class_weights'] = class_weights

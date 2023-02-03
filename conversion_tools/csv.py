@@ -14,7 +14,7 @@ def copy_csv_data(df, dest, mode):
         patient = df.iloc[i].to_dict()
 
         # Create new patient folder
-        patient_dest = os.path.join(dest, patient['id'])
+        patient_dest = os.path.join(dest, str(patient['id']))
         create_empty_dir(patient_dest)
         
         if mode == 'train':

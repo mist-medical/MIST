@@ -68,30 +68,26 @@ def back_to_original_space(prediction, inferred_params, original_image, nzmask, 
     prediction = ants.from_numpy(prediction)
     prediction.set_spacing(inferred_params['target_spacing'])
 
-    if np.linalg.norm(np.array(original_image.direction) - np.eye(3)) > 0:
-        prediction.set_direction(original_image.direction)
+    # Reorient prediction
+    original_orientation = ants.get_orientation(original_image)
+    prediction = ants.reorient_image2(prediction, original_orientation)
+    prediction.set_direction(original_image.direction)
 
-    if np.linalg.norm(np.array(prediction.spacing) - np.array(original_image.spacing)) > 0:
-        prediction = ants.resample_image(prediction,
-                                         resample_params=list(original_image.spacing),
-                                         use_voxels=False,
-                                         interp_type=1)
+    # Resample prediction
+    prediction = ants.resample_image(prediction,
+                                     resample_params=list(original_image.spacing),
+                                     use_voxels=False,
+                                     interp_type=1)
 
     prediction = prediction.numpy()
 
-    # Set correct dimensions for resampled prediction
-    prediction_dims = prediction.shape
+    # Get original dimensions for final size correction if necessary
     if inferred_params['use_nz_mask']:
         original_dims = original_cropped.numpy().shape
     else:
         original_dims = original_image.numpy().shape
 
     prediction_final = resize_image_with_crop_or_pad(prediction, original_dims)
-    # prediction_final_dims = [np.max([prediction_dims[i], original_dims[i]]) for i in range(3)]
-    #
-    # prediction_final = np.zeros(tuple(prediction_final_dims))
-    # prediction_final[0:prediction.shape[0], 0:prediction.shape[1], 0:prediction.shape[2], ...] = prediction
-    # prediction_final = prediction_final[0:original_dims[0], 0:original_dims[1], 0:original_dims[2], ...]
 
     if inferred_params['use_nz_mask']:
         prediction_final = original_cropped.new_image_like(data=prediction_final)

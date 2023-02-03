@@ -31,7 +31,7 @@ def get_activation(name, **kwargs):
     elif name == "leaky":
         return tf.keras.layers.LeakyReLU(alpha=kwargs["alpha"])
     elif name == "prelu":
-        return tf.keras.layers.PReLU(shared_axis=[1, 2, 3])
+        return tf.keras.layers.PReLU(shared_axes=[1, 2, 3])
     else:
         raise ValueError("Invalid activation layer")
 

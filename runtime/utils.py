@@ -69,6 +69,16 @@ def get_files_df(params, mode):
     return df
 
 
+def get_test_df(df, test_df_ids):
+    test_df = pd.DataFrame(columns=df.columns)
+    for patient in test_df_ids:
+        row_dict = df.loc[df['id'].astype(str).isin([patient])].to_dict("list")
+        for key in row_dict.keys():
+            row_dict[key] = str(row_dict[key][0])
+        test_df = test_df.append(row_dict, ignore_index=True)
+    return test_df
+
+
 def convert_dict_to_df(patients):
     columns = ['id']
 

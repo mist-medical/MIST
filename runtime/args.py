@@ -99,10 +99,13 @@ def get_main_args():
     p.arg('--clip-norm-max', type=float, default=1.0, help='Max threshold for global norm clipping')
 
     # UNet architecture
-    p.arg("--model", type=str, default="nnunet", choices=["nnunet", "unet", "resnet", "densenet", "hrnet"])
+    p.arg("--model",
+          type=str,
+          default="nnunet",
+          choices=["nnunet", "unet", "resnet", "densenet", "hrnet"])
     p.arg('--depth', type=non_negative_int, help='Depth of U-Net')
-    p.arg('--init-filters', type=non_negative_int, default=32, help='Number of filters to start U-Net')
-    p.boolean_flag('--pocket', default=False, help='Use pocket U-Net')
+    p.arg('--init-filters', type=non_negative_int, default=32, help='Number of filters to start network')
+    p.boolean_flag('--pocket', default=False, help='Use pocket version of network')
 
     # Data loading
     p.arg('--oversampling',
@@ -111,6 +114,7 @@ def get_main_args():
           help='Probability of crop centered on foreground voxel')
 
     # Preprocessing
+    p.boolean_flag("--use-precomputed-weights", default=False, help="Use precomputed class weights")
     p.arg('--class-weights', nargs='+', type=float, help='Specify class weights')
 
     # Loss function
@@ -119,16 +123,6 @@ def get_main_args():
           default='dice_ce',
           choices=['dice_ce', 'dice', 'gdl', 'gdl_ce'],
           help='Loss function for training')
-
-    # TODO: Work on this later
-    # DTM loss function parameters
-    # p.boolean_flag('--use-dtm', default = False, help = 'Use distance transorm map, required for bl and wnbl losses')
-    # p.arg('--alpha', type = float_0_1, default = 0.99, help = 'Weighting term for DTM based losses')
-    # p.arg('--alpha-scheduler', 
-    #       type = str,
-    #       default = 'none', 
-    #       choices = ['none', 'linear', 'step', 'cosine'], 
-    #       help = 'Weighting schedule for DTM based losses')
 
     # Sliding window inference
     p.arg('--sw-overlap',

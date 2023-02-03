@@ -1,8 +1,8 @@
 import tensorflow as tf
 
-from models.layers import ConvLayer, EncoderBlock, Bottleneck, DecoderBlock, BaseModel
+from models.layers import ConvLayer, BaseModel
 
-conv_kwargs = {"regularizer": "l2",
+conv_kwargs = {"regularizer": "none",
                "norm": "batch",
                "activation": "relu",
                "down_type": "maxpool"}
