@@ -156,8 +156,9 @@ class Analyze:
             dims = mask.numpy().shape
 
             # If native image spacing is different from target, get resampled image size
-            if np.linalg.norm(np.array(mask.spacing) - np.array(self.config['target_spacing'])) > 1e-8:
-                dims = [int(np.round(dims[i] / self.config['target_spacing'][i])) for i in range(len(dims))]
+            if not(np.array_equal(np.array(mask.spacing), np.array(self.config['target_spacing']))):
+                dims = [int(np.round((dims[i]*mask.spacing[i]) / self.config['target_spacing'][i]))
+                        for i in range(len(dims))]
 
             # Get image buffer sizes
             image_buffer_size = 4 * (np.prod(dims) * (len(image_list) + len(self.labels)))
