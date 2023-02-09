@@ -24,4 +24,3 @@ class ProgressBar:
 
         self.train_loss.reset_states()
         self.val_loss.reset_states()
-

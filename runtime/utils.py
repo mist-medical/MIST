@@ -8,11 +8,9 @@ import absl.logging
 import multiprocessing
 import pandas as pd
 import numpy as np
-from functools import wraps
 
 import tensorflow as tf
 from tensorflow.keras import mixed_precision
-import horovod.tensorflow as hvd
 
 from metrics.metrics import dice_sitk, hausdorff, surface_hausdorff
 
@@ -143,7 +141,7 @@ def get_optimizer(args):
 def set_visible_devices(args):
     # Select GPU(s) for training
     if len(args.gpus) > 1:
-        visible_devices = ','.join([str(self.args.gpus[j]) for j in range(len(args.gpus))])
+        visible_devices = ','.join([str(args.gpus[j]) for j in range(len(args.gpus))])
         os.environ['CUDA_VISIBLE_DEVICES'] = visible_devices
     else:
         os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpus[0])
@@ -163,30 +161,33 @@ def set_amp():
     mixed_precision.set_global_policy(policy)
 
 
-def set_xla():
+def set_xla(args):
+    os.environ["TF_XLA_ENABLE_GPU_GRAPH_CAPTURE"] = "1"
+    if args.amp:
+        os.environ["XLA_FLAGS"] = "--xla_gpu_force_conv_nhwc"
     tf.config.optimizer.set_jit(True)
 
 
-def hvd_init():
-    hvd.init()
-
-
-def set_tf_flags():
-    os.environ["CUDA_CACHE_DISABLE"] = "1"
+def set_tf_flags(args):
+    os.environ["CUDA_CACHE_DISABLE"] = "0"
     os.environ["HOROVOD_GPU_ALLREDUCE"] = "NCCL"
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
     os.environ["TF_GPU_THREAD_MODE"] = "gpu_private"
-    os.environ["TF_USE_CUDNN_BATCHNORM_SPATIAL_PERSISTENT"] = "0"
+    os.environ["TF_GPU_THREAD_COUNT"] = str(len(args.gpus))
+    os.environ["TF_USE_CUDNN_BATCHNORM_SPATIAL_PERSISTENT"] = "1"
     os.environ["TF_ADJUST_HUE_FUSED"] = "1"
     os.environ["TF_ADJUST_SATURATION_FUSED"] = "1"
     os.environ["TF_ENABLE_WINOGRAD_NONFUSED"] = "1"
     os.environ["TF_SYNC_ON_FINISH"] = "0"
     os.environ["TF_AUTOTUNE_THRESHOLD"] = "2"
     os.environ["TF_ENABLE_AUTO_MIXED_PRECISION"] = "0"
+    os.environ["TF_ENABLE_LAYOUT_NHWC"] = "1"
+    os.environ["TF_CPP_VMODULE"] = "4"
 
-    tf.config.optimizer.set_experimental_options({"remapping": False})
-    tf.config.threading.set_intra_op_parallelism_threads(1)
-    tf.config.threading.set_inter_op_parallelism_threads(max(2, (multiprocessing.cpu_count() // hvd.size()) - 2))
+    if len(args.gpus) > 1:
+        tf.config.threading.set_inter_op_parallelism_threads(max(2, (multiprocessing.cpu_count() // len(args.gpus)) - 2))
+    else:
+        tf.config.threading.set_inter_op_parallelism_threads(8)
 
 
 def set_seed(seed):
@@ -203,27 +204,14 @@ Misc. utilities
 def set_warning_levels():
     warnings.simplefilter(action='ignore',
                           category=np.VisibleDeprecationWarning)
-
     warnings.simplefilter(action='ignore',
                           category=FutureWarning)
+    warnings.simplefilter(action='ignore',
+                          category=RuntimeWarning)
 
     absl.logging.set_verbosity(absl.logging.ERROR)
 
     logging.getLogger('tensorflow').disabled = True
-
-
-def is_main_process():
-    return hvd.rank() == 0
-
-
-def rank_zero_only(fn):
-    @wraps(fn)
-    def wrapped_fn(*args, **kwargs):
-        if is_main_process():
-            return fn(*args, **kwargs)
-
-    return wrapped_fn
-
 
 '''
 Evaluation utilities

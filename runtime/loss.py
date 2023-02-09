@@ -10,7 +10,7 @@ def get_one_hot(y_true, y_pred):
 
 class DiceLoss(tf.keras.losses.Loss):
     def __init__(self, **kwargs):
-        super(DiceLoss, self).__init__()
+        super(DiceLoss, self).__init__(reduction=kwargs["reduction"])
         self.axes = (1, 2, 3)
         self.smooth = 1.e-6
 
@@ -22,15 +22,16 @@ class DiceLoss(tf.keras.losses.Loss):
         num = tf.reduce_sum(tf.square(y_true - y_pred), axis=self.axes)
         den = tf.reduce_sum(tf.square(y_true), axis=self.axes) + tf.reduce_sum(tf.square(y_pred),
                                                                                axis=self.axes) + self.smooth
+
         return tf.reduce_mean(num / den, axis=-1)
 
 
 class DiceCELoss(tf.keras.losses.Loss):
     def __init__(self, **kwargs):
-        super(DiceCELoss, self).__init__()
+        super(DiceCELoss, self).__init__(reduction=kwargs["reduction"])
         self.axes = (1, 2, 3)
         self.smooth = 1.e-6
-        self.dice_loss = DiceLoss()
+        self.dice_loss = DiceLoss(**kwargs)
 
     def call(self, y_true, y_pred):
         dice_loss = self.dice_loss(y_true, y_pred)
@@ -42,7 +43,7 @@ class DiceCELoss(tf.keras.losses.Loss):
 
 class WeightedDiceLoss(tf.keras.losses.Loss):
     def __init__(self, class_weights, **kwargs):
-        super(WeightedDiceLoss, self).__init__()
+        super(WeightedDiceLoss, self).__init__(reduction=kwargs["reduction"])
         self.class_weights = class_weights
         self.axes = (1, 2, 3)
         self.smooth = 1.e-6
@@ -73,11 +74,11 @@ class WeightedDiceLoss(tf.keras.losses.Loss):
 
 class WeightedDiceCELoss(tf.keras.losses.Loss):
     def __init__(self, class_weights, **kwargs):
-        super(WeightedDiceCELoss, self).__init__()
+        super(WeightedDiceCELoss, self).__init__(reduction=kwargs["reduction"])
         self.class_weights = class_weights
         self.axes = (1, 2, 3)
         self.smooth = 1.e-6
-        self.gdl_loss = WeightedDiceLoss(class_weights)
+        self.gdl_loss = WeightedDiceLoss(class_weights, **kwargs)
 
     def call(self, y_true, y_pred):
         gdl_loss = self.gdl_loss(y_true, y_pred)
@@ -92,18 +93,18 @@ class WeightedDiceCELoss(tf.keras.losses.Loss):
 
 def get_loss(args, **kwargs):
     if args.loss == 'dice':
-        loss_fn = DiceLoss()
+        loss_fn = DiceLoss(reduction=kwargs["reduction"])
 
     elif args.loss == 'dice_ce':
-        loss_fn = DiceCELoss()
+        loss_fn = DiceCELoss(reduction=kwargs["reduction"])
 
     elif args.loss == 'gdl':
-        loss_fn = WeightedDiceLoss(class_weights=kwargs['class_weights'])
+        loss_fn = WeightedDiceLoss(class_weights=kwargs['class_weights'], reduction=kwargs["reduction"])
 
     elif args.loss == 'gdl_ce':
-        loss_fn = WeightedDiceCELoss(class_weights=kwargs['class_weights'])
+        loss_fn = WeightedDiceCELoss(class_weights=kwargs['class_weights'], reduction=kwargs["reduction"])
 
     else:
-        loss_fn = DiceCELoss()
+        loss_fn = DiceCELoss(reduction=kwargs["reduction"])
 
     return loss_fn

@@ -1,4 +1,3 @@
-import horovod.tensorflow as hvd
 import numpy as np
 import nvidia.dali.fn as fn
 import nvidia.dali.math as math
@@ -34,6 +33,7 @@ class GenericPipeline(Pipeline):
             self,
             batch_size,
             num_threads,
+            device_id,
             shard_id,
             seed,
             num_gpus,
@@ -44,7 +44,7 @@ class GenericPipeline(Pipeline):
         super().__init__(
             batch_size=batch_size,
             num_threads=num_threads,
-            device_id=hvd.rank(),
+            device_id=device_id,
             seed=seed,
         )
 
@@ -176,35 +176,62 @@ class EvalPipeline(GenericPipeline):
         return img, lbl
 
 
-def get_data_loader(imgs, lbls, batch_size, mode, **kwargs):
+def check_dataset(imgs, lbls):
     assert len(imgs) > 0, "No images found"
     if lbls is not None:
         assert len(imgs) == len(lbls), f"Got {len(imgs)} images but {len(lbls)} lables"
 
-    gpus = hvd.size()
-    device_id = hvd.rank()
+
+def get_validation_dataset(imgs, lbls, batch_size, **kwargs):
+    check_dataset(imgs, lbls)
+
+    gpus = 1
+    device_id = 0
 
     pipe_kwargs = {
         "num_gpus": gpus,
         "seed": kwargs["seed"],
         "batch_size": batch_size,
         "num_threads": kwargs["num_workers"],
+        "device_id": device_id,
         "shard_id": device_id
     }
 
-    if mode == "eval":  # Validation data is manually sharded beforehand.
-        pipe_kwargs["shard_id"] = 0
-        pipe_kwargs["num_gpus"] = 1
-
     output_dtypes = (tf.float32, tf.uint8)
-    if mode == "train":
-        pipeline = TrainPipeline(imgs,
-                                 lbls,
-                                 kwargs["oversampling"],
-                                 kwargs["patch_size"],
-                                 **pipe_kwargs)
-    elif mode == "eval":
-        pipeline = EvalPipeline(imgs, lbls, **pipe_kwargs)
-
+    pipeline = EvalPipeline(imgs, lbls, **pipe_kwargs)
     tf_pipe = dali_tf.DALIDataset(pipeline, batch_size=batch_size, device_id=device_id, output_dtypes=output_dtypes)
     return tf_pipe
+
+
+def get_distributed_train_dataset(imgs, lbls, batch_size, strategy, n_gpus, **kwargs):
+    check_dataset(imgs, lbls)
+
+    def dataset_fn(input_context):
+        with tf.device("/gpu:{}".format(input_context.input_pipeline_id)):
+            device_id = input_context.input_pipeline_id
+            pipe_kwargs = {
+                "num_gpus": n_gpus,
+                "seed": kwargs["seed"],
+                "batch_size": batch_size,
+                "num_threads": kwargs["num_workers"],
+                "device_id": device_id,
+                "shard_id": device_id
+            }
+            output_dtypes = (tf.float32, tf.uint8)
+            pipeline = TrainPipeline(imgs,
+                                     lbls,
+                                     kwargs["oversampling"],
+                                     kwargs["patch_size"],
+                                     **pipe_kwargs)
+            return dali_tf.DALIDataset(pipeline,
+                                       batch_size=batch_size,
+                                       output_dtypes=output_dtypes,
+                                       device_id=device_id)
+
+    input_options = tf.distribute.InputOptions(
+        experimental_place_dataset_on_device=True,
+        experimental_fetch_to_device=False,
+        experimental_replication_mode=tf.distribute.InputReplicationMode.PER_REPLICA)
+
+    train_dataset = strategy.experimental_distribute_datasets_from_function(dataset_fn, input_options)
+    return train_dataset

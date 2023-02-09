@@ -1,10 +1,8 @@
 import os
 import gc
 import json
-import pdb
 
 import ants
-import ctypes
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
@@ -23,10 +21,10 @@ from runtime.logger import Logger
 from inference.main_inference import predict_single_example, load_test_time_models, test_time_inference
 from inference.sliding_window import sliding_window_inference
 from postprocess_preds.postprocess import Postprocess
-from runtime.utils import get_files_df, get_lr_schedule, get_optimizer, get_flip_axes, \
+from runtime.utils import get_files_df, get_optimizer, get_flip_axes, \
     evaluate_prediction, compute_results_stats, init_results_df, set_seed, set_tf_flags, set_visible_devices, \
-    set_memory_growth, set_amp, set_xla, hvd_init, get_test_df
-from data_loading.dali_loader import get_data_loader
+    set_memory_growth, set_amp, set_xla, get_test_df
+from data_loading.dali_loader import get_validation_dataset, get_distributed_train_dataset
 
 
 class RunTime:
@@ -49,7 +47,9 @@ class RunTime:
         self.n_classes = len(self.data['labels'])
 
         self.flip_axes = get_flip_axes()
-        self.dice_loss = DiceLoss()
+
+        self.reduction = tf.keras.losses.Reduction.NONE
+        self.dice_loss = DiceLoss(reduction=self.reduction)
 
         # Get paths to dataset
         if self.args.paths is None:
@@ -156,51 +156,57 @@ class RunTime:
                                                                                   random_state=self.args.seed)
 
             # Get DALI loaders
-            train_loader = get_data_loader(imgs=train_images,
-                                           lbls=train_labels,
-                                           batch_size=self.args.batch_size,
-                                           mode='train',
-                                           seed=self.args.seed,
-                                           num_workers=8,
-                                           oversampling=self.args.oversampling,
-                                           patch_size=patch_size)
+            train_loader = get_distributed_train_dataset(imgs=train_images,
+                                                         lbls=train_labels,
+                                                         batch_size=self.args.batch_size,
+                                                         strategy=self.strategy,
+                                                         n_gpus=self.n_gpus,
+                                                         seed=self.args.seed,
+                                                         num_workers=8,
+                                                         oversampling=self.args.oversampling,
+                                                         patch_size=patch_size)
 
-            val_loader = get_data_loader(imgs=val_images,
-                                         lbls=val_labels,
-                                         batch_size=1,
-                                         mode='eval',
-                                         seed=self.args.seed,
-                                         num_workers=8)
+            val_loader = get_validation_dataset(imgs=val_images,
+                                                lbls=val_labels,
+                                                batch_size=1,
+                                                mode='eval',
+                                                seed=self.args.seed,
+                                                num_workers=8)
 
+            # Get steps per epoch
             if self.args.steps_per_epoch is None:
                 self.args.steps_per_epoch = len(train_images) // self.args.batch_size
             else:
                 self.args.steps_per_epoch = self.args.steps_per_epoch
 
-            # Set up optimizer
-            optimizer = get_optimizer(self.args)
-
-            # Get loss function
+            # Get class weights if we are using them
             if self.args.use_precomputed_weights:
                 class_weights = self.config['class_weights']
             else:
                 class_weights = None
 
-            loss_fn = get_loss(self.args, class_weights=class_weights)
+            # Set up optimizer, model, and loss under distribution strategy scope
+            with self.strategy.scope():
+                # Set up optimizer
+                optimizer = get_optimizer(self.args)
 
-            # Get model
-            model = get_model(self.args.model,
-                              input_shape=tuple(patch_size),
-                              n_channels=len(self.data['images']),
-                              n_classes=self.n_classes,
-                              init_filters=self.args.init_filters,
-                              depth=depth,
-                              pocket=self.args.pocket,
-                              config=self.config)
+                # Get model
+                model = get_model(self.args.model,
+                                  input_shape=tuple(patch_size),
+                                  n_channels=len(self.data['images']),
+                                  n_classes=self.n_classes,
+                                  init_filters=self.args.init_filters,
+                                  depth=depth,
+                                  pocket=self.args.pocket,
+                                  config=self.config)
+
+                # Get loss function
+                loss_fn = get_loss(self.args,
+                                   reduction=self.reduction,
+                                   class_weights=class_weights)
 
             train_loss = tf.keras.metrics.Mean('loss', dtype=tf.float32)
 
-            @tf.function
             def train_step(image, mask):
                 with tf.GradientTape() as tape:
                     pred = model(image)
@@ -216,6 +222,12 @@ class RunTime:
                 optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
                 train_loss(unscaled_loss)
+                return loss
+
+            @tf.function
+            def distributed_train_step(image, mask):
+                per_replica_losses = self.strategy.run(train_step, args=(image, mask))
+                return self.strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
 
             val_loss = tf.keras.metrics.Mean('val_loss', dtype=tf.float32)
 
@@ -229,7 +241,6 @@ class RunTime:
                                                 model=model)
 
                 val_loss(self.dice_loss(mask, pred))
-                # gc.collect()
 
             # Setup checkpoints for training
             best_val_loss = np.Inf
@@ -256,7 +267,7 @@ class RunTime:
                 if local_step == 1:
                     print('Fold {}: Epoch {}/{}'.format(fold, current_epoch, self.args.epochs))
 
-                train_step(image, mask)
+                distributed_train_step(image, mask)
                 progress_bar.update_train_bar()
                 local_step += 1
 
@@ -294,12 +305,12 @@ class RunTime:
             test_labels = [labels[idx] for idx in test_splits[fold]]
             test_labels.sort()
 
-            test_loader = get_data_loader(imgs=test_images,
-                                          lbls=test_labels,
-                                          batch_size=1,
-                                          mode='eval',
-                                          seed=42,
-                                          num_workers=8)
+            test_loader = get_validation_dataset(imgs=test_images,
+                                                 lbls=test_labels,
+                                                 batch_size=1,
+                                                 mode='eval',
+                                                 seed=42,
+                                                 num_workers=8)
 
             # Bug fix: Strange behavior with numerical ids
             test_df_ids = [pat.split('/')[-1].split('.')[0] for pat in test_images]
@@ -319,7 +330,6 @@ class RunTime:
         # End train function
 
     def run(self):
-
         os.environ["TF_GPU_THREAD_MODE"] = "gpu_private"
         os.environ["TF_GPU_THREAD_COUNT"] = "1"
 
@@ -338,13 +348,14 @@ class RunTime:
             set_amp()
 
         if self.args.xla:
-            set_xla()
-
-        # Initialize horovod
-        hvd_init()
+            set_xla(self.args)
 
         # Set tf flags
-        set_tf_flags()
+        set_tf_flags(self.args)
+
+        # Define tf distribution strategy for multi or single gpu training
+        self.n_gpus = len(self.args.gpus)
+        self.strategy = tf.distribute.MirroredStrategy()
 
         # Run training pipeline
         self.train()

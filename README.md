@@ -27,14 +27,14 @@ The Medical Imaging Segmentation Toolkit (MIST) is a simple 3D medical imaging s
 
 The following features are supported by MIST: 
 
-| Feature                                                                                         | MIST |
-|-------------------------------------------------------------------------------------------------|------|
-| [NVIDIA Data Loading Library (DALI)](https://docs.nvidia.com/deeplearning/dali/user-guide/docs/) | Yes  |
-| [Automatic mixed precision (AMP)](https://www.tensorflow.org/guide/mixed_precision)             | Yes  |
-| [Accelerated Linear Algebra (XLA)](https://www.tensorflow.org/xla)                              | Yes  |
-| [Horovod Multi-GPU (NCCL)](https://horovod.ai/)                                                 | No   |
+| Feature                                                                                           | MIST |
+|---------------------------------------------------------------------------------------------------|------|
+| [NVIDIA Data Loading Library (DALI)](https://docs.nvidia.com/deeplearning/dali/user-guide/docs/)  | Yes  |
+| [Automatic mixed precision (AMP)](https://www.tensorflow.org/guide/mixed_precision)               | Yes  |
+| [Accelerated Linear Algebra (XLA)](https://www.tensorflow.org/xla)                                | Yes  |
+| [Multi-GPU training with tf.distribute](https://www.tensorflow.org/api_docs/python/tf/distribute) | Yes  |
 
-Support for Horovod Multi-GPU (NCCL) is an upcoming feature.
+Support for PyTorch is coming soon.
     
 ## Setup
 ### Requirements
