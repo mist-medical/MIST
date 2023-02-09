@@ -2,7 +2,7 @@ import os
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
 from runtime.args import non_negative_int, float_0_1, ArgParser
-from runtime.utils import set_warning_levels, set_memory_growth, set_tf_flags, set_amp, set_xla, hvd_init
+from runtime.utils import set_warning_levels, set_memory_growth, set_tf_flags, set_amp, set_xla
 from inference.main_inference import check_test_time_input, load_test_time_models, test_time_inference
 
 
