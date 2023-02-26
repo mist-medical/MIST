@@ -77,7 +77,7 @@ class RunTime:
                                                 [model],
                                                 self.args.sw_overlap,
                                                 self.args.blend_mode,
-                                                self.args.tta)
+                                                False)
 
             prediction_filename = '{}.nii.gz'.format(patient['id'])
             ants.image_write(prediction,

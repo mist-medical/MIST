@@ -145,6 +145,7 @@ class Postprocess:
 
         # Get final statistics
         new_results_df = compute_results_stats(new_results_df)
+        new_results_df.to_csv(os.path.join(self.args.results, "predictions", "train", "postprocess", "clean_mask.csv"))
 
         new_score = compute_results_score(new_results_df)
         if new_score > self.best_score:
@@ -208,6 +209,9 @@ class Postprocess:
             # Get final statistics
             new_results_df = compute_results_stats(new_results_df)
 
+            new_results_df.to_csv(
+                os.path.join(self.args.results, "predictions", "train", "postprocess", "component_{}.csv".format(i)))
+
             new_score = compute_results_score(new_results_df)
             if new_score > self.best_score:
                 use_postprocessing.append(self.data['labels'][i])
@@ -219,12 +223,12 @@ class Postprocess:
         return use_postprocessing
 
     def run(self):
-        if not(self.args.post_no_morph):
+        if not self.args.post_no_morph:
             clean_mask = self.use_clean_mask()
         else:
             clean_mask = False
 
-        if not(self.args.post_no_largest):
+        if not self.args.post_no_largest:
             use_postprocessing = self.connected_components_analysis()
         else:
             use_postprocessing = []

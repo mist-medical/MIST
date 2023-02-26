@@ -9,6 +9,21 @@ def get_worst_haus(truth):
     depth = truth.GetDepth() * spacing[0]
     return np.sqrt(width ** 2 + height ** 2 + depth ** 2)
 
+
+def check_both_empty(truth, pred):
+    statsImageFilter = sitk.StatisticsImageFilter()
+    statsImageFilter.Execute(truth)
+    sum_truth = int(statsImageFilter.GetSum())
+
+    statsImageFilter.Execute(pred)
+    sum_pred = int(statsImageFilter.GetSum())
+
+    if (sum_truth == 0) and (sum_pred == 0):
+        return True
+    else:
+        return False
+
+
 def dice_sitk(truth, pred):
     # Read images
     pred = sitk.ReadImage(pred, sitk.sitkUInt8)
@@ -87,21 +102,24 @@ def surface_hausdorff(truth, pred, mode):
     meanSurfaceHausdorff = SurfaceHausdorff('/path/to/truth.nii.gz', 'path/to/pred.nii.gz', 'mean')
 
     Reference: http://insightsoftwareconsortium.github.io/SimpleITK-Notebooks/Python_html/34_Segmentation_Evaluation.html
-    Last modified: 01.20.2022
+    Last modified: 02.25.2023
     """
 
+    # Read in nifti files
+    truth = sitk.ReadImage(truth, sitk.sitkUInt8)
+    pred = sitk.ReadImage(pred, sitk.sitkUInt8)
+
+    # Compute sum of images to eliminate case where ground truth and prediction are both empty
+    both_empty = check_both_empty(truth, pred)
+
+    pred.CopyInformation(truth)
+
     try:
-        # Read in nifti files
-        truth = sitk.ReadImage(truth, sitk.sitkUInt8)
-        pred = sitk.ReadImage(pred, sitk.sitkUInt8)
-
-        pred.CopyInformation(truth)
-
         truthDistanceMap = sitk.Abs(sitk.SignedMaurerDistanceMap(truth, squaredDistance=False, useImageSpacing=True))
         truthSurface = sitk.LabelContour(truth)
 
-        statsImageFilter = sitk.StatisticsImageFilter()
         # Get the number of pixels in the truth surface by counting all pixels that are 1.
+        statsImageFilter = sitk.StatisticsImageFilter()
         statsImageFilter.Execute(truthSurface)
         numTruthSurfacePixels = int(statsImageFilter.GetSum())
 
@@ -140,10 +158,17 @@ def surface_hausdorff(truth, pred, mode):
         if not (np.isfinite(hausdorffSurface)):
             hausdorffSurface = get_worst_haus(truth)
 
-        return hausdorffSurface
+        if both_empty:
+            hausdorffSurface = 0
 
+        return hausdorffSurface
     except:
-        return get_worst_haus(truth)
+        if both_empty:
+            hausdorffSurface = 0
+        else:
+            hausdorffSurface = get_worst_haus(truth)
+
+        return hausdorffSurface
 
 
 def hausdorff(truth, pred, mode):
@@ -163,14 +188,18 @@ def hausdorff(truth, pred, mode):
 
     Reference: http://insightsoftwareconsortium.github.io/SimpleITK-Notebooks/Python_html/34_Segmentation_Evaluation.html
     Author: Adrian Celaya
-    Last modified: 01.20.2020
+    Last modified: 02.25.2023
     """
+
+    truth = sitk.ReadImage(truth, sitk.sitkUInt8)
+    pred = sitk.ReadImage(pred, sitk.sitkUInt8)
+
+    # Compute sum of images to eliminate case where ground truth and prediction are both empty
+    both_empty = check_both_empty(truth, pred)
+
+    pred.CopyInformation(truth)
+
     try:
-        truth = sitk.ReadImage(truth, sitk.sitkUInt8)
-        pred = sitk.ReadImage(pred, sitk.sitkUInt8)
-
-        pred.CopyInformation(truth)
-
         # Get the number of pixels in the reference surface by counting all pixels that are 1.
         statistics_image_filter = sitk.StatisticsImageFilter()
         statistics_image_filter.Execute(truth)
@@ -208,7 +237,15 @@ def hausdorff(truth, pred, mode):
         if not (np.isfinite(hausdorffDistance)):
             hausdorffDistance = get_worst_haus(truth)
 
+        if both_empty:
+            hausdorffDistance = 0
+
         return hausdorffDistance
 
     except:
-        return get_worst_haus(truth)
+        if both_empty:
+            hausdorffDistance = 0
+        else:
+            hausdorffDistance = get_worst_haus(truth)
+
+        return hausdorffDistance
