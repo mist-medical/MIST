@@ -174,6 +174,10 @@ class UNet(tf.keras.Model):
         self.n_layers = len(self.upsamples) - 1
 
     def call(self, x, training=True):
+
+        # Get current input shape for deep supervision
+        input_shape = (int(x.shape[1]), int(x.shape[2]), int(x.shape[3]))
+
         skip_connections = []
         out = self.input_block(x)
         skip_connections.append(out)
@@ -189,14 +193,22 @@ class UNet(tf.keras.Model):
             out = up_block(out, skip_connections.pop())
             decoder_outputs.append(out)
 
-        out = self.output_block(out)
-
         if training and self.deep_supervision:
-            out = [
-                out,
-                self.deep_supervision_heads[0](decoder_outputs[-2]),
-                self.deep_supervision_heads[1](decoder_outputs[-3]),
-            ]
+            out_deep_supervision = list()
+            out_deep_supervision.append(self.output_block(out))
+
+            for i in range(2):
+                head = decoder_outputs[-2]
+                current_shape = (int(head.shape[1]), int(head.shape[2]), int(head.shape[3]))
+                upsample_size = tuple([int(input_shape[i] // current_shape[i]) for i in range(3)])
+                head = tf.keras.layers.UpSampling3D(size=upsample_size)(head)
+                out_deep_supervision.append(self.deep_supervision_heads[i](head))
+
+            out = out_deep_supervision
+
+        else:
+            out = self.output_block(out)
+
         return out
 
     def get_output_block(self):
@@ -224,7 +236,7 @@ class UNet(tf.keras.Model):
 
 
 class NNUnet(tf.keras.Model):
-    def __init__(self, config, n_channels, n_classes, pocket):
+    def __init__(self, config, n_channels, n_classes, pocket, deep_supervision):
         super(NNUnet, self).__init__()
         kernels, strides = self.get_unet_params(config)
         self.n_classes = n_classes
@@ -238,7 +250,7 @@ class NNUnet(tf.keras.Model):
             dimension=3,
             normalization_layer="instance",
             negative_slope=0.01,
-            deep_supervision=False,
+            deep_supervision=deep_supervision,
             pocket=pocket
         )
 

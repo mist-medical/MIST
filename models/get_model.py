@@ -10,23 +10,30 @@ def get_model(model_name, **kwargs):
         model = UNet(n_classes=kwargs["n_classes"],
                      init_filters=kwargs["init_filters"],
                      depth=kwargs["depth"],
-                     pocket=kwargs["pocket"])
+                     pocket=kwargs["pocket"],
+                     deep_supervision=kwargs["deep_supervision"])
     elif model_name == "nnunet":
         model = NNUnet(kwargs["config"],
                        kwargs["n_channels"],
                        kwargs["n_classes"],
-                       kwargs["pocket"])
+                       kwargs["pocket"],
+                       kwargs["deep_supervision"])
     elif model_name == "resnet":
         model = ResNet(n_classes=kwargs["n_classes"],
                        init_filters=kwargs["init_filters"],
                        depth=kwargs["depth"],
-                       pocket=kwargs["pocket"])
+                       pocket=kwargs["pocket"],
+                       deep_supervision=kwargs["deep_supervision"])
     elif model_name == "densenet":
         model = DenseNet(n_classes=kwargs["n_classes"],
                          init_filters=kwargs["init_filters"],
                          depth=kwargs["depth"],
-                         pocket=kwargs["pocket"])
+                         pocket=kwargs["pocket"],
+                         deep_supervision=kwargs["deep_supervision"])
     elif model_name == "hrnet":
+        if kwargs["deep_supervision"]:
+            raise Warning("Deep supervision not supported for HRNet!")
+
         model = HRNet(input_shape=kwargs["input_shape"],
                       num_channels=kwargs["n_channels"],
                       num_class=kwargs["n_classes"],

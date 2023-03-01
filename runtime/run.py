@@ -135,7 +135,7 @@ class RunTime:
 
         # Get network depth based on patch size
         if self.args.depth is None:
-            depth = np.min([int(np.log(np.min(patch_size) / 4) / np.log(2)), 5])
+            depth = np.min([int(np.log(np.min(patch_size) // 4) // np.log(2)), 6])
         else:
             depth = self.args.depth
 
@@ -197,6 +197,7 @@ class RunTime:
                                   n_classes=self.n_classes,
                                   init_filters=self.args.init_filters,
                                   depth=depth,
+                                  deep_supervision=self.args.deep_supervision,
                                   pocket=self.args.pocket,
                                   config=self.config)
 
@@ -211,7 +212,17 @@ class RunTime:
                 with tf.GradientTape() as tape:
                     pred = model(image)
 
-                    unscaled_loss = loss_fn(mask, pred)
+                    if self.args.deep_supervision:
+                        unscaled_loss = loss_fn(mask, pred[0])
+
+                        for i, p in enumerate(pred[1:]):
+                            unscaled_loss += 0.5 ** (i + 1) * loss_fn(mask, p)
+
+                        c_norm = 1 / (2 - 2 ** (-len(pred)))
+                        unscaled_loss *= c_norm
+                    else:
+                        unscaled_loss = loss_fn(mask, pred)
+
                     loss = unscaled_loss
                     if self.args.amp:
                         loss = optimizer.get_scaled_loss(unscaled_loss)

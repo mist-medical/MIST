@@ -1,3 +1,4 @@
+import nv_norms
 import tensorflow as tf
 
 from models.normalizations import GroupNormalization, InstanceNormalization
@@ -8,6 +9,8 @@ def get_norm(name):
         return GroupNormalization(32, axis=-1, center=True, scale=True)
     elif "batch" in name:
         return tf.keras.layers.BatchNormalization(axis=-1, center=True, scale=True)
+    elif "atex_instance" in name:
+        return nv_norms.InstanceNormalization(axis=-1)
     elif "instance" in name:
         return InstanceNormalization(axis=-1, center=True, scale=True)
     elif "none" in name:
@@ -108,6 +111,7 @@ class BaseModel(tf.keras.Model):
                  init_filters,
                  depth,
                  pocket,
+                 deep_supervision,
                  **kwargs):
         super(BaseModel, self).__init__()
 
@@ -116,6 +120,7 @@ class BaseModel(tf.keras.Model):
         self.init_filters = init_filters
         self.depth = depth
         self.pocket = pocket
+        self.deep_supervision = deep_supervision
 
         # If pocket network, do not double feature maps after downsampling
         self.mul_on_downsample = 2
@@ -137,17 +142,51 @@ class BaseModel(tf.keras.Model):
 
         self.out = tf.keras.layers.Conv3D(self.n_classes, 1, dtype='float32')
 
-    def call(self, x):
+    def call(self, x, training=True):
+
+        # Get current input shape for deep supervision
+        input_shape = (int(x.shape[1]), int(x.shape[2]), int(x.shape[3]))
+
+        # Encoder
         skips = list()
         for encoder_block in self.encoder:
             skip, x = encoder_block(x)
             skips.append(skip)
 
+        # Bottleneck
         x = self.bottleneck(x)
 
+        # Add deep supervision heads
+        if self.deep_supervision and training:
+            deep_supervision_heads = list()
+
+        # Decoder
         skips.reverse()
         for skip, decoder_block in zip(skips, self.decoder):
             x = decoder_block(skip, x)
 
-        x = self.out(x)
-        return x
+            if self.deep_supervision and training:
+                deep_supervision_heads.append(x)
+
+        # Apply deep supervision
+        if self.deep_supervision and training:
+            # Create output list
+            output = list()
+
+            # Remove highest resolution output from deep supervision heads
+            deep_supervision_heads.pop()
+
+            for head in deep_supervision_heads:
+                current_shape = (int(head.shape[1]), int(head.shape[2]), int(head.shape[3]))
+                upsample_size = tuple([int(input_shape[i] // current_shape[i]) for i in range(3)])
+                head = tf.keras.layers.UpSampling3D(size=upsample_size)(head)
+                output.append(self.out(head))
+
+            output.append(self.out(x))
+
+            output.reverse()
+
+        else:
+            output = self.out(x)
+
+        return output

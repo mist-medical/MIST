@@ -26,7 +26,8 @@ class UNet(tf.keras.Model):
                  n_classes,
                  init_filters,
                  depth,
-                 pocket):
+                 pocket,
+                 deep_supervision):
         super(UNet, self).__init__()
 
         self.base_model = BaseModel(UNetBlock,
@@ -34,8 +35,9 @@ class UNet(tf.keras.Model):
                                     init_filters,
                                     depth,
                                     pocket,
+                                    deep_supervision,
                                     **conv_kwargs)
 
-    @tf.function
+    @tf.function(experimental_relax_shapes=True)
     def call(self, x, **kwargs):
         return self.base_model(x, **kwargs)

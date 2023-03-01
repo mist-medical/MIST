@@ -98,13 +98,14 @@ def get_main_args():
     p.boolean_flag('--clip-norm', default=False, help='Use gradient clipping')
     p.arg('--clip-norm-max', type=float, default=1.0, help='Max threshold for global norm clipping')
 
-    # UNet architecture
+    # Neural network parameters
     p.arg("--model",
           type=str,
           default="nnunet",
           choices=["nnunet", "unet", "resnet", "densenet", "hrnet"])
     p.arg('--depth', type=non_negative_int, help='Depth of U-Net')
     p.arg('--init-filters', type=non_negative_int, default=32, help='Number of filters to start network')
+    p.boolean_flag("--deep-supervision", default=False, help="Use deep supervision")
     p.boolean_flag('--pocket', default=False, help='Use pocket version of network')
 
     # Data loading

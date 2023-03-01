@@ -52,7 +52,7 @@ def get_importance_kernel(roi_size, blend_mode, sigma):
 @tf.function(experimental_relax_shapes=True)
 def run_model(model, windows, importance_map, sw_batch_size, **kwargs):
     windows_merged = tf.reshape(windows, shape=(-1, *windows.shape[2:]))
-    preds = tf.cast(model(windows_merged, **kwargs), dtype=tf.float32) * importance_map
+    preds = tf.cast(model(windows_merged, training=False, **kwargs), dtype=tf.float32) * importance_map
     return tf.reshape(preds, shape=(sw_batch_size, -1, *preds.shape[1:]))
 
 
