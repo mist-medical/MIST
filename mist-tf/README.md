@@ -273,7 +273,7 @@ MIST supports two formats for test data: CSV and JSON. For CSV formatted data, t
 |------------|-----------------------|-----------------------|-----------------------|-----------------------|
 | Patient ID | Full path to t1 image | Full path to t2 image | Full path to tc image | Full path to fl image | 
 
-Similaryly, for JSON fomratted data, we would have the following.
+Similarly, for JSON formatted data, we would have the following.
 ```
 {
     "Patient ID": {
@@ -284,18 +284,16 @@ Similaryly, for JSON fomratted data, we would have the following.
     }
 }
 ```
-Note that the order of the image types should be the same as the order given in the JSON file input to the MIST training pipeline.
+Note that the order of the image types should be the same as the order given in the JSON file 
+input to the MIST training pipeline.
 
 ### Advanced Usage
-To see the complete list of available options and their descriptions, use the -h or --help command-line option, for example:
+A complete list of available options and their descriptions, can be accessed by 
+using ```-h``` or ```--help``` command-line option, for example:
 
 ```
 python predict.py --help
-```
 
-The following output is printed when running the command above:
-
-```
 usage: predict.py [-h] [--models MODELS] [--config CONFIG] [--data DATA] [--output OUTPUT]
                   [--fast [BOOLEAN]] [--gpu GPU] [--amp [BOOLEAN]] [--xla [BOOLEAN]]
                   [--sw-overlap SW_OVERLAP] [--blend-mode {gaussian,constant}] [--tta [BOOLEAN]]
@@ -320,28 +318,25 @@ optional arguments:
 ## MSD and CSV Formatted Data
 If your dataset in the MSD or CSV format, then you can use the ```convert_to_mist.py``` script to convert your dataset to the standard MIST format described above. For example, if your dataset is in the MSD format, then use the following command to convert it to the standard MSD format.
 ```
-python convert_to_mist.py --msd-source /workspace/path/to/msd/dataset \ 
+python convert_to_mist.py --msd-source /workspace/path/to/msd/dataset \
 --dest /workspace/path/to/mist/format/dataset
 ```
 This will reformat the MSD dataset to the MIST format and produce the corresponding JSON file to run the MIST pipeline.
 
 If your dataset is given as a CSV file with ```id```, ```mask```, and columns for each image type, then use the following command to convert it to a MIST-compatible dataset.
 ```
-python convert_to_mist.py --format csv \ 
---train-csv /workspace/path/to/csv/dataset.csv \ 
+python convert_to_mist.py --format csv \
+--train-csv /workspace/path/to/csv/dataset.csv \
 --dest /workspace/path/to/mist/format/dataset
 ```
-Like the MSD formatted dataset, this command will reformat the CSV dataset to a MIST-compatible one but will require the user to fill in details in its corresponding JSON file.
+Like the MSD formatted dataset, this command will reformat the CSV dataset to a MIST-compatible 
+one but will require the user to fill in details in its corresponding JSON file.
 
-To see the complete list of available options and their descriptions, use the -h or --help command-line option, for example:
-
+A complete list of available options and their descriptions, can be accessed by 
+using ```-h``` or ```--help``` command-line option, for example:
 ```
 python convert_to_mist.py --help
-```
 
-The following output is printed when running the command above:
-
-```
 usage: convert_to_mist.py [-h] [--format {msd,csv}] [--msd-source MSD_SOURCE] [--train-csv TRAIN_CSV]
                           [--test-csv TEST_CSV] [--dest DEST]
 
