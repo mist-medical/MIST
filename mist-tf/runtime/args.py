@@ -150,7 +150,7 @@ def get_main_args():
     p.arg('--epochs', type=positive_int, default=300, help='Number of epochs')
     p.arg('--steps-per-epoch',
           type=positive_int,
-          help='Steps per epoch. By default ceil(training_dataset_size / batch_size / gpus)')
+          help='Steps per epoch. By default ceil(training_dataset_size / batch_size)')
 
     args = p.parse_args()
     return args

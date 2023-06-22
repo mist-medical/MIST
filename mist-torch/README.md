@@ -19,7 +19,8 @@ Please cite the following if you use this code for your work:
 ## Overview
 The Medical Imaging Segmentation Toolkit (MIST) is a simple 3D medical imaging segmentation 
 framework for PyTorch and TensorFlow. MIST allows researchers to quickly setup, train, 
-and test a variety of d. The following architectures are implemented on MIST:
+and test a variety of deep learning models for 3D medical imaging segmentation. 
+The following architectures are implemented on MIST in PyTorch:
 
 * nnUNet
 * U-Net
@@ -123,6 +124,12 @@ the environment via the YAML file provided.
 ```
 git clone https://github.com/aecelaya/MIST.git
 cd MIST/mist-torch
+```
+
+Change the ```prefix``` line at the bottom of the ```mist-torch.ymal``` file to match your system
+and then run the following line to create the environment.
+
+```
 conda env --create --file mist-torch.yml
 ```
 
@@ -130,6 +137,7 @@ Once the Conda environment is ready, you can run (with all default values) the M
 the following command:
 
 ```
+conda activate mist-torch
 python main.py --data examples/brats.json \
 --numpy /path/to/brats/numpy/ \
 --results /path/to/results
