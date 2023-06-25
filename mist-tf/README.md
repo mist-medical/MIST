@@ -258,33 +258,40 @@ optional arguments:
 
 ## Inference
 ### Overview
-Once the MIST pipeline finishes running, the saved models are in the ```models``` directory in the specified ```--results``` folder. Additionally, the MIST pipeline outputs a file called ```config.json``` at the top level of the user-defined ```--results``` folder. We can run the MIST pipeline on new test data using the following command.
+Once the MIST pipeline finishes running, the saved models are in the ```models``` directory in 
+the specified ```--results``` folder. Additionally, the MIST pipeline outputs a file 
+called ```config.json``` at the top level of the user-defined ```--results``` folder. 
+We can run the MIST pipeline on new test data using the following command.
 
 ```
-python predict.py --models /workspace/data/mist-examples/brats/results/models \ 
---config /workspace/data/mist-examples/brats/results/config.json \ 
---data /workspace/data/mist-examples/brats/new-data.csv \ 
+python predict.py --models /workspace/data/mist-examples/brats/results/models \
+--config /workspace/data/mist-examples/brats/results/config.json \
+--data /workspace/data/mist-examples/brats/new-data.csv \
 --output /workspace/data/mist-examples/brats/new-data-predictions
 ```
 
-MIST supports two formats for test data: CSV and JSON. For CSV formatted data, the CSV file must have an ```id`` column with the new patient IDs and one column for each image type. For example, for the BraTS dataset, our CSV header would look like the following.
+MIST supports two formats for test data: CSV and JSON. For CSV formatted data, the CSV file must,
+at a minimum, have an ```id``` column with the new patient IDs and one column for each image type.
+A column for the ```mask``` is allowed if you want to run the evaluation portion of the pipeline
+(see below). For example, for the BraTS dataset, our CSV header would look like the following.
 
-| id         | t1                    | t2                    | tc                    | fl                    |
-|------------|-----------------------|-----------------------|-----------------------|-----------------------|
-| Patient ID | Full path to t1 image | Full path to t2 image | Full path to tc image | Full path to fl image | 
+| id         | mask (optional) | t1               | t2               | tc               | fl               |
+|------------|-----------------|------------------|------------------|------------------|------------------|
+| Patient ID | Path to mask    | Path to t1 image | Path to t2 image | Path to tc image | Path to fl image |
 
 Similarly, for JSON formatted data, we would have the following.
 ```
 {
     "Patient ID": {
-        "t1": "Full path to t1 image",
-        "t2": "Full path to t2 image",
-        "tc": "Full path to tc image", 
-        "fl": "full path to fl image"
+        "mask": "Path to mask", *** (optional) ***
+        "t1": "Path to t1 image",
+        "t2": "Path to t2 image",
+        "tc": "Path to tc image", 
+        "fl": "Path to fl image"
     }
 }
 ```
-Note that the order of the image types should be the same as the order given in the JSON file 
+Note that the order of the image types should be the same as the order given in the JSON file
 input to the MIST training pipeline.
 
 ### Advanced Usage
@@ -313,6 +320,38 @@ optional arguments:
   --blend-mode {gaussian,constant}
                         How to blend output of overlapping windows (default: gaussian)
   --tta [BOOLEAN]       Use test time augmentation (default: False)
+```
+
+## Evaluating
+If you have a set of predictions that you want to evaluate, then run the ```eval_preds.py``` script
+as follows:
+
+```
+python eval_preds.py --data-json examples/brats.json \
+--paths-csv /workspace/data/mist-examples/brats/new-data.csv \
+--preds-dir /workspace/data/mist-examples/brats/results/predictions/test/ \ 
+--output-csv /workspace/data/mist-examples/brats/results/results_test.csv
+```
+
+A full list of options for the evaluation scirpt is below.
+
+```
+usage: eval_preds.py [-h] [--data-json DATA_JSON] [--paths-csv PATHS_CSV]
+                     [--preds-dir PREDS_DIR] [--output-csv OUTPUT_CSV]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --data-json DATA_JSON
+                        Path to dataset JSON file (default: None)
+  --paths-csv PATHS_CSV
+                        Path to CSV file with original mask/data (default:
+                        None)
+  --preds-dir PREDS_DIR
+                        Path to directory containing predictions (default:
+                        None)
+  --output-csv OUTPUT_CSV
+                        Path to CSV containing evaluation results (default:
+                        None)
 ```
 
 ## MSD and CSV Formatted Data

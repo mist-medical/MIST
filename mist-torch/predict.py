@@ -41,7 +41,7 @@ def main(args):
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
 
     # Handle inputs
-    df = check_test_time_input(args.data, args.output)
+    df = check_test_time_input(args.data)
 
     # Load models
     models = load_test_time_models(os.path.join(args.models), False)

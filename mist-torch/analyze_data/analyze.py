@@ -178,14 +178,19 @@ class Analyzer:
                 # If data exceeds maximum allowed memory size, then resample to coarser resolution
                 while image_memory_size > max_memory_per_image:
                     if self.is_anisotropic:
-                        trailing_dims = np.where(self.config["target_spacing"] != np.max(self.config["target_spacing"]))[0]
+                        trailing_dims = \
+                            np.where(self.config["target_spacing"] != np.max(self.config["target_spacing"]))[0]
                         for dim in trailing_dims:
                             self.config["target_spacing"][dim] *= 1.25
                     else:
                         self.config["target_spacing"] *= 1.25
 
                     dims, image_memory_size = self.get_resampled_dims(dims, mask_header["spacing"], len(image_list))
-                    messages += "In {}: Images are too large, coarsening target spacing to {}\n".format(patient["id"], np.round(self.config["target_spacing"], 4))
+                    messages += "In {}: Images are too large, coarsening target spacing to {}\n".format(patient["id"],
+                                                                                                        np.round(
+                                                                                                            self.config[
+                                                                                                                "target_spacing"],
+                                                                                                            4))
 
                 resampled_dims[i, :] = dims
 
@@ -231,7 +236,6 @@ class Analyzer:
 
         return global_z_score_mean, global_z_score_std, global_window_range
 
-
     def analyze_dataset(self):
         """
         Analyze dataset to get inferred parameters.
@@ -256,13 +260,12 @@ class Analyzer:
             self.config = {"modality": self.data["modality"],
                            "labels": self.labels,
                            "use_nz_mask": bool(use_nz_mask),
-                           "target_spacing": [float(target_spacing[i]) for i in range(3)], 
+                           "target_spacing": [float(target_spacing[i]) for i in range(3)],
                            "use_n4_bias_correction": bool(self.args.n4_bias_correction)}
         median_dims = self.check_resampled_dims(cropped_dims)
         self.config["median_image_size"] = [int(median_dims[i]) for i in range(3)]
 
     def run(self):
-
         text = Text("\nAnalyzing dataset\n")
         text.stylize("bold")
         console.print(text)
@@ -275,10 +278,19 @@ class Analyzer:
         with progress as pb:
             for i in pb.track(range(len(self.df))):
                 patient = self.df.iloc[i].to_dict()
-                mask_header = ants.image_header_info(patient["mask"])
+
+                # Check if labels are correct
+                mask = ants.image_read(patient["mask"])
+                mask_labels = set(mask.unique().astype("int"))
+                if not mask_labels == set(self.labels):
+                    messages += "In {}: Labels in mask do not match those specified in {}\n".format(patient["id"],
+                                                                                                    self.args.data)
+                    bad_data.append(i)
+                    continue
 
                 # Get list of image paths and segmentation mask
                 image_list = list(patient.values())[2:len(patient)]
+                mask_header = ants.image_header_info(patient["mask"])
                 for image_path in image_list:
                     image_header = ants.image_header_info(image_path)
 
@@ -319,6 +331,8 @@ class Analyzer:
             messages += "Excluding these from training\n"
             text = Text(messages)
             console.print(text)
+
+        assert len(bad_data) < len(self.df), "Dataset did not meet verification requirements, please check your data!"
 
         rows_to_drop = self.df.index[bad_data]
         self.df.drop(rows_to_drop, inplace=True)

@@ -15,8 +15,6 @@ from rich.progress import (
     TextColumn,
     TimeElapsedColumn
 )
-from rich.console import Console
-from rich.text import Text
 
 from monai.inferers import sliding_window_inference
 
@@ -167,10 +165,8 @@ def load_test_time_models(models_dir, fast):
     return models
 
 
-def check_test_time_input(patients, dest):
-    # Handle input data
-    create_empty_dir(dest)
-
+def check_test_time_input(patients):
+    # Convert input to pandas dataframe
     if isinstance(patients, pd.DataFrame):
         return patients
     elif '.csv' in patients:
@@ -204,7 +200,12 @@ def test_time_inference(df, dest, config_file, models, overlap, blend_mode, tta)
     with testing_progress as pb:
         for ii in pb.track(range(len(df))):
             patient = df.iloc[ii].to_dict()
-            image_list = list(patient.values())[1:]
+
+            if "mask" in df.columns:
+                image_list = list(patient.values())[2:]
+            else:
+                image_list = list(patient.values())[1:]
+
             original_image = ants.image_read(image_list[0])
 
             image_npy, _, _ = preprocess_example(config, image_list, None)
