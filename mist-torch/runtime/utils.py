@@ -23,6 +23,8 @@ def set_warning_levels():
                           category=FutureWarning)
     warnings.simplefilter(action='ignore',
                           category=RuntimeWarning)
+    warnings.simplefilter(action='ignore',
+                          category=UserWarning)
 
 
 def create_empty_dir(path):
@@ -177,7 +179,7 @@ def set_seed(seed):
     torch.cuda.manual_seed(seed)
 
 
-def create_model_config_file(args, config, data, depth, output):
+def create_model_config_file(args, config, data, depth, latent_dim, output):
     model_config = dict()
 
     model_config["model_name"] = args.model
@@ -190,6 +192,8 @@ def create_model_config_file(args, config, data, depth, output):
     model_config["pocket"] = args.pocket
     model_config["patch_size"] = config["patch_size"]
     model_config["target_spacing"] = config["target_spacing"]
+    model_config["latent_dim"] = latent_dim
+    model_config["vae_reg"] = args.vae_reg
 
     with open(output, 'w') as outfile:
         json.dump(model_config, outfile, indent=2)

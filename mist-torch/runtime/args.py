@@ -52,7 +52,7 @@ def get_main_args():
     p.arg("--exec-mode",
           type=str,
           default="all",
-          choices=["all", "analyze", "preprocess", "train", "eval"],
+          choices=["all", "analyze", "preprocess", "train"],
           help="Run all of the MIST pipeline or an individual component"),
     p.arg("--data", type=str, help="Path to dataset json file")
     p.arg("--gpus", nargs="+", default=[-1], type=int, help="Which gpu(s) to use, defaults to all available GPUs")
@@ -71,7 +71,7 @@ def get_main_args():
     p.arg("--batch-size", type=positive_int, default=2, help="Batch size")
     p.arg("--patch-size", nargs="+", default=[64, 64, 64], type=int, help="Height, width, and depth of patch size to "
                                                                           "use for cropping")
-    p.arg("--learning-rate", type=float, default=0.0003, help="Learning rate")
+    p.arg("--learning-rate", type=float, default=0.001, help="Learning rate")
     p.arg("--exp_decay", type=float, default=0.9, help="Exponential decay factor")
     p.arg("--lr-scheduler",
           type=str,
@@ -98,6 +98,11 @@ def get_main_args():
     p.arg("--init-filters", type=non_negative_int, default=32, help="Number of filters to start network")
     p.boolean_flag("--deep-supervision", default=False, help="Use deep supervision")
     p.arg("--deep-supervision-heads", type=positive_int, default=2, help="Number of deep supervision heads")
+    p.boolean_flag("--vae-reg", default=False, help="Use VAE regularization")
+    p.boolean_flag("--l2-reg", default=False, help="Use L2 regularization")
+    p.arg("--l2-penalty", default=0.00001, help="L2 penalty")
+    p.boolean_flag("--l1-reg", default=False, help="Use L1 regularization")
+    p.arg("--l1-penalty", default=0.00001, help="L1 penalty")
 
     # Data loading
     p.arg("--oversampling",

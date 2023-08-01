@@ -9,7 +9,7 @@ def get_eval_args():
     p = ArgParser(formatter_class=ArgumentDefaultsHelpFormatter)
 
     p.arg("--data-json", type=str, help="Path to dataset JSON file")
-    p.arg("--paths-csv", type=str, help="Path to CSV file with original mask/data")
+    p.arg("--paths", type=str, help="Path to CSV or JSON file with original mask/data")
     p.arg("--preds-dir", type=str, help="Path to directory containing predictions")
     p.arg("--output-csv", type=str, help="Path to CSV containing evaluation results")
 
@@ -22,7 +22,7 @@ def main(args):
     set_warning_levels()
 
     # Evaluate predictions
-    evaluate(args.data_json, args.paths_csv, args.preds_dir, args.output_csv)
+    evaluate(args.data_json, args.paths, args.preds_dir, args.output_csv)
 
 
 if __name__ == "__main__":

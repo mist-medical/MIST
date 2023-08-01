@@ -11,16 +11,27 @@ from rich.progress import (
     TimeElapsedColumn
 )
 
-from runtime.utils import init_results_df, evaluate_prediction, compute_results_stats
+from runtime.utils import init_results_df, evaluate_prediction, compute_results_stats, convert_dict_to_df
 
 
-def evaluate(data_json, paths_csv, source_dir, output_csv):
+def evaluate(data_json, paths, source_dir, output_csv):
     with open(data_json, 'r') as file:
         data = json.load(file)
 
-    paths = pd.read_csv(paths_csv)
-    results_df = init_results_df(data)
+    if not isinstance(paths, pd.DataFrame):
+        # Convert input to pandas dataframe
+        if '.csv' in paths:
+            paths = pd.read_csv(paths)
+        elif type(paths) is dict:
+            paths = convert_dict_to_df(paths)
+        elif '.json' in paths:
+            with open(paths, 'r') as file:
+                paths = json.load(file)
+            paths = convert_dict_to_df(paths)
+        else:
+            raise ValueError("Invalid format for paths!")
 
+    results_df = init_results_df(data)
     pred_temp_filename = os.path.join(source_dir, 'pred_temp.nii.gz')
     mask_temp_filename = os.path.join(source_dir, 'mask_temp.nii.gz')
 

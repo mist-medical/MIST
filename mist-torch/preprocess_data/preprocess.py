@@ -267,5 +267,10 @@ def preprocess_dataset(args):
 
     # Save class weights to config file for later
     config['class_weights'] = class_weights
+
+    # Add default postprocessing arguments
+    config["cleanup_mask"] = False
+    config["postprocess_labels"] = []
+
     with open(config_file, 'w') as outfile:
         json.dump(config, outfile, indent=2)

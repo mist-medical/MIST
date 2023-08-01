@@ -29,7 +29,9 @@ class UNet(nn.Module):
                  depth,
                  pocket,
                  deep_supervision,
-                 deep_supervision_heads):
+                 deep_supervision_heads,
+                 vae_reg,
+                 latent_dim):
         super(UNet, self).__init__()
 
         self.base_model = BaseModel(UNetBlock,
@@ -40,6 +42,8 @@ class UNet(nn.Module):
                                     pocket,
                                     deep_supervision,
                                     deep_supervision_heads,
+                                    vae_reg,
+                                    latent_dim,
                                     **conv_kwargs)
 
     def forward(self, x, **kwargs):

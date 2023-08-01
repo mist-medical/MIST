@@ -1,5 +1,6 @@
 import json
 import os
+import numpy as np
 
 import torch
 
@@ -25,6 +26,7 @@ def create_folders(args):
     numpy = os.path.abspath(args.numpy)
 
     dirs_to_create = [results,
+                      os.path.join(results, "models"),
                       os.path.join(results, "predictions"),
                       os.path.join(results, "predictions", "train"),
                       os.path.join(results, "predictions", "train", "raw")]
@@ -32,8 +34,7 @@ def create_folders(args):
     if args.postprocess:
         dirs_to_create += [os.path.join(results, "predictions", "train", "postprocess"),
                            os.path.join(results, "predictions", "train", "postprocess", "clean_mask"),
-                           os.path.join(results, "predictions", "train", "final"),
-                           os.path.join(results, "models")]
+                           os.path.join(results, "predictions", "train", "final")]
 
         labels = data["labels"]
         for i in range(1, len(labels)):
@@ -51,12 +52,14 @@ def create_folders(args):
 def main(args):
     # Create file structure for MIST output
     create_folders(args)
-    if args.exec_mode == "all":
+    if args.exec_mode == "all" or args.exec_mode == "analyze":
         analyze = Analyzer(args)
         analyze.run()
 
+    if args.exec_mode == "all" or args.exec_mode == "preprocess":
         preprocess_dataset(args)
 
+    if args.exec_mode == "all" or args.exec_mode == "train":
         mist_trainer = Trainer(args)
         mist_trainer.fit()
 
@@ -85,47 +88,14 @@ def main(args):
                                     args.sw_overlap,
                                     args.blend_mode,
                                     args.tta)
-    elif args.exec_mode == "analyze":
-        analyze = Analyzer(args)
-        analyze.run()
-    elif args.exec_mode == "preprocess":
-        preprocess_dataset(args)
-    elif args.exec_mode == "train":
-        mist_trainer = Trainer(args)
-        mist_trainer.fit()
-
-        evaluate(args.data,
-                 os.path.join(args.results, "train_paths.csv"),
-                 os.path.join(args.results, "predictions", "train", "raw"),
-                 os.path.join(args.results, "results.csv"))
-
-        if args.postprocess:
-            postprocess = Postprocessor(args)
-            postprocess.run()
-
-        if has_test_data(args.data):
-            test_df = get_files_df(args.data, "test")
-            test_df.to_csv(os.path.join(args.results, "test_paths.csv"), index=False)
-
-            models = load_test_time_models(os.path.join(args.results, "models"), False)
-            models = [model.eval() for model in models]
-            models = [model.to("cuda") for model in models]
-
-            with torch.no_grad():
-                test_time_inference(test_df,
-                                    os.path.join(args.results, "predictions", "test"),
-                                    os.path.join(args.results, "config.json"),
-                                    models,
-                                    args.sw_overlap,
-                                    args.blend_mode,
-                                    args.tta)
-    else:
-        raise ValueError("Invalid execution mode! See documentation at https://github.com/aecelaya/MIST/")
 
 
 if __name__ == "__main__":
     set_warning_levels()
     args = get_main_args()
+
+    assert np.max(args.folds) < args.nfolds or len(args.folds) > args.nfolds,  \
+        "More folds listed than specified! Make sure folds are zero-indexed"
 
     n_gpus = set_visible_devices(args)
     assert args.batch_size % n_gpus == 0, \

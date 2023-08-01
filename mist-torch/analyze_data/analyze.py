@@ -282,7 +282,7 @@ class Analyzer:
                 # Check if labels are correct
                 mask = ants.image_read(patient["mask"])
                 mask_labels = set(mask.unique().astype("int"))
-                if not mask_labels == set(self.labels):
+                if not mask_labels.issubset(set(self.labels)):
                     messages += "In {}: Labels in mask do not match those specified in {}\n".format(patient["id"],
                                                                                                     self.args.data)
                     bad_data.append(i)

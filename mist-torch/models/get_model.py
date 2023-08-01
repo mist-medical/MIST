@@ -12,13 +12,16 @@ def get_model(**kwargs):
                      kwargs["depth"],
                      kwargs["pocket"],
                      kwargs["deep_supervision"],
-                     kwargs["deep_supervision_heads"])
+                     kwargs["deep_supervision_heads"],
+                     kwargs["vae_reg"],
+                     kwargs["latent_dim"])
     elif kwargs["model_name"] == "nnunet":
         model = NNUnet(kwargs["n_classes"],
                        kwargs["n_channels"],
                        kwargs["pocket"],
                        kwargs["deep_supervision"],
                        kwargs["deep_supervision_heads"],
+                       kwargs["vae_reg"],
                        kwargs["patch_size"],
                        kwargs["target_spacing"])
     elif kwargs["model_name"] == "resnet":
@@ -28,7 +31,9 @@ def get_model(**kwargs):
                        kwargs["depth"],
                        kwargs["pocket"],
                        kwargs["deep_supervision"],
-                       kwargs["deep_supervision_heads"])
+                       kwargs["deep_supervision_heads"],
+                       kwargs["vae_reg"],
+                       kwargs["latent_dim"])
     elif kwargs["model_name"] == "densenet":
         model = DenseNet(kwargs["n_classes"],
                          kwargs["n_channels"],
@@ -36,7 +41,9 @@ def get_model(**kwargs):
                          kwargs["depth"],
                          kwargs["pocket"],
                          kwargs["deep_supervision"],
-                         kwargs["deep_supervision_heads"])
+                         kwargs["deep_supervision_heads"],
+                         kwargs["vae_reg"],
+                         kwargs["latent_dim"])
     else:
         raise ValueError("Invalid model name!")
 

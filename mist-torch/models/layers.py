@@ -66,14 +66,9 @@ def get_upsample(name, in_channels, out_channels, **kwargs):
 
 class GlobalMaxPooling3D(nn.Module):
     def forward(self, x):
-        batch_size = x.shape[0]
-        n_channels = x.shape[1]
-
-        x, _ = torch.max(x, dim=2)
-        x, _ = torch.max(x, dim=3)
-        x, _ = torch.max(x, dim=4)
-
-        return torch.reshape(x, (batch_size, n_channels))
+        for _ in range(3):
+            x, _ = torch.max(x, dim=2)
+        return x
 
 
 class ConvLayer(nn.Module):
@@ -142,6 +137,18 @@ class DecoderBlock(nn.Module):
         return x
 
 
+class VAEDecoderBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, block, **kwargs):
+        super(VAEDecoderBlock, self).__init__()
+        self.upsample = get_upsample(kwargs["up_type"], in_channels, out_channels, **kwargs)
+        self.block = block(out_channels, out_channels, **kwargs)
+
+    def forward(self, x):
+        x = self.upsample(x)
+        x = self.block(x)
+        return x
+
+
 class BaseModel(nn.Module):
 
     def __init__(self,
@@ -153,6 +160,8 @@ class BaseModel(nn.Module):
                  pocket,
                  deep_supervision,
                  deep_supervision_heads,
+                 vae_reg,
+                 latent_dim,
                  **kwargs):
         super(BaseModel, self).__init__()
 
@@ -166,6 +175,8 @@ class BaseModel(nn.Module):
         self.pocket = pocket
         self.deep_supervision = deep_supervision
         self.deep_supervision_heads = deep_supervision_heads
+        self.vae_reg = vae_reg
+        self.latent_dim = latent_dim
 
         # Make sure number of deep supervision heads is less than network depth
         assert self.deep_supervision_heads < self.depth
@@ -190,10 +201,31 @@ class BaseModel(nn.Module):
         out_channels = self.init_filters * self.mul_on_downsample ** self.depth
         self.bottleneck = Bottleneck(in_channels, out_channels, block, **kwargs)
 
+        # VAE Regularization
+        if self.vae_reg:
+            self.normal_dist = torch.distributions.Normal(0, 1)
+            self.normal_dist.loc = self.normal_dist.loc.cuda()
+            self.normal_dist.scale = self.normal_dist.scale.cuda()
+
+            self.global_maxpool = GlobalMaxPooling3D()
+            self.mu = nn.Linear(self.init_filters * self.mul_on_downsample ** self.depth, self.latent_dim)
+            self.sigma = nn.Linear(self.init_filters * self.mul_on_downsample ** self.depth, self.latent_dim)
+
+            self.vae_decoder = nn.ModuleList()
+            for i in range(self.depth - 1, -1, -1):
+                if i == self.depth - 1:
+                    in_channels = 1
+                else:
+                    in_channels = self.init_filters * self.mul_on_downsample ** (i + 1)
+                out_channels = self.init_filters * self.mul_on_downsample ** i
+                self.vae_decoder.append(VAEDecoderBlock(in_channels, out_channels, block, **kwargs))
+
+            self.vae_out = nn.Conv3d(in_channels=self.init_filters, out_channels=self.n_channels, kernel_size=1)
+
         # Define main decoder branch
         self.decoder = nn.ModuleList()
         if self.deep_supervision:
-            self.head_ids = [head for head in range(1, self.deep_supervision_heads + 1)]
+            self.head_ids =[head for head in range(1, self.deep_supervision_heads + 1)]
             self.deep_supervision_out = nn.ModuleList()
         for i in range(self.depth - 1, -1, -1):
             in_channels = self.init_filters * self.mul_on_downsample ** (i + 1)
@@ -214,7 +246,7 @@ class BaseModel(nn.Module):
 
     def forward(self, x):
         # Get current input shape for deep supervision
-        input_shape = (x.shape[2], x.shape[3], x.shape[4])
+        input_shape = (int(x.shape[2]), int(x.shape[3]), int(x.shape[4]))
 
         # Encoder
         skips = list()
@@ -225,33 +257,60 @@ class BaseModel(nn.Module):
         # Bottleneck
         x = self.bottleneck(x)
 
+        # VAE Regularization
+        if self.vae_reg and self.training:
+            x_vae = self.global_maxpool(x)
+            mu = self.mu(x_vae)
+            log_var = self.sigma(x_vae)
+
+            # Sample from distribution
+            x_vae = mu + torch.exp(0.5 * log_var)*self.normal_dist.sample(mu.shape)
+
+            # Reshape for decoder
+            x_vae = torch.reshape(x_vae, (x.shape[0], 1, x.shape[2], x.shape[3], x.shape[4]))
+
+            # Start VAE decoder
+            for i, decoder_block in enumerate(self.vae_decoder):
+                x_vae = decoder_block(x_vae)
+
+            x_vae = self.vae_out(x_vae)
+            output_vae = (x_vae, mu, log_var)
+
         # Add deep supervision heads
         if self.deep_supervision and self.training:
             deep_supervision_heads = list()
 
         # Decoder
         skips.reverse()
-        deep_supervision_cnt = self.depth
         for i, (skip, decoder_block) in enumerate(zip(skips, self.decoder)):
             x = decoder_block(skip, x)
 
-            if self.deep_supervision and self.training and (self.depth - 1 - i) in self.head_ids:
+            if self.deep_supervision and self.training and i in self.head_ids:
                 deep_supervision_heads.append(x)
 
         # Apply deep supervision
         if self.deep_supervision and self.training:
             # Create output list
-            output = list()
+            output_deep_supervision = list()
 
             for head, head_out in zip(deep_supervision_heads, self.deep_supervision_out):
-                current_shape = (head.shape[2], head.shape[3], head.shape[4])
+                current_shape = (int(head.shape[2]), int(head.shape[3]), int(head.shape[4]))
                 scale_factor = tuple([int(input_shape[i] // current_shape[i]) for i in range(3)])
-                head = interpolate(head, scale_factor=scale_factor)
-                output.append(head_out(head))
+                head = interpolate(head, scale_factor=scale_factor, mode="trilinear")
+                output_deep_supervision.append(head_out(head))
 
-            output.append(self.out(x))
-            output.reverse()
-            output = tuple(output)
+            output_deep_supervision.reverse()
+            output_deep_supervision = tuple(output_deep_supervision)
+
+        if self.training:
+            output = dict()
+            output["prediction"] = self.out(x)
+
+            if self.deep_supervision:
+                output["deep_supervision"] = output_deep_supervision
+
+            if self.vae_reg:
+                output["vae_reg"] = output_vae
 
         else:
             output = self.out(x)

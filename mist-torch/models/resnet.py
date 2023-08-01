@@ -40,7 +40,9 @@ class ResNet(nn.Module):
                  depth,
                  pocket,
                  deep_supervision,
-                 deep_supervision_heads):
+                 deep_supervision_heads,
+                 vae_reg,
+                 latent_dim):
         super(ResNet, self).__init__()
 
         self.base_model = BaseModel(ResNetBlock,
@@ -51,7 +53,9 @@ class ResNet(nn.Module):
                                     pocket,
                                     deep_supervision,
                                     deep_supervision_heads,
-                                    **conv_kwargs)
+                                    vae_reg,
+                                    latent_dim,
+                                    ** conv_kwargs)
 
     def forward(self, x, **kwargs):
         return self.base_model(x, **kwargs)

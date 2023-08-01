@@ -195,17 +195,17 @@ class Postprocessor:
         text.stylize("bold")
         console.print(text)
 
-        # Run connected component analysis
-        if not self.args.post_no_largest:
-            use_postprocessing = self.connected_components_analysis()
-        else:
-            use_postprocessing = []
-
         # Run morphological clean up
         if not self.args.post_no_morph:
             clean_mask = self.use_clean_mask()
         else:
             clean_mask = False
+
+        # Run connected component analysis
+        if not self.args.post_no_largest:
+            use_postprocessing = self.connected_components_analysis()
+        else:
+            use_postprocessing = []
 
         # Copy best results to final predictions folder
         cp_best_cmd = "cp -a {}/. {}".format(self.source_dir,

@@ -3,7 +3,6 @@ import json
 import ants
 import pandas as pd
 import numpy as np
-from collections import OrderedDict
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import KFold
 
@@ -35,7 +34,7 @@ from monai.inferers import sliding_window_inference
 # Custom code
 from data_loading.dali_loader import get_training_dataset, get_validation_dataset, get_test_dataset
 from models.get_model import get_model
-from runtime.loss import get_loss, DiceLoss
+from runtime.loss import get_loss, DiceLoss, VAELoss
 from inference.main_inference import predict_single_example
 from runtime.utils import get_optimizer, get_lr_schedule, Mean, get_test_df, create_model_config_file, \
     load_model_from_config
@@ -74,12 +73,16 @@ class Trainer:
         else:
             self.depth = self.args.depth
 
+        # Get latent dimension for VAE regularization
+        self.latent_dim = int(np.prod(np.array(self.patch_size) // 2**self.depth))
+
         # Create model configuration file for inference later
         self.model_config_path = os.path.join(self.args.results, "models", "model_config.json")
         self.model_config = create_model_config_file(self.args,
                                                      self.config,
                                                      self.data,
                                                      self.depth,
+                                                     self.latent_dim,
                                                      self.model_config_path)
 
         # Get class weights if we are using them
@@ -90,6 +93,9 @@ class Trainer:
 
         # Get standard dice loss for validation
         self.dice_loss = DiceLoss()
+
+        # Get VAE regularization loss
+        self.vae_loss = VAELoss()
 
     def predict_on_val(self, model_path, loader, df):
         # Load model
@@ -248,17 +254,36 @@ class Trainer:
             def train_step(image, label):
                 # Loss computation
                 def compute_loss():
-                    pred = model(image)
+                    output = model(image)
+
+                    loss = loss_fn(label, output["prediction"])
+
                     if self.args.deep_supervision:
-                        loss = loss_fn(label, pred[0])
+                        for k, p in enumerate(output["deep_supervision"]):
+                            loss += 0.5 ** (k + 1) * loss_fn(label, p)
 
-                        for i, p in enumerate(pred[1:]):
-                            loss += 0.5 ** (i + 1) * loss_fn(label, p)
-
-                        c_norm = 1 / (2 - 2 ** (-len(pred)))
+                        c_norm = 1 / (2 - 2 ** (-(len(output["deep_supervision"]) + 1)))
                         loss *= c_norm
-                    else:
-                        loss = loss_fn(label, pred)
+
+                    if self.args.vae_reg:
+                        loss += 0.1*self.vae_loss(image, output["vae_reg"])
+
+                    # L2 regularization term
+                    if self.args.l2_reg:
+                        l2_reg = 0.0
+                        for param in model.parameters():
+                            l2_reg += torch.norm(param, p=2)
+
+                        loss += self.args.l2_penalty * l2_reg
+
+                    # L1 regularization term
+                    if self.args.l1_reg:
+                        l1_reg = 0.0
+                        for param in model.parameters():
+                            l1_reg += torch.norm(param, p=1)
+
+                        loss += self.args.l1_penalty * l1_reg
+
                     return loss
 
                 # Zero your gradients for every batch!

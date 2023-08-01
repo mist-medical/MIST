@@ -83,6 +83,22 @@ class WeightedDiceLoss(nn.Module):
         return loss
 
 
+class KLDivLoss(nn.Module):
+    def forward(self, z_mean, z_log_var):
+        loss = -0.5 * (1. + z_log_var - torch.square(z_mean) - torch.exp(z_log_var))
+        return torch.mean(loss)
+
+
+class VAELoss(nn.Module):
+    def __init__(self):
+        super(VAELoss, self).__init__()
+        self.reconstruction_loss = nn.MSELoss()
+        self.kl_loss = KLDivLoss()
+
+    def forward(self, y_true, y_pred):
+        return self.reconstruction_loss(y_true, y_pred[0]) + self.kl_loss(y_pred[1], y_pred[2])
+
+
 def get_loss(args, **kwargs):
     if args.loss == "dice":
         return DiceLoss()
