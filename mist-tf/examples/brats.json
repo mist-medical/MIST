@@ -1,0 +1,43 @@
+{
+    "task": "brats2020",
+    "modality": "mr",
+    "train-data": "/workspace/data/brats_2020/raw/train",
+    "test-data": "/workspace/data/brats_2020/raw/validation",
+    "mask": [
+        "seg.nii.gz"
+      ],
+    "images": {
+        "t1": [
+          "t1.nii.gz"
+        ],
+        "t2": [
+          "t2.nii.gz"
+        ],
+        "tc": [
+          "t1ce.nii.gz"
+        ],
+        "fl": [
+          "flair.nii.gz"
+        ]
+      },
+    "labels": [
+        0,
+        1,
+        2,
+        4
+      ],
+    "final_classes": {
+        "WT": [
+          1,
+          2,
+          4
+        ],
+        "TC": [
+          1,
+          4
+        ],
+        "ET": [
+          4
+        ]
+      }
+}

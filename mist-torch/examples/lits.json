@@ -1,0 +1,26 @@
+{
+  "task": "lits",
+  "train-data": "/workspace/data/lits/raw/train",
+  "modality": "ct",
+  "mask": [
+    "segmentation"
+  ],
+  "images": {
+    "CT": [
+      "volume"
+    ]
+  },
+  "labels": [
+    0,
+    1,
+    2
+  ],
+  "final_classes": {
+    "liver": [
+      1, 2
+    ],
+    "tumor": [
+      2
+    ]
+    }
+  }

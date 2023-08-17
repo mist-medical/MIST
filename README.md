@@ -1,11 +1,14 @@
 # Medical Imaging Segmentation Toolkit
+The Medical Imaging Segmentation Toolkit (MIST) is a simple, fully automated 3D medical imaging 
+segmentation framework for PyTorch and TensorFlow. MIST allows researchers to quickly set up, train, 
+and test various deep learning models for 3D medical imaging segmentation.
 
-Work in progress. MIST is a simple 3D medical image segmentation framework for TensorFlow.
+For documentation on how to run either the PyTorch or TensorFlow implementations, please see the 
+following
 
-TODO:
+* [MIST PyTorch](mist-torch)
+* [MIST TensorFlow](mist-tf)
 
-- Testing testing testing! So far, MIST has been tested on the LiTS, BraTS, and MSD datasets
-- Create a MIST pypi package
-- Add command line support
-- Create documentation
-- Benchmark against nnUNet for accuracy, speed, and resource consumption
+Please cite the following if you use this code for your work:
+
+> A. Celaya et al., "PocketNet: A Smaller Neural Network For Medical Image Analysis," in IEEE Transactions on Medical Imaging, doi: 10.1109/TMI.2022.3224873.
