@@ -38,9 +38,6 @@ def main(args):
     # Set warning levels
     set_warning_levels()
 
-    # Horovod init
-    hvd_init()
-
     # Set TF flags
     set_tf_flags()
 
