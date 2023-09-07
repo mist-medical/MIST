@@ -28,6 +28,9 @@ def dice_sitk(truth, pred):
     # Read images
     pred = sitk.ReadImage(pred, sitk.sitkUInt8)
     truth = sitk.ReadImage(truth, sitk.sitkUInt8)
+    
+    truth = sitk.RescaleIntensity(truth, 0, 255)
+    pred = sitk.RescaleIntensity(pred, 0, 255)
 
     # Big fix -- Make sure prediction and truth are in same physical space
     # Writing with ANTs can cause strange interactions with SimpleITK
