@@ -126,7 +126,7 @@ git clone https://github.com/aecelaya/MIST.git
 cd MIST/mist-torch
 ```
 
-Change the ```prefix``` line at the bottom of the ```mist-torch.ymal``` file to match your system
+Change the ```prefix``` line at the bottom of the ```mist-torch.yml``` file to match your system
 and then run the following line to create the environment.
 
 ```
@@ -211,7 +211,7 @@ usage: main.py [-h] [--exec-mode {all,analyze,preprocess,train}] [--data DATA]
                [--vae-reg [BOOLEAN]] [--l2-reg [BOOLEAN]]
                [--l2-penalty L2_PENALTY] [--l1-reg [BOOLEAN]]
                [--l1-penalty L1_PENALTY] [--oversampling OVERSAMPLING]
-               [--n4-bias-correction [BOOLEAN]]
+               [--use-n4-bias-correction [BOOLEAN]]
                [--use-precomputed-weights [BOOLEAN]]
                [--class-weights CLASS_WEIGHTS [CLASS_WEIGHTS ...]]
                [--loss {dice_ce,dice,gdl}] [--sw-overlap SW_OVERLAP]
@@ -276,7 +276,7 @@ optional arguments:
   --oversampling OVERSAMPLING
                         Probability of crop centered on foreground voxel
                         (default: 0.4)
-  --n4-bias-correction [BOOLEAN]
+  --use-n4-bias-correction [BOOLEAN]
                         Use N4 bias field correction (only for MR images)
                         (default: False)
   --use-precomputed-weights [BOOLEAN]

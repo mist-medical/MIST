@@ -111,7 +111,7 @@ def get_main_args():
           help="Probability of crop centered on foreground voxel")
 
     # Preprocessing
-    p.boolean_flag("--n4-bias-correction", default=False, help="Use N4 bias field correction (only for MR images)")
+    p.boolean_flag("--use-n4-bias-correction", default=False, help="Use N4 bias field correction (only for MR images)")
     p.boolean_flag("--use-precomputed-weights", default=False, help="Use precomputed class weights")
     p.arg("--class-weights", nargs="+", type=float, help="Specify class weights")
 

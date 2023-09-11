@@ -257,7 +257,7 @@ class Analyze:
                            "labels": self.labels,
                            "use_nz_mask": bool(use_nz_mask),
                            "target_spacing": [float(target_spacing[i]) for i in range(3)],
-                           "use_n4_bias_correction": bool(self.args.n4_bias_correction)}
+                           "use_n4_bias_correction": bool(self.args.use_n4_bias_correction)}
         median_dims = self.check_resampled_dims(cropped_dims)
         self.config["median_image_size"] = [int(median_dims[i]) for i in range(3)]
 
