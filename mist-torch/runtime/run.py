@@ -266,7 +266,7 @@ class Trainer:
                         loss *= c_norm
 
                     if self.args.vae_reg:
-                        loss += 0.1*self.vae_loss(image, output["vae_reg"])
+                        loss += self.args.vae_penalty * self.vae_loss(image, output["vae_reg"])
 
                     # L2 regularization term
                     if self.args.l2_reg:
