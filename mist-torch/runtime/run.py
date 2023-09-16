@@ -37,7 +37,7 @@ from models.get_model import get_model
 from runtime.loss import get_loss, DiceLoss, VAELoss
 from inference.main_inference import predict_single_example
 from runtime.utils import get_optimizer, get_lr_schedule, Mean, get_test_df, create_model_config_file, \
-    load_model_from_config
+    load_model_from_config, get_master_port
 
 console = Console()
 
@@ -142,7 +142,7 @@ class Trainer:
     # Set up for distributed training
     def setup(self, rank, world_size):
         os.environ['MASTER_ADDR'] = 'localhost'
-        os.environ['MASTER_PORT'] = '12355'
+        os.environ['MASTER_PORT'] = get_master_port()
         dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
     # Clean up processes after distributed training

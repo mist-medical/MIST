@@ -1,9 +1,9 @@
 import os
 import json
-import pdb
 
 import ants
 import random
+import socket
 import warnings
 import pandas as pd
 import numpy as np
@@ -30,6 +30,12 @@ def set_warning_levels():
 def create_empty_dir(path):
     if not (os.path.exists(path)):
         os.makedirs(path)
+
+
+def get_master_port():
+    sock = socket.socket()
+    sock.bind(('', 0))
+    return str(sock.getsockname()[1])
 
 
 def get_files_list(path):
