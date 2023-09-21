@@ -75,6 +75,7 @@ def apply_largest_component(prediction, label, majority_label):
         prediction = prediction * opposite_label_mask + label_mask_largest * label + holes
 
     return prediction
+    
 
 
 class Postprocess:
@@ -202,7 +203,7 @@ class Postprocess:
             use_postprocessing = []
 
         # Run morphological clean up
-        if not self.args.post_no_morph:
+        if self.args.post_no_morph:
             clean_mask = self.use_clean_mask()
         else:
             clean_mask = False

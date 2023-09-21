@@ -1,26 +1,15 @@
 import os
 import json
-import pdb
-
 import ants
 import warnings
 import pandas as pd
 import numpy as np
+from tqdm import trange
 
-# Rich progres bar
-from rich.progress import (
-    BarColumn,
-    MofNCompleteColumn,
-    Progress,
-    TextColumn,
-    TimeElapsedColumn
-)
-from rich.console import Console
-from rich.text import Text
+warnings.simplefilter(action='ignore',
+                      category=FutureWarning)
 
 from runtime.utils import create_empty_dir, resize_image_with_crop_or_pad
-
-console = Console()
 
 
 def get_mask_and_nonzeros(image):
@@ -100,79 +89,78 @@ def preprocess_example(config, image_list, mask):
     if mask is None:
         training = False
 
-    # Read all images (and mask if training)
+    if training: # RG removed this line
+        # Reorient mask to RAI if not already in RAI
+        mask = ants.reorient_image2(mask, "RAI")
+        mask.set_direction(np.eye(3))
+
+        # Resample mask to target spacing if dataset is anisotropic
+        if not(np.array_equal(np.array(mask.spacing), np.array(config['target_spacing']))):
+           mask = ants.resample_image(mask,
+                                       resample_params=np.array(config['target_spacing']),
+                                       use_voxels=False,
+                                       interp_type=0)
+
+    if config['use_nz_mask']:
+        # Create non-zero mask from first image in image list
+        nzmask = ants.image_read(image_list[0])
+        nzmask = ants.get_mask(nzmask, cleanup=0)
+        if training:
+            # Crop mask according to nonzero mask
+            mask = ants.crop_image(mask, nzmask)
     images = list()
     for image_path in image_list:
         # Load image as ants image
-        images.append(ants.image_read(image_path))
-
-    # Compute non-zero mask if config file calls for it
-    if config['use_nz_mask']:
-        nzmask = (images[0] != 0).astype("float32")
-
-        # Put nzmask into standard space
-        image = ants.reorient_image2(nzmask, "RAI")
-        image.set_direction(np.eye(3))
-        if not np.array_equal(nzmask.spacing, config["target_spacing"]):
-            nzmask = ants.resample_image(nzmask,
-                                         resample_params=config['target_spacing'],
-                                         use_voxels=False,
-                                         interp_type=1)
-
-    # Put all images (and mask if training) into standard space
-    for i, image in enumerate(images):
-        if config["use_n4_bias_correction"]:
-            image = ants.n4_bias_field_correction(image)
-
+        image = ants.image_read(image_path)
+        hinfo  = ants.image_header_info(image_path)
+        pclass = hinfo['pixelclass']
         # Reorient image to RAI if not already in RAI
         image = ants.reorient_image2(image, "RAI")
         image.set_direction(np.eye(3))
 
         # Resample image to target spacing using spline interpolation
-        if not np.array_equal(image.spacing, config["target_spacing"]):
+        if not(np.array_equal(np.array(image.spacing), np.array(config['target_spacing']))):
             image = ants.resample_image(image,
-                                        resample_params=config['target_spacing'],
+                                        resample_params=np.array(config['target_spacing']),
                                         use_voxels=False,
-                                        interp_type=4)
-
+                                        interp_type=0) # RG changed from 4 to 3
+            
         # If using non-zero mask, crop image according to non-zero mask
         if config['use_nz_mask']:
-            image *= nzmask
             image = ants.crop_image(image, nzmask)
 
-        images[i] = image
+        images.append(image)
+        test = image.numpy()
+        #if image.numpy().shape != mask.numpy().shape:
+        # image = image[mask.numpy().shape]
 
-    # Get dimensions of image in standard space
-    dims = images[0].shape
-
+    # Get dims of images
     if training:
-        # Read mask if we are in training mode
-        mask = ants.image_read(mask)
-
-        # Reorient mask to RAI if not already in RAI
-        mask = ants.reorient_image2(mask, "RAI")
-        mask.set_direction(np.eye(3))
-
-        # Resample mask to target spacing
-        if not np.array_equal(mask.spacing, config["target_spacing"]):
+        if not(np.array_equal(np.array(mask.spacing), np.array(config['target_spacing']))):
             mask = ants.resample_image(mask,
-                                       resample_params=config['target_spacing'],
-                                       use_voxels=False,
-                                       interp_type=1)
-
-        if config['use_nz_mask']:
-            mask *= nzmask
-            mask = ants.crop_image(mask, nzmask)
-
-        # Convert to numpy and get one hot encoding
+                                        resample_params=config['target_spacing'],
+                                        use_voxels=False,
+                                        interp_type=2) # RG changed from 4 to 3
+     
         mask_npy = mask.numpy()
-        mask_onehot = np.zeros((*dims, len(config['labels'])))
-        for j in range(len(config['labels'])):
-            mask_onehot[..., j] = (mask_npy == config['labels'][j]).astype('float32')
+        mask_npy = np.array(mask_npy/ np.amax(mask_npy),dtype=np.uint8)
     else:
         mask_npy = None
-        mask_onehot = None
 
+    dims = images[0].numpy().shape
+
+
+    if training:
+        
+         
+        mask_onehot = np.zeros((*dims, len(config['labels'])))
+
+        for j in range(len(config['labels'])):
+            mask_onehot[..., j] = (mask_npy == config['labels'][j]).astype('float32')
+
+    else:
+        mask_onehot = None
+    
     # Apply windowing and normalization to images
     image_npy = np.zeros((*dims, len(image_list)))
     for j in range(len(image_list)):
@@ -190,16 +178,19 @@ def preprocess_example(config, image_list, mask):
 
 def preprocess_dataset(args):
     # Get configuration file
-    config_file = os.path.join(args.results, 'config.json')
+    if args.config is None:
+        config_file = os.path.join(args.results, 'config.json')
+    else:
+        config_file = args.config
 
     with open(config_file, 'r') as file:
         config = json.load(file)
 
-    if config["modality"] != "mr" and config["use_n4_bias_correction"]:
-        warnings.warn("N4 bias correction should not be used for modality {}".format(config["modality"]))
-
     # Get paths to dataset
-    df = pd.read_csv(os.path.join(args.results, 'train_paths.csv'))
+    if args.paths is None:
+        df = pd.read_csv(os.path.join(args.results, 'train_paths.csv'))
+    else:
+        df = pd.read_csv(args.paths)
 
     # Create output directories if they do not exist
     images_dir = os.path.join(args.processed_data, 'images')
@@ -217,53 +208,57 @@ def preprocess_dataset(args):
         class_weights = args.class_weights
         compute_weights = False
 
-    text = Text("\nPreprocessing dataset\n")
-    text.stylize("bold")
-    console.print(text)
+    #compute_weights = False # RG fix for bug
+    print('Preprocessing dataset...')
+    for i in trange(len(df)):
+        # Get paths to images for single patient
+        patient = df.iloc[i].to_dict()
 
-    progress = Progress(TextColumn("Preprocessing"),
-                        BarColumn(),
-                        MofNCompleteColumn(),
-                        TextColumn("•"),
-                        TimeElapsedColumn())
+        # Get list of image paths and segmentation mask
+        image_list = list(patient.values())[2:len(patient)]
+        mask = ants.image_read(patient['mask'])
+        hinfo  = ants.image_header_info(patient['mask'])
+        pclass = hinfo['pixelclass']
+        # Preprocess a single example
+        image_npy, mask_npy, mask_onehot = preprocess_example(config, image_list, mask)
 
-    with progress as pb:
-        for i in pb.track(range(len(df))):
-            # Get paths to images for single patient
-            patient = df.iloc[i].to_dict()
+        # Compute class weights
+        if compute_weights:
+            for j in range(len(config['labels'])):
+                #if config['labels'][j] == 0 and config['use_nz_mask']:
+                if config['labels'][j] == 0:
+                
+                    fg_mask = (mask_onehot[..., 0] == 0).astype('int')
+                    label_mask = (image_npy[..., 0] != 0).astype('int') - fg_mask
+                else:
+                  
+                    label_mask = mask_onehot[..., j]
 
-            # Get list of image paths and segmentation mask
-            image_list = list(patient.values())[2:len(patient)]
-            mask = patient['mask']
+                # Update class weights with number of voxels belonging to class
+                class_weights[j] += np.count_nonzero(label_mask)
+        
 
-            # Preprocess a single example
-            image_npy, mask_npy, mask_onehot = preprocess_example(config, image_list, mask)
+        # Save image in npy format              
+        dims = image_npy.shape
 
-            # Compute class weights
-            if compute_weights:
-                for j in range(len(config['labels'])):
-                    if config['labels'][j] == 0 and config['use_nz_mask']:
-                        fg_mask = (mask_onehot[..., 0] == 0).astype('int')
-                        label_mask = (image_npy[..., 0] != 0).astype('int') - fg_mask
-                    else:
-                        label_mask = mask_onehot[..., j]
+        if dims[-1] > 1:
+          image_npy = np.dot(image_npy[...,:3], [0.299, 0.587, 0.114])
+          image_npy = image_npy.reshape(dims[0], dims[1], dims[2], 1)
 
-                    # Update class weights with number of voxels belonging to class
-                    class_weights[j] += np.count_nonzero(label_mask)
+        np.save(os.path.join(images_dir, '{}.npy'.format(patient['id'])), image_npy.astype(np.float32))
 
-            # Save image in npy format
-            np.save(os.path.join(images_dir, '{}.npy'.format(patient['id'])), image_npy.astype(np.float32))
-
-            # Save mask in npy format
-            # Fix labels for training
-            mask_npy = np.argmax(mask_onehot, axis=-1)
-            mask_npy = np.reshape(mask_npy, (*mask_npy.shape, 1))
-            np.save(os.path.join(labels_dir, '{}.npy'.format(patient['id'])), mask_npy.astype(np.uint8))
+        # Save mask in npy format
+        # Fix labels for training
+        mask_npy = np.argmax(mask_onehot, axis=-1)
+        mask_npy = np.reshape(mask_npy, (*mask_npy.shape, 1))
+        np.save(os.path.join(labels_dir, '{}.npy'.format(patient['id'])), mask_npy.astype(np.uint8))
 
     # Finalize class weights
     if compute_weights:
-        den = np.sum(1. / np.array(class_weights))
+        den = (1. / len(config['labels'])) * (np.sum(1. / np.array(class_weights)))
         class_weights = [(1. / class_weights[j]) / den for j in range(len(config['labels']))]
+        max_weight = np.max(class_weights)
+        class_weights = [weight / max_weight for weight in class_weights]
 
     # Save class weights to config file for later
     config['class_weights'] = class_weights

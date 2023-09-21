@@ -150,12 +150,21 @@ def predict_single_example(image,
 def load_test_time_models(models_dir, fast):
     model_list = os.listdir(models_dir)
     model_list.sort()
-
+    current_dir = os.getcwd()
+    models = []
     if fast:
-        model_list = [model_list[0]]
-
-    models = [load_model(os.path.join(models_dir, model), compile=False) for model in model_list]
-    return models
+      model_list = [models_dir]
+      os.chdir(os.path.join(models_dir))
+      models = [load_model(".")]
+      os.chdir(current_dir)
+      return models
+    else:
+      for model in model_list:
+        os.chdir(os.path.join(models_dir, model))
+        print("Adding Model", os.path.join(models_dir, model))
+        models.append(load_model("."))
+      os.chdir(current_dir)    
+      return models
 
 
 def check_test_time_input(patients, dest):
@@ -208,14 +217,15 @@ def test_time_inference(df, dest, config_file, models, overlap, blend_mode, tta)
 
         # Apply postprocessing if called for in config file
         # Apply morphological cleanup to nonzero mask
-        if config['cleanup_mask']:
+        if config.__contains__('cleanup_mask'):
+          if config['cleanup_mask']:
             prediction = apply_clean_mask(prediction, original_image, majority_label)
 
         # Apply results of connected components analysis
         if len(config['postprocess_labels']) > 0:
             for label in config['postprocess_labels']:
                 prediction = apply_largest_component(prediction,
-                                                     original_image,
+                                                     #original_image,
                                                      label,
                                                      majority_label)
 

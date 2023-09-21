@@ -19,9 +19,20 @@ Get file paths dataframe
 '''
 
 
+
+
+
+def create_empty_dir_remove(path):
+    if not (os.path.exists(path)):
+        os.makedirs(path)
+    else:
+      os.system("rm -rf " + path)
+      os.makedirs(path)
+
 def create_empty_dir(path):
     if not (os.path.exists(path)):
         os.makedirs(path)
+
 
 
 def get_files_list(path):
@@ -173,7 +184,16 @@ def set_tf_flags(args):
     os.environ["HOROVOD_GPU_ALLREDUCE"] = "NCCL"
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
     os.environ["TF_GPU_THREAD_MODE"] = "gpu_private"
-    os.environ["TF_GPU_THREAD_COUNT"] = str(len(args.gpus))
+
+    if isinstance(args.gpus, list):
+      os.environ["TF_GPU_THREAD_COUNT"] = str(len(args.gpus))
+      if len(args.gpus) > 1:
+        tf.config.threading.set_inter_op_parallelism_threads(max(2, (multiprocessing.cpu_count() // len(args.gpus)) - 2))
+      else:
+        tf.config.threading.set_inter_op_parallelism_threads(8)
+    else:
+      os.environ["TF_GPU_THREAD_COUNT"] = str(len([0]))
+      tf.config.threading.set_inter_op_parallelism_threads(8)
     os.environ["TF_USE_CUDNN_BATCHNORM_SPATIAL_PERSISTENT"] = "1"
     os.environ["TF_ADJUST_HUE_FUSED"] = "1"
     os.environ["TF_ADJUST_SATURATION_FUSED"] = "1"
@@ -184,10 +204,7 @@ def set_tf_flags(args):
     os.environ["TF_ENABLE_LAYOUT_NHWC"] = "1"
     os.environ["TF_CPP_VMODULE"] = "4"
 
-    if len(args.gpus) > 1:
-        tf.config.threading.set_inter_op_parallelism_threads(max(2, (multiprocessing.cpu_count() // len(args.gpus)) - 2))
-    else:
-        tf.config.threading.set_inter_op_parallelism_threads(8)
+
 
 
 def set_seed(seed):

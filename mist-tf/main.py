@@ -5,7 +5,7 @@ from analyze_data.analyze import Analyze
 from preprocess_data.preprocess import preprocess_dataset
 from runtime.args import get_main_args
 from runtime.run import RunTime
-from runtime.utils import create_empty_dir, set_warning_levels
+from runtime.utils import create_empty_dir, create_empty_dir_remove, set_warning_levels
 
 
 def create_folders(args):
@@ -41,7 +41,10 @@ def create_folders(args):
     for folder in dirs_to_create:
         create_empty_dir(folder)
 
-    create_empty_dir(processed_data)
+    
+    if args.exec_mode != "train":
+      print("removing processed data folder", processed_data)
+      create_empty_dir_remove(processed_data)
 
 
 def main(args):

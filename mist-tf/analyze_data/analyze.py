@@ -29,14 +29,18 @@ def get_progress_bar(task):
 
 def compare_headers(header1, header2):
     is_valid = True
-
     if header1["dimensions"] != header2["dimensions"]:
         is_valid = False
     if header1["spacing"] != header2["spacing"]:
         is_valid = False
-    if not np.array_equal(header1["direction"], header2["direction"]):
+    dir_1 = header1["direction"]
+    dir_2 = header2["direction"]
+    dir_1[dir_1 == -0] = 0
+    dir_2[dir_2 == -0] = 0
+    if not np.array_equal(np.round(dir_1,1), np.round(dir_2,1)):
         is_valid = False
-
+    if not np.array_equal(header1["origin"], header2["origin"]):
+        is_valid = False
     return is_valid
 
 
@@ -257,7 +261,7 @@ class Analyze:
                            "labels": self.labels,
                            "use_nz_mask": bool(use_nz_mask),
                            "target_spacing": [float(target_spacing[i]) for i in range(3)],
-                           "use_n4_bias_correction": bool(self.args.n4_bias_correction)}
+                           "use_n4_bias_correction": bool(self.args.use_n4_bias_correction)}
         median_dims = self.check_resampled_dims(cropped_dims)
         self.config["median_image_size"] = [int(median_dims[i]) for i in range(3)]
 
@@ -287,7 +291,7 @@ class Analyze:
                     is_3d_mask = is_single_channel(mask_header)
 
                     if not is_valid:
-                        messages += "In {}: Mismatch between image and mask header information\n".format(patient["id"])
+                        messages += "In {}: Mismatch between image and mask header information (run.py)\n".format(patient["id"])
                         bad_data.append(i)
                         break
 
@@ -311,7 +315,7 @@ class Analyze:
                         is_valid = compare_headers(anchor_header, image_header)
 
                         if not is_valid:
-                            messages += "In {}: Mismatch between images header information\n".format(patient["id"])
+                            messages += "In {}: Mismatch between images (anchor) header information\n".format(patient["id"])
                             bad_data.append(i)
                             break
 

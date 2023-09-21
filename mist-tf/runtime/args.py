@@ -143,7 +143,9 @@ def get_main_args():
     p.boolean_flag("--post-no-largest",
                    default=False,
                    help="Do not run connected components analysis for postprocessing")
-
+    p.boolean_flag("--use_n4_bias_correction",
+                   default=False,
+                   help="Do not run bias correction for preprocessing")
     # Validation
     p.arg('--nfolds', type=positive_int, default=5, help='Number of cross-validation folds')
     p.arg('--folds', nargs='+', default=[0, 1, 2, 3, 4], type=int, help='Which folds to run')
