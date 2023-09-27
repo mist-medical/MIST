@@ -44,7 +44,7 @@ def main(args):
     df = check_test_time_input(args.data)
 
     # Load models
-    models = load_test_time_models(os.path.join(args.models), False)
+    models = load_test_time_models(os.path.join(args.models), args.fast)
     models = [model.eval() for model in models]
     models = [model.to("cuda") for model in models]
 
