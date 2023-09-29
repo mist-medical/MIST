@@ -323,7 +323,6 @@ class Trainer:
 
                     optimizer.step()
 
-                scheduler.step()
                 return loss
 
             def val_step(image, label):
@@ -347,6 +346,9 @@ class Trainer:
 
                             # Compute loss for single step
                             loss = train_step(image, label)
+
+                            # Update lr schedule
+                            scheduler.step()
 
                             # Send all training losses to device 0 for average
                             dist.reduce(loss, dst=0)

@@ -100,11 +100,11 @@ def get_main_args():
     p.boolean_flag("--deep-supervision", default=False, help="Use deep supervision")
     p.arg("--deep-supervision-heads", type=positive_int, default=2, help="Number of deep supervision heads")
     p.boolean_flag("--vae-reg", default=False, help="Use VAE regularization")
-    p.arg("--vae-penalty", default=0.1, help="Weight for VAE regularization loss")
+    p.arg("--vae-penalty", type=float_0_1, default=0.1, help="Weight for VAE regularization loss")
     p.boolean_flag("--l2-reg", default=False, help="Use L2 regularization")
-    p.arg("--l2-penalty", default=0.00001, help="L2 penalty")
+    p.arg("--l2-penalty", type=float_0_1, default=0.00001, help="L2 penalty")
     p.boolean_flag("--l1-reg", default=False, help="Use L1 regularization")
-    p.arg("--l1-penalty", default=0.00001, help="L1 penalty")
+    p.arg("--l1-penalty", type=float_0_1, default=0.00001, help="L1 penalty")
 
     # Data loading
     p.arg("--oversampling",

@@ -80,8 +80,9 @@ class WeightedDiceLoss(nn.Module):
         num *= class_weights
 
         den = torch.sum(torch.square(y_true), dim=self.axes) + torch.sum(torch.square(y_pred),
-                                                                         dim=self.axes) + self.smooth
+                                                                         dim=self.axes)
         den *= class_weights
+        den += self.smooth
 
         loss = torch.sum(num, axis=1) / torch.sum(den, axis=1)
         loss = torch.mean(loss)

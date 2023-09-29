@@ -1,7 +1,5 @@
 import os
 import json
-import pdb
-
 import ants
 import warnings
 import pandas as pd
@@ -111,8 +109,8 @@ def preprocess_example(config, image_list, mask):
         nzmask = (images[0] != 0).astype("float32")
 
         # Put nzmask into standard space
-        image = ants.reorient_image2(nzmask, "RAI")
-        image.set_direction(np.eye(3))
+        nzmask = ants.reorient_image2(nzmask, "RAI")
+        nzmask.set_direction(np.eye(3))
         if not np.array_equal(nzmask.spacing, config["target_spacing"]):
             nzmask = ants.resample_image(nzmask,
                                          resample_params=config['target_spacing'],
@@ -202,10 +200,10 @@ def preprocess_dataset(args):
     df = pd.read_csv(os.path.join(args.results, 'train_paths.csv'))
 
     # Create output directories if they do not exist
-    images_dir = os.path.join(args.processed_data, 'images')
+    images_dir = os.path.join(args.numpy, 'images')
     create_empty_dir(images_dir)
 
-    labels_dir = os.path.join(args.processed_data, 'labels')
+    labels_dir = os.path.join(args.numpy, 'labels')
     create_empty_dir(labels_dir)
 
     # Get class weights if they exist
@@ -267,5 +265,10 @@ def preprocess_dataset(args):
 
     # Save class weights to config file for later
     config['class_weights'] = class_weights
+
+    # Add default postprocessing arguments
+    config["cleanup_mask"] = False
+    config["postprocess_labels"] = []
+
     with open(config_file, 'w') as outfile:
         json.dump(config, outfile, indent=2)
