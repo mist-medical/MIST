@@ -8,6 +8,7 @@ import absl.logging
 import multiprocessing
 import pandas as pd
 import numpy as np
+import SimpleITK as sitk
 
 import tensorflow as tf
 from tensorflow.keras import mixed_precision
@@ -261,26 +262,47 @@ def evaluate_prediction(prediction_final,
     # Get dice and hausdorff distances for final prediction
     row_dict = dict.fromkeys(list(key_names))
     row_dict['id'] = patient_id
+    
+    #pred = sitk.RescaleIntensity(pred, 0, 1)
+    original_mask = sitk.RescaleIntensity(original_mask, 0, 1)
+    pred = sitk.GetArrayFromImage(prediction_final)
+    mask = sitk.GetArrayFromImage(original_mask)
+        
+
     for key in data['final_classes'].keys():
         class_labels = data['final_classes'][key]
-        pred = prediction_final.numpy()
-        mask = original_mask.numpy()
+        #pred = prediction_final.numpy()
+        #mask = original_mask.numpy()
+
+
 
         pred_temp = np.zeros(pred.shape)
         mask_temp = np.zeros(mask.shape)
-
+        
+        #print("max", np.amax(mask), "min", np.amin(mask))
+        #print("check class_labels", class_labels)
         for label in class_labels:
-            pred_label = (pred == label).astype(np.uint8)
+            #print("check label", label)
+            pred_label = (pred == label).astype(np.uint8) 
             mask_label = (mask == label).astype(np.uint8)
 
             pred_temp += pred_label
             mask_temp += mask_label
 
-        pred_temp = original_mask.new_image_like(pred_temp)
-        mask_temp = original_mask.new_image_like(mask_temp)
+        #pred_temp = original_mask.new_image_like(pred_temp)
+        #mask_temp = original_mask.new_image_like(mask_temp)
 
-        ants.image_write(pred_temp, pred_temp_filename)
-        ants.image_write(mask_temp, mask_temp_filename)
+        #ants.image_write(pred_temp, pred_temp_filename)
+        #ants.image_write(mask_temp, mask_temp_filename)
+        
+        mask_image = sitk.GetImageFromArray(mask_temp)
+        pred_image = sitk.GetImageFromArray(pred)
+        
+        mask_image.CopyInformation(original_mask)
+        pred_image.CopyInformation(prediction_final)
+        
+        sitk.WriteImage(pred_image, pred_temp_filename)
+        sitk.WriteImage(mask_image, mask_temp_filename)
 
         row_dict['{}_dice'.format(key)] = dice_sitk(pred_temp_filename, mask_temp_filename)
         row_dict['{}_haus95'.format(key)] = hausdorff(pred_temp_filename, mask_temp_filename, '95')

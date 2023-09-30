@@ -8,6 +8,7 @@ import numpy as np
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import KFold
+import SimpleITK as sitk
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model
@@ -80,11 +81,15 @@ class RunTime:
                                                 False)
 
             prediction_filename = '{}.nii.gz'.format(patient['id'])
-            ants.image_write(prediction,
-                             os.path.join(self.args.results, 'predictions', 'train', 'raw', prediction_filename))
+            prediction_path = os.path.join(self.args.results, 'predictions', 'train', 'raw', prediction_filename)
+            ants.image_write(prediction, prediction_path)
 
             # Evaluate prediction
-            original_mask = ants.image_read(patient['mask'])
+            #print("check originial mask", patient['mask'])
+            #original_mask = ants.image_read(patient['mask'])
+            original_mask = sitk.ReadImage(patient['mask'], sitk.sitkUInt8)
+            prediction = sitk.ReadImage(prediction_path, sitk.sitkUInt8)
+            
             eval_results = evaluate_prediction(prediction,
                                                original_mask,
                                                patient['id'],
@@ -271,6 +276,11 @@ class RunTime:
             total_steps = self.args.epochs * self.args.steps_per_epoch
             current_epoch = 1
             local_step = 1
+            epochs_list = []
+            train_loss_list = []
+            val_loss_list = []
+            
+            current_val_loss = 0
             for global_step, (image, mask) in enumerate(train_loader):
                 if global_step >= total_steps:
                     break
@@ -289,8 +299,10 @@ class RunTime:
                         progress_bar.update_val_bar()
 
                     current_val_loss = val_loss.result().numpy()
-
+                    #print(" check current_val_loss", current_val_loss)
                     checkpoint.update(model, current_val_loss)
+                    val_loss_list.append(current_val_loss)
+                    epochs_list.append(current_epoch)
                     logs.update(current_epoch)
 
                     progress_bar.reset()
@@ -299,7 +311,12 @@ class RunTime:
                     gc.collect()
 
             # End of training for fold
+            df = pd.DataFrame(
+                   {'val loss':val_loss_list,
+                    'epoch': epochs_list,
+                    })
 
+            df.to_csv(os.path.join(self.args.results, 'val_list_' + str(fold) +  '.csv'), index=False)
             # Save last model
             print('Training for fold {} complete...'.format(fold))
             checkpoint.save_last_model(model)

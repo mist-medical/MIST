@@ -24,10 +24,16 @@ def check_both_empty(truth, pred):
         return False
 
 
-def dice_sitk(truth, pred):
+def dice_sitk(truth_filename, pred_filename):
     # Read images
-    pred = sitk.ReadImage(pred, sitk.sitkUInt8)
-    truth = sitk.ReadImage(truth, sitk.sitkUInt8)
+    pred = sitk.ReadImage(pred_filename, sitk.sitkUInt8)
+    truth = sitk.ReadImage(truth_filename, sitk.sitkUInt8) 
+
+    truth = sitk.RescaleIntensity(truth, 0, 255)
+    pred = sitk.RescaleIntensity(pred, 0, 255)
+    
+    pred = sitk.Cast(pred, sitk.sitkUInt8)
+    truth = sitk.Cast(truth, sitk.sitkUInt8)
 
     # Big fix -- Make sure prediction and truth are in same physical space
     # Writing with ANTs can cause strange interactions with SimpleITK
@@ -48,6 +54,8 @@ def dice_sitk(truth, pred):
         dice = 1.0
 
     if not (np.isfinite(dice)):
+        print("Error with dice score", truth_filename, pred_filename)
+        
         dice = 0.0
 
     return dice
