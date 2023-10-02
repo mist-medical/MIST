@@ -123,7 +123,7 @@ class Trainer:
                 image = data["image"]
 
                 # Predict with model and put back into original image space
-                pred = predict_single_example(image,
+                pred, _ = predict_single_example(image,
                                               original_image,
                                               self.config,
                                               [model],
@@ -142,7 +142,7 @@ class Trainer:
     # Set up for distributed training
     def setup(self, rank, world_size):
         os.environ['MASTER_ADDR'] = 'localhost'
-        os.environ['MASTER_PORT'] = get_master_port()
+        os.environ['MASTER_PORT'] = '12355'
         dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
     # Clean up processes after distributed training

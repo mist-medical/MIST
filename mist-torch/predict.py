@@ -28,6 +28,7 @@ def get_predict_args():
           default="constant",
           help="How to blend output of overlapping windows")
     p.boolean_flag("--tta", default=False, help="Use test time augmentation")
+    p.boolean_flag("--output_std", default=False, help="Outputs standard deviation image")
 
     args = p.parse_args()
     return args
@@ -44,7 +45,7 @@ def main(args):
     df = check_test_time_input(args.data)
 
     # Load models
-    models = load_test_time_models(os.path.join(args.models), False)
+    models = load_test_time_models(os.path.join(args.models), args.fast)
     models = [model.eval() for model in models]
     models = [model.to("cuda") for model in models]
 
@@ -55,7 +56,8 @@ def main(args):
                             models,
                             args.sw_overlap,
                             args.blend_mode,
-                            args.tta)
+                            args.tta,
+                            args.output_std)
 
 
 if __name__ == "__main__":
