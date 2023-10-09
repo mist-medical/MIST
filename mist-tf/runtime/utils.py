@@ -253,7 +253,7 @@ def init_results_df(data):
 
 
 def evaluate_prediction(prediction_final,
-                        original_mask,
+                        original_mask_filepath,
                         patient_id,
                         data,
                         pred_temp_filename,
@@ -263,7 +263,13 @@ def evaluate_prediction(prediction_final,
     row_dict = dict.fromkeys(list(key_names))
     row_dict['id'] = patient_id
     
+    #print("orginial mask", original_mask)
     #pred = sitk.RescaleIntensity(pred, 0, 1)
+    original_mask = sitk.ReadImage(original_mask_filepath, sitk.sitkUInt8)
+    #original_mask = sitk.GetArrayFromImage(original_mask)
+    
+    prediction_final = sitk.ReadImage(prediction_final, sitk.sitkUInt8)
+    
     original_mask = sitk.RescaleIntensity(original_mask, 0, 1)
     pred = sitk.GetArrayFromImage(prediction_final)
     mask = sitk.GetArrayFromImage(original_mask)
