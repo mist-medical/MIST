@@ -72,7 +72,6 @@ def argmax_and_fix_labels(prediction, labels):
     prediction = prediction.numpy()
     return prediction
 
-
 def back_to_original_space(prediction, config, original_image, nzmask, original_cropped):
     prediction = ants.from_numpy(prediction)
     prediction.set_spacing(config['target_spacing'])
@@ -121,18 +120,24 @@ def predict_single_example(image,
                            models,
                            overlap,
                            blend_mode,
-                           tta):
+                           tta,
+                           output_std=False):
     n_classes = len(config['labels'])
     prediction = torch.zeros(1, n_classes, image.shape[2], image.shape[3], image.shape[4]).to("cuda")
 
+    std_images = []
+
     for model in models:
-        prediction += get_sw_prediction(image,
+        sw_prediction = get_sw_prediction(image,
                                         model,
                                         config['patch_size'],
                                         overlap,
                                         blend_mode,
                                         tta)
-
+        prediction += sw_prediction
+        if output_std:
+            std_images.append(sw_prediction)
+    
     prediction /= len(models)
     prediction = prediction.to("cpu")
     prediction = argmax_and_fix_labels(prediction, config['labels'])
@@ -149,8 +154,20 @@ def predict_single_example(image,
                                         original_image,
                                         nzmask,
                                         original_cropped)
-
-    return prediction.astype("uint8")
+    # Creates standard deviation images
+    if output_std:
+        std_images = torch.stack(std_images, dim=0)
+        std_images = torch.std(std_images, dim=0)
+        std_images = std_images.to("cpu")
+        std_images = torch.squeeze(std_images, dim=0)
+        std_images = std_images.to(torch.float32)
+        std_images = std_images.numpy()
+        std_images = [back_to_original_space(std_image,
+                                        config,
+                                        original_image,
+                                        nzmask,
+                                        original_cropped) for std_image in std_images]
+    return prediction.astype("uint8"), std_images
 
 
 def load_test_time_models(models_dir, fast):
@@ -181,7 +198,7 @@ def check_test_time_input(patients):
         raise ValueError("Invalid input format for test time")
 
 
-def test_time_inference(df, dest, config_file, models, overlap, blend_mode, tta):
+def test_time_inference(df, dest, config_file, models, overlap, blend_mode, tta, output_std=False):
     with open(config_file, 'r') as file:
         config = json.load(file)
 
@@ -201,6 +218,13 @@ def test_time_inference(df, dest, config_file, models, overlap, blend_mode, tta)
         for ii in pb.track(range(len(df))):
             patient = df.iloc[ii].to_dict()
 
+            # Create individual folders for each prediction if output_std is enabled
+            if output_std:
+                new_dest = os.path.join(dest, str(patient['id']))
+                create_empty_dir(new_dest)
+            else:
+                new_dest = dest
+
             if "mask" in df.columns:
                 image_list = list(patient.values())[2:]
             else:
@@ -217,13 +241,14 @@ def test_time_inference(df, dest, config_file, models, overlap, blend_mode, tta)
             image = torch.Tensor(image_npy.copy()).to(torch.float32)
             image = image.to("cuda")
 
-            prediction = predict_single_example(image,
-                                                original_image,
-                                                config,
-                                                models,
-                                                overlap,
-                                                blend_mode,
-                                                tta)
+            prediction, std_images = predict_single_example(image,
+                                                     original_image,
+                                                     config,
+                                                     models,
+                                                     overlap,
+                                                     blend_mode,
+                                                     tta,
+                                                     output_std)
 
             # Apply postprocessing if called for in config file
             # Apply morphological cleanup to nonzero mask
@@ -238,9 +263,16 @@ def test_time_inference(df, dest, config_file, models, overlap, blend_mode, tta)
                                                          majority_label)
 
             # Write prediction mask to nifti file and save to disk
-            prediction_filename = '{}.nii.gz'.format(patient['id'])
-            output = os.path.join(dest, prediction_filename)
+            prediction_filename = '{}.nii.gz'.format(str(patient['id']))
+            output = os.path.join(new_dest, prediction_filename)
             ants.image_write(prediction, output)
+
+            # Write standard deviation image(s) to nifti file and save to disk
+            if output_std:
+                for i in range(len(std_images)):
+                    std_image_filename = '{}_std_{}.nii.gz'.format(patient['id'], config['labels'][i])
+                    output = os.path.join(new_dest, std_image_filename)
+                    ants.image_write(std_images[i], output)
 
         # Clean up
         gc.collect()

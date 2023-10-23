@@ -28,6 +28,7 @@ def get_predict_args():
           default="constant",
           help="How to blend output of overlapping windows")
     p.boolean_flag("--tta", default=False, help="Use test time augmentation")
+    p.boolean_flag("--output_std", default=False, help="Outputs standard deviation image")
 
     args = p.parse_args()
     return args
@@ -55,7 +56,8 @@ def main(args):
                             models,
                             args.sw_overlap,
                             args.blend_mode,
-                            args.tta)
+                            args.tta,
+                            args.output_std)
 
 
 if __name__ == "__main__":

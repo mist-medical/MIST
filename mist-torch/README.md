@@ -355,7 +355,7 @@ python predict.py --help
 usage: predict.py [-h] [--models MODELS] [--config CONFIG] [--data DATA]
                   [--output OUTPUT] [--fast [BOOLEAN]] [--gpu GPU]
                   [--sw-overlap SW_OVERLAP] [--blend-mode {constant,gaussian}]
-                  [--tta [BOOLEAN]]
+                  [--tta [BOOLEAN]] [output_std [BOOLEAN]]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -375,6 +375,7 @@ optional arguments:
                         How to blend output of overlapping windows (default:
                         constant)
   --tta [BOOLEAN]       Use test time augmentation (default: False)
+  --output_std [BOOLEAN]Outputs standard deviation images (default: False)
 ```
 
 ## Evaluating

@@ -129,7 +129,7 @@ class Trainer:
                 image = data["image"]
 
                 # Predict with model and put back into original image space
-                pred = predict_single_example(image,
+                pred, _ = predict_single_example(image,
                                               original_image,
                                               self.config,
                                               [model],
