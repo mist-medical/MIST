@@ -54,10 +54,16 @@ class DiceCELoss(nn.Module):
 class WeightedDiceLoss(nn.Module):
     def __init__(self, class_weights):
         super(WeightedDiceLoss, self).__init__()
+
+        # Define class weight scheme
+        # Move weights to cuda if already given by user
         if not(class_weights is None):
             self.class_weights = torch.Tensor(class_weights).to("cuda")
+        else:
+            self.class_weights = None
+
+        self.smooth = 1e-6
         self.axes = (2, 3, 4)
-        self.smooth = 1.e-6
 
     def forward(self, y_true, y_pred):
         # Prepare inputs
@@ -74,13 +80,41 @@ class WeightedDiceLoss(nn.Module):
         num *= class_weights
 
         den = torch.sum(torch.square(y_true), dim=self.axes) + torch.sum(torch.square(y_pred),
-                                                                         dim=self.axes) + self.smooth
+                                                                         dim=self.axes)
         den *= class_weights
+        den += self.smooth
 
         loss = torch.sum(num, axis=1) / torch.sum(den, axis=1)
         loss = torch.mean(loss)
 
         return loss
+
+
+class WeightedDiceCELoss(nn.Module):
+    def __init__(self, class_weights):
+        super(WeightedDiceCELoss, self).__init__()
+
+        # Define class weight scheme
+        # Move weights to cuda if already given by user
+        if not(class_weights is None):
+            self.class_weights = torch.Tensor(class_weights).to("cuda")
+        else:
+            self.class_weights = None
+
+        self.cross_entropy = torch.nn.CrossEntropyLoss(weight=self.class_weights)
+        self.weighted_dice_loss = WeightedDiceLoss(class_weights=self.class_weights)
+
+    def forward(self, y_true, y_pred):
+        # Dice loss
+        loss_weighted_dice = self.weighted_dice_loss(y_true, y_pred)
+
+        # Prepare inputs
+        y_true = get_one_hot(y_true, y_pred.shape[1]).to(torch.float32)
+
+        # Weighted cross entropy loss
+        loss_weighted_ce = self.cross_entropy(y_pred, y_true)
+
+        return loss_weighted_dice + loss_weighted_ce
 
 
 class KLDivLoss(nn.Module):
@@ -106,5 +140,7 @@ def get_loss(args, **kwargs):
         return DiceCELoss()
     elif args.loss == "gdl":
         return WeightedDiceLoss(class_weights=kwargs["class_weights"])
+    elif args.loss == "gdl_ce":
+        return WeightedDiceCELoss(class_weights=kwargs["class_weights"])
     else:
         raise ValueError("Invalid loss function")

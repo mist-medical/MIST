@@ -32,12 +32,6 @@ def create_empty_dir(path):
         os.makedirs(path)
 
 
-def get_master_port():
-    sock = socket.socket()
-    sock.bind(('', 0))
-    return str(sock.getsockname()[1])
-
-
 def get_files_list(path):
     files_list = list()
     for root, _, files in os.walk(path, topdown=False):

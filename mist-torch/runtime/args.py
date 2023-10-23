@@ -57,6 +57,7 @@ def get_main_args():
     p.arg("--data", type=str, help="Path to dataset json file")
     p.arg("--gpus", nargs="+", default=[-1], type=int, help="Which gpu(s) to use, defaults to all available GPUs")
     p.arg("--num-workers", type=positive_int, default=8, help="Number of workers to use for data loading")
+    p.arg("--master-port", type=str, default="12355", help="Master port for multi-gpu training")
     p.arg("--seed", type=non_negative_int, default=42, help="Random seed")
     p.boolean_flag("--tta", default=False, help="Enable test time augmentation")
 
@@ -99,11 +100,11 @@ def get_main_args():
     p.boolean_flag("--deep-supervision", default=False, help="Use deep supervision")
     p.arg("--deep-supervision-heads", type=positive_int, default=2, help="Number of deep supervision heads")
     p.boolean_flag("--vae-reg", default=False, help="Use VAE regularization")
-    p.arg("--vae-penalty", default=0.1, help="Weight for VAE regularization loss")
+    p.arg("--vae-penalty", type=float_0_1, default=0.1, help="Weight for VAE regularization loss")
     p.boolean_flag("--l2-reg", default=False, help="Use L2 regularization")
-    p.arg("--l2-penalty", default=0.00001, help="L2 penalty")
+    p.arg("--l2-penalty", type=float_0_1, default=0.00001, help="L2 penalty")
     p.boolean_flag("--l1-reg", default=False, help="Use L1 regularization")
-    p.arg("--l1-penalty", default=0.00001, help="L1 penalty")
+    p.arg("--l1-penalty", type=float_0_1, default=0.00001, help="L1 penalty")
 
     # Data loading
     p.arg("--oversampling",
@@ -113,14 +114,14 @@ def get_main_args():
 
     # Preprocessing
     p.boolean_flag("--use-n4-bias-correction", default=False, help="Use N4 bias field correction (only for MR images)")
-    p.boolean_flag("--use-precomputed-weights", default=False, help="Use precomputed class weights")
+    p.boolean_flag("--use-precomputed-class-weights", default=False, help="Use precomputed class weights")
     p.arg("--class-weights", nargs="+", type=float, help="Specify class weights")
 
     # Loss function
     p.arg("--loss",
           type=str,
           default="dice_ce",
-          choices=["dice_ce", "dice", "gdl"],
+          choices=["dice_ce", "dice", "gdl", "gdl_ce"],
           help="Loss function for training")
 
     # Sliding window inference

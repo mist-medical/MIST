@@ -143,7 +143,7 @@ def predict_single_example(image,
     prediction = argmax_and_fix_labels(prediction, config['labels'])
 
     if config['use_nz_mask']:
-        nzmask = ants.get_mask(original_image, cleanup=0)
+        nzmask = (original_image != 0).astype("uint8")
         original_cropped = ants.crop_image(original_image, nzmask)
     else:
         nzmask = None
@@ -167,7 +167,7 @@ def predict_single_example(image,
                                         original_image,
                                         nzmask,
                                         original_cropped) for std_image in std_images]
-    return prediction, std_images
+    return prediction.astype("uint8"), std_images
 
 
 def load_test_time_models(models_dir, fast):

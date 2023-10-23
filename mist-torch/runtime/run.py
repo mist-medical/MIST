@@ -34,10 +34,16 @@ from monai.inferers import sliding_window_inference
 # Custom code
 from data_loading.dali_loader import get_training_dataset, get_validation_dataset, get_test_dataset
 from models.get_model import get_model
-from runtime.loss import get_loss, DiceLoss, VAELoss
+from runtime.loss import get_loss, DiceCELoss, VAELoss
 from inference.main_inference import predict_single_example
-from runtime.utils import get_optimizer, get_lr_schedule, Mean, get_test_df, create_model_config_file, \
-    load_model_from_config, get_master_port
+from runtime.utils import (
+    get_optimizer,
+    get_lr_schedule,
+    Mean,
+    get_test_df,
+    create_model_config_file,
+    load_model_from_config
+)
 
 console = Console()
 
@@ -86,13 +92,13 @@ class Trainer:
                                                      self.model_config_path)
 
         # Get class weights if we are using them
-        if self.args.use_precomputed_weights:
+        if self.args.use_precomputed_class_weights:
             self.class_weights = self.config['class_weights']
         else:
             self.class_weights = None
 
         # Get standard dice loss for validation
-        self.dice_loss = DiceLoss()
+        self.val_loss = DiceCELoss()
 
         # Get VAE regularization loss
         self.vae_loss = VAELoss()
@@ -142,7 +148,7 @@ class Trainer:
     # Set up for distributed training
     def setup(self, rank, world_size):
         os.environ['MASTER_ADDR'] = 'localhost'
-        os.environ['MASTER_PORT'] = '12355'
+        os.environ['MASTER_PORT'] = self.args.master_port
         dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
     # Clean up processes after distributed training
@@ -317,7 +323,6 @@ class Trainer:
 
                     optimizer.step()
 
-                scheduler.step()
                 return loss
 
             def val_step(image, label):
@@ -328,7 +333,7 @@ class Trainer:
                                                 predictor=model,
                                                 device=torch.device("cuda"))
 
-                return self.dice_loss(label, pred)
+                return self.val_loss(label, pred)
 
             for epoch in range(self.args.epochs):
                 # Make sure gradient tracking is on, and do a pass over the data
@@ -341,6 +346,9 @@ class Trainer:
 
                             # Compute loss for single step
                             loss = train_step(image, label)
+
+                            # Update lr schedule
+                            scheduler.step()
 
                             # Send all training losses to device 0 for average
                             dist.reduce(loss, dst=0)
