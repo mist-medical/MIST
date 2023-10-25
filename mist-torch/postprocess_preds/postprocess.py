@@ -202,7 +202,7 @@ class Postprocessor:
             clean_mask = self.use_clean_mask()
 
         # Run connected component analysis
-        if not self.args.post_no_largest:
+        if self.args.post_no_largest:
             use_postprocessing = []
         else:
             use_postprocessing = self.connected_components_analysis()
