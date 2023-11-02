@@ -76,6 +76,7 @@ def get_files_df(params, mode):
                         row_dict[img_type] = file
 
         df = df.append(row_dict, ignore_index=True)
+    print("got df", df)
     return df
 
 
@@ -263,10 +264,7 @@ def evaluate_prediction(prediction_final,
     row_dict = dict.fromkeys(list(key_names))
     row_dict['id'] = patient_id
     
-    #print("orginial mask", original_mask)
-    #pred = sitk.RescaleIntensity(pred, 0, 1)
     original_mask = sitk.ReadImage(original_mask_filepath, sitk.sitkUInt8)
-    #original_mask = sitk.GetArrayFromImage(original_mask)
     
     prediction_final = sitk.ReadImage(prediction_final, sitk.sitkUInt8)
     
@@ -277,30 +275,22 @@ def evaluate_prediction(prediction_final,
 
     for key in data['final_classes'].keys():
         class_labels = data['final_classes'][key]
-        #pred = prediction_final.numpy()
-        #mask = original_mask.numpy()
+
 
 
 
         pred_temp = np.zeros(pred.shape)
         mask_temp = np.zeros(mask.shape)
         
-        #print("max", np.amax(mask), "min", np.amin(mask))
-        #print("check class_labels", class_labels)
+
         for label in class_labels:
-            #print("check label", label)
+
             pred_label = (pred == label).astype(np.uint8) 
             mask_label = (mask == label).astype(np.uint8)
 
             pred_temp += pred_label
             mask_temp += mask_label
 
-        #pred_temp = original_mask.new_image_like(pred_temp)
-        #mask_temp = original_mask.new_image_like(mask_temp)
-
-        #ants.image_write(pred_temp, pred_temp_filename)
-        #ants.image_write(mask_temp, mask_temp_filename)
-        
         mask_image = sitk.GetImageFromArray(mask_temp)
         pred_image = sitk.GetImageFromArray(pred)
         

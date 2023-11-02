@@ -109,8 +109,11 @@ def preprocess_example(config, image_list, mask):
             # Crop mask according to nonzero mask
             mask = ants.crop_image(mask, nzmask)
     images = list()
+    #print("check image_path", image_list)
     for image_path in image_list:
         # Load image as ants image
+        
+        #print("check target_spacing", config['target_spacing'])
         image = ants.image_read(image_path)
         hinfo  = ants.image_header_info(image_path)
         pclass = hinfo['pixelclass']
@@ -151,10 +154,8 @@ def preprocess_example(config, image_list, mask):
 
 
     if training:
-        
-         
         mask_onehot = np.zeros((*dims, len(config['labels'])))
-
+        print("check dimensions", dims, mask_npy.shape)
         for j in range(len(config['labels'])):
             mask_onehot[..., j] = (mask_npy == config['labels'][j]).astype('float32')
 
@@ -190,7 +191,8 @@ def preprocess_dataset(args):
     if args.paths is None:
         df = pd.read_csv(os.path.join(args.results, 'train_paths.csv'))
     else:
-        df = pd.read_csv(args.paths)
+         #df = pd.read_csv(args.paths)
+         df = pd.read_csv(os.path.join(args.results, 'train_paths.csv'))
 
     # Create output directories if they do not exist
     images_dir = os.path.join(args.processed_data, 'images')
@@ -209,13 +211,17 @@ def preprocess_dataset(args):
         compute_weights = False
 
     #compute_weights = False # RG fix for bug
-    print('Preprocessing dataset...')
+    print('Preprocessing dataset...') 
+ 
     for i in trange(len(df)):
         # Get paths to images for single patient
         patient = df.iloc[i].to_dict()
-
+        print("check patient", patient)
         # Get list of image paths and segmentation mask
-        image_list = list(patient.values())[2:len(patient)]
+        if args.kfold == True:
+            image_list = list(patient.values())[2:len(patient)]
+        else:
+            image_list = list(patient.values())[3:len(patient)]
         mask = ants.image_read(patient['mask'])
         hinfo  = ants.image_header_info(patient['mask'])
         pclass = hinfo['pixelclass']
@@ -253,6 +259,130 @@ def preprocess_dataset(args):
         mask_npy = np.reshape(mask_npy, (*mask_npy.shape, 1))
         np.save(os.path.join(labels_dir, '{}.npy'.format(patient['id'])), mask_npy.astype(np.uint8))
 
+    # Finalize class weights
+    if compute_weights:
+        den = (1. / len(config['labels'])) * (np.sum(1. / np.array(class_weights)))
+        class_weights = [(1. / class_weights[j]) / den for j in range(len(config['labels']))]
+        max_weight = np.max(class_weights)
+        class_weights = [weight / max_weight for weight in class_weights]
+
+    # Save class weights to config file for later
+    config['class_weights'] = class_weights
+    with open(config_file, 'w') as outfile:
+        json.dump(config, outfile, indent=2)
+        
+        
+
+def preprocess_dataset_nofold(args):
+    # Get configuration file
+    if args.config is None:
+        config_file = os.path.join(args.results, 'config.json')
+    else:
+        config_file = args.config
+
+    with open(config_file, 'r') as file:
+        config = json.load(file)
+
+    # Get paths to dataset
+    if args.paths is None:
+        df = pd.read_csv(os.path.join(args.results, 'train_paths.csv'))
+    else:
+        df = pd.read_csv(args.paths)
+
+    # Create output directories if they do not exist
+    train_dir = os.path.join(args.processed_data, 'train')
+    create_empty_dir(train_dir)
+    
+    train_images_dir = os.path.join(train_dir, 'images')
+    create_empty_dir(train_images_dir)
+    
+    train_labels_dir = os.path.join(train_dir, 'labels')
+    create_empty_dir(train_labels_dir)
+    
+    # create empty validation directory
+    val_dir = os.path.join(args.processed_data, 'val')
+    create_empty_dir(val_dir)
+
+    val_images_dir = os.path.join(val_dir, 'images')
+    create_empty_dir(val_images_dir)
+    
+    val_labels_dir = os.path.join(val_dir, 'labels')
+    create_empty_dir(val_labels_dir)
+
+    # create empty validation directory
+    test_dir = os.path.join(args.processed_data, 'test')
+    create_empty_dir(test_dir)
+
+    test_images_dir = os.path.join(test_dir, 'images')
+    create_empty_dir(test_images_dir)
+    
+    test_labels_dir = os.path.join(test_dir, 'labels')
+    create_empty_dir(test_labels_dir)
+
+
+    # Get class weights if they exist
+    # Else we compute them
+    if args.class_weights is None:
+        class_weights = [0. for i in range(len(config['labels']))]
+        compute_weights = True
+    else:
+        class_weights = args.class_weights
+        compute_weights = False
+
+    #compute_weights = False # RG fix for bug
+    print('Preprocessing dataset...')
+ 
+    for i in trange(len(df)):
+        # Get paths to images for single patient
+        patient = df.iloc[i].to_dict()
+
+        # Get list of image paths and segmentation mask
+        image_list = list(patient.values())[3:len(patient)]
+        mask = ants.image_read(patient['mask'])
+        hinfo  = ants.image_header_info(patient['mask'])
+        type_data = patient['split_location']
+        pclass = hinfo['pixelclass']
+        # Preprocess a single example
+        image_npy, mask_npy, mask_onehot = preprocess_example(config, image_list, mask)
+
+        # Compute class weights
+        if compute_weights:
+            for j in range(len(config['labels'])):
+                #if config['labels'][j] == 0 and config['use_nz_mask']:
+                if config['labels'][j] == 0:
+                
+                    fg_mask = (mask_onehot[..., 0] == 0).astype('int')
+                    label_mask = (image_npy[..., 0] != 0).astype('int') - fg_mask
+                else:
+                  
+                    label_mask = mask_onehot[..., j]
+
+                # Update class weights with number of voxels belonging to class
+                class_weights[j] += np.count_nonzero(label_mask)
+        
+
+        # Save image in npy format              
+        dims = image_npy.shape
+
+        if dims[-1] > 1:
+          image_npy = np.dot(image_npy[...,:3], [0.299, 0.587, 0.114])
+          image_npy = image_npy.reshape(dims[0], dims[1], dims[2], 1)
+        # Save mask in npy format
+        # Fix labels for training
+        mask_npy = np.argmax(mask_onehot, axis=-1)
+        mask_npy = np.reshape(mask_npy, (*mask_npy.shape, 1))
+        
+        if type_data == 'training':
+          np.save(os.path.join(train_images_dir, '{}.npy'.format(patient['id'])), image_npy.astype(np.float32))
+          np.save(os.path.join(train_labels_dir, '{}.npy'.format(patient['id'])), mask_npy.astype(np.uint8))
+        elif type_data == 'validation':
+          np.save(os.path.join(val_images_dir, '{}.npy'.format(patient['id'])), image_npy.astype(np.float32))
+          np.save(os.path.join(val_labels_dir, '{}.npy'.format(patient['id'])), mask_npy.astype(np.uint8))
+        elif type_data == 'testing':
+          np.save(os.path.join(test_images_dir, '{}.npy'.format(patient['id'])), image_npy.astype(np.float32))
+          np.save(os.path.join(test_labels_dir, '{}.npy'.format(patient['id'])), mask_npy.astype(np.uint8))
+        else:
+          print("Error: No association with type of training", patient['id'])
     # Finalize class weights
     if compute_weights:
         den = (1. / len(config['labels'])) * (np.sum(1. / np.array(class_weights)))

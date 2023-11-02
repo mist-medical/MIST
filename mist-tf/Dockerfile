@@ -18,4 +18,4 @@ ENV HCOLL_ENABLE_MCAST 0
 RUN mkdir /mist
 
 WORKDIR /mist
-ADD . /mist
+#ADD . /mist

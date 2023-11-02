@@ -146,6 +146,11 @@ def get_main_args():
     p.boolean_flag("--use_n4_bias_correction",
                    default=False,
                    help="Do not run bias correction for preprocessing")
+                   
+    p.boolean_flag("--kfold",
+                   default=True,
+                   help="Do not do kfold")              
+    p.arg('--train_val_test_csv',help="csv  file for training, validation, and testing.")
     # Validation
     p.arg('--nfolds', type=positive_int, default=5, help='Number of cross-validation folds')
     p.arg('--folds', nargs='+', default=[0, 1, 2, 3, 4], type=int, help='Which folds to run')

@@ -2,6 +2,7 @@ import os
 import json
 import ants
 import numpy as np
+import pandas as pd
 
 # Rich progres bar
 from rich.progress import (
@@ -31,15 +32,19 @@ def compare_headers(header1, header2):
     is_valid = True
     if header1["dimensions"] != header2["dimensions"]:
         is_valid = False
+        #print("header dimensions is not valid", header1["dimensions"],  header2["dimensions"])
     if header1["spacing"] != header2["spacing"]:
         is_valid = False
+        #print("header spacing is not valid", header1["spacing"], header2["spacing"] )
     dir_1 = header1["direction"]
     dir_2 = header2["direction"]
     dir_1[dir_1 == -0] = 0
     dir_2[dir_2 == -0] = 0
     if not np.array_equal(np.round(dir_1,1), np.round(dir_2,1)):
         is_valid = False
+        #print("header direction is not valid",np.round(dir_1,1),  np.round(dir_2,1) )
     if not np.array_equal(header1["origin"], header2["origin"]):
+        #print("header origin is not valid", header1["origin"], header2["origin"])
         is_valid = False
     return is_valid
 
@@ -68,7 +73,10 @@ class Analyze:
         self.config_file = os.path.join(self.args.results, "config.json")
 
         self.config = dict()
-        self.df = get_files_df(self.data, "train")
+        if self.args.kfold == True:
+            self.df = get_files_df(self.data, "train")
+        else:
+            self.df = pd.DataFrame(pd.read_csv(args.train_val_test_csv))
 
     def check_nz_mask(self):
         """
@@ -87,8 +95,11 @@ class Analyze:
         with progress as pb:
             for i in pb.track(range(len(self.df))):
                 patient = self.df.iloc[i].to_dict()
-                image_list = list(patient.values())[2:len(patient)]
-
+                
+                if self.args.kfold == True:
+                    image_list = list(patient.values())[2:len(patient)]
+                else:
+                    image_list = list(patient.values())[3:len(patient)]
                 # Read original images
                 full_sized_image = ants.image_read(image_list[0])
 
@@ -123,6 +134,7 @@ class Analyze:
 
         with progress as pb:
             for i in pb.track(range(len(self.df))):
+                
                 patient = self.df.iloc[i].to_dict()
 
                 # Read mask image. This is faster to load.
@@ -209,7 +221,10 @@ class Analyze:
         with progress as pb:
             for i in pb.track(range(len(self.df))):
                 patient = self.df.iloc[i].to_dict()
-                image_list = list(patient.values())[2:len(patient)]
+                if self.args.kfold == True:
+                    image_list = list(patient.values())[2:len(patient)]
+                else:
+                    image_list = list(patient.values())[3:len(patient)]
 
                 # Read original image
                 image = ants.image_read(image_list[0])
@@ -282,7 +297,11 @@ class Analyze:
                 mask_header = ants.image_header_info(patient["mask"])
 
                 # Get list of image paths and segmentation mask
-                image_list = list(patient.values())[2:len(patient)]
+                
+                if self.args.kfold == False:
+                    image_list = list(patient.values())[3:len(patient)]
+                else:
+                    image_list = list(patient.values())[2:len(patient)]
                 for image_path in image_list:
                     image_header = ants.image_header_info(image_path)
 
@@ -292,6 +311,7 @@ class Analyze:
 
                     if not is_valid:
                         messages += "In {}: Mismatch between image and mask header information (run.py)\n".format(patient["id"])
+                        messages += "\n{}\n{}\n".format(patient["mask"], image_list)
                         bad_data.append(i)
                         break
 
@@ -326,7 +346,12 @@ class Analyze:
 
         rows_to_drop = self.df.index[bad_data]
         self.df.drop(rows_to_drop, inplace=True)
-        self.df.to_csv(self.train_paths_csv, index=False)
+        
+        if self.args.kfold == False:
+          self.df.to_csv(self.args.paths, index=False)
+
+        else:
+          self.df.to_csv(self.train_paths_csv, index=False)
 
         # Get inferred parameters
         self.analyze_dataset()

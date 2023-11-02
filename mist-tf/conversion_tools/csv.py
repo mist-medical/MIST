@@ -21,6 +21,7 @@ def copy_csv_data(df, dest, mode):
             # Copy mask to new patient folder
             mask_source = os.path.abspath(patient['mask'])
             mask_dest = os.path.join(patient_dest, 'mask.nii.gz')
+            
             cp_mask_cmd = 'cp {} {}'.format(mask_source, mask_dest)
             subprocess.call(cp_mask_cmd, shell = True)
 
@@ -36,6 +37,7 @@ def copy_csv_data(df, dest, mode):
             image_source = os.path.abspath(image_list[j])
             image_dest = os.path.join(patient_dest, '{}.nii.gz'.format(image_keys[j]))
             cp_image_cmd = 'cp {} {}'.format(image_source, image_dest)
+            
             subprocess.call(cp_image_cmd, shell = True)
     
 def convert_csv(train_csv, test_csv, dest):

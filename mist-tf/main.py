@@ -2,7 +2,7 @@ import json
 import os
 
 from analyze_data.analyze import Analyze
-from preprocess_data.preprocess import preprocess_dataset
+from preprocess_data.preprocess import preprocess_dataset, preprocess_dataset_nofold
 from runtime.args import get_main_args
 from runtime.run import RunTime
 from runtime.utils import create_empty_dir, create_empty_dir_remove, set_warning_levels
@@ -53,12 +53,19 @@ def main(args):
 
     # Create file structure for MIST output
     create_folders(args)
+    
+    
+    print("kfold", args.kfold)
 
     if args.exec_mode == "all":
         analyze = Analyze(args)
         analyze.run()
-
-        preprocess_dataset(args)
+        
+        if args.kfold == True:
+            preprocess_dataset(args)
+        else:
+            print("Doing post process with no fold....")
+            preprocess_dataset_nofold(args)
 
         runtime = RunTime(args)
         runtime.run()
@@ -68,8 +75,11 @@ def main(args):
         analyze.run()
 
     elif args.exec_mode == "preprocess":
-        preprocess_dataset(args)
-
+        if args.kfold == True:
+            preprocess_dataset(args)
+        else:
+            print("Doing post process with no fold....")
+            preprocess_dataset_nofold(args)
     elif args.exec_mode == "train":
         runtime = RunTime(args)
         runtime.run()

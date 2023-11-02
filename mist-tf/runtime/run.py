@@ -33,6 +33,8 @@ class RunTime:
     def __init__(self, args):
         # Read user defined parameters
         self.args = args
+        self.nofold = args.kfold
+        print("Check Loading datafile:", self.args.data)
         with open(self.args.data, 'r') as file:
             self.data = json.load(file)
 
@@ -88,7 +90,9 @@ class RunTime:
             #print("check originial mask", patient['mask'])
             #original_mask = ants.image_read(patient['mask'])
             original_mask = sitk.ReadImage(patient['mask'], sitk.sitkUInt8)
-            prediction = sitk.ReadImage(prediction_path, sitk.sitkUInt8)
+            #prediction = sitk.ReadImage(prediction_path, sitk.sitkUInt8)
+            original_mask = patient['mask']
+            prediction = prediction_path
             
             eval_results = evaluate_prediction(prediction,
                                                original_mask,
@@ -357,6 +361,248 @@ class RunTime:
         gc.collect()
         # End train function
 
+
+    def train_nofold(self):
+
+       
+        train_dir =  os.path.join(self.args.processed_data, 'train', 'images')
+        train_images = [os.path.join(train_dir, file) for file in os.listdir(train_dir)]
+        
+        train_dir =  os.path.join(self.args.processed_data, 'train', 'labels')
+        train_labels = [os.path.join(train_dir, file) for file in os.listdir(train_dir)]
+        
+        val_dir =  os.path.join(self.args.processed_data, 'val', 'images')
+        val_images = [os.path.join(val_dir, file) for file in os.listdir(val_dir)]
+        
+        val_dir =  os.path.join(self.args.processed_data, 'val', 'labels')
+        val_labels = [os.path.join(val_dir, file) for file in os.listdir(val_dir)]
+
+        test_dir =  os.path.join(self.args.processed_data, 'test', 'images')
+        test_images = [os.path.join(test_dir, file) for file in os.listdir(test_dir)]
+        test_images.sort()
+
+        test_dir =  os.path.join(self.args.processed_data, 'test', 'labels')
+        test_labels = [os.path.join(test_dir, file) for file in os.listdir(test_dir)]
+        test_labels.sort()
+      
+	
+
+        # Get patch size if not specified by user
+        if self.args.patch_size is None:
+            patch_size = [64, 64, 64]
+        else:
+            patch_size = self.args.patch_size
+
+        # Get network depth based on patch size
+        if self.args.depth is None:
+            depth = np.min([int(np.log(np.min(patch_size) // 4) // np.log(2)), 6])
+        else:
+            depth = self.args.depth
+
+        self.config['patch_size'] = patch_size
+        with open(self.config_file, 'w') as outfile:
+            json.dump(self.config, outfile, indent=2)
+
+
+        # Get DALI loaders
+        train_loader = get_distributed_train_dataset(imgs=train_images,
+                                                         lbls=train_labels,
+                                                         batch_size=self.args.batch_size,
+                                                         strategy=self.strategy,
+                                                         n_gpus=self.n_gpus,
+                                                         seed=self.args.seed,
+                                                         num_workers=8,
+                                                         oversampling=self.args.oversampling,
+                                                         patch_size=patch_size)
+
+        val_loader = get_validation_dataset(imgs=val_images,
+                                                lbls=val_labels,
+                                                batch_size=1,
+                                                mode='eval',
+                                                seed=self.args.seed,
+                                                num_workers=8)
+
+        # Get steps per epoch
+        if self.args.steps_per_epoch is None:
+            self.args.steps_per_epoch = len(train_images) // self.args.batch_size
+        else:
+            self.args.steps_per_epoch = self.args.steps_per_epoch
+
+        # Get class weights if we are using them
+        if self.args.use_precomputed_weights:
+            class_weights = self.config['class_weights']
+        else:
+             class_weights = None
+
+        # Set up optimizer, model, and loss under distribution strategy scope
+        with self.strategy.scope():
+             # Set up optimizer
+             optimizer = get_optimizer(self.args)
+
+             # Get model
+             model = get_model(self.args.model,
+                                  input_shape=tuple(patch_size),
+                                  n_channels=len(self.data['images']),
+                                  n_classes=self.n_classes,
+                                  init_filters=self.args.init_filters,
+                                  depth=depth,
+                                  deep_supervision=self.args.deep_supervision,
+                                  pocket=self.args.pocket,
+                                  config=self.config)
+
+             # Get loss function
+             loss_fn = get_loss(self.args,
+                                   reduction=self.reduction,
+                                   class_weights=class_weights)
+
+        train_loss = tf.keras.metrics.Mean('loss', dtype=tf.float32)
+
+        def train_step(image, mask):
+             with tf.GradientTape() as tape:
+                 pred = model(image)
+
+                 if self.args.deep_supervision:
+                     unscaled_loss = loss_fn(mask, pred[0])
+
+                     for i, p in enumerate(pred[1:]):
+                         unscaled_loss += 0.5 ** (i + 1) * loss_fn(mask, p)
+
+                     c_norm = 1 / (2 - 2 ** (-len(pred)))
+                     unscaled_loss *= c_norm
+                 else:
+                     unscaled_loss = loss_fn(mask, pred)
+
+                 loss = unscaled_loss
+                 if self.args.amp:
+                     loss = optimizer.get_scaled_loss(unscaled_loss)
+
+             gradients = tape.gradient(loss, model.trainable_variables)
+             if self.args.amp:
+                 gradients = optimizer.get_unscaled_gradients(gradients)
+             optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+
+             train_loss(unscaled_loss)
+             return loss
+
+        @tf.function
+        def distributed_train_step(image, mask):
+             per_replica_losses = self.strategy.run(train_step, args=(image, mask))
+             return self.strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
+
+        val_loss = tf.keras.metrics.Mean('val_loss', dtype=tf.float32)
+
+        def val_step(image, mask):
+            pred = sliding_window_inference(image,
+                                                n_class=self.n_classes,
+                                                roi_size=tuple(patch_size),
+                                                sw_batch_size=1,
+                                                overlap=self.args.sw_overlap,
+                                                blend_mode=self.args.blend_mode,
+                                                model=model)
+
+            val_loss(self.dice_loss(mask, pred))
+
+        # Setup checkpoints for training
+        best_val_loss = np.Inf
+        #print("check self.data['task']", self.data['task'])
+        best_model_path = os.path.join(self.args.results, 'models', 'best',
+                                           '{}_best_model'.format(self.data['task']))
+        last_model_path = os.path.join(self.args.results, 'models', 'last',
+                                           '{}_last_model'.format(self.data['task']))
+
+        checkpoint = Checkpoints(best_model_path, last_model_path, best_val_loss)
+
+        # Setup progress bar
+        progress_bar = ProgressBar(self.args.steps_per_epoch, len(val_images), train_loss, val_loss)
+
+        # Setup logging
+        logs = Logger_nofold(self.args, train_loss, val_loss)
+
+        total_steps = self.args.epochs * self.args.steps_per_epoch
+        current_epoch = 1
+        local_step = 1
+        epochs_list = []
+        train_loss_list = []
+        val_loss_list = []
+            
+        current_val_loss = 0
+        for global_step, (image, mask) in enumerate(train_loader):
+            if global_step >= total_steps:
+                 break
+
+            if local_step == 1:
+                print('Epoch {}/{}'.format(current_epoch, self.args.epochs))
+
+            distributed_train_step(image, mask)
+            progress_bar.update_train_bar()
+            local_step += 1
+
+            if (global_step + 1) % self.args.steps_per_epoch == 0 and global_step > 0:
+                # Perform validation
+                #print("check val_images", val_images)
+                for _, (val_image, val_mask) in enumerate(val_loader.take(len(val_images))):  # pylint: disable=protected-access
+                     #print("\n val_image", val_image.shape)
+                     #print("\n val_mask", val_mask.shape)
+                     val_step(val_image, val_mask)  # pylint: disable=protected-access
+                     progress_bar.update_val_bar()
+                #print("completed validate")  
+                current_val_loss = val_loss.result().numpy()
+                #print(" check current_val_loss", current_val_loss)
+                checkpoint.update(model, current_val_loss)
+                val_loss_list.append(current_val_loss)
+                epochs_list.append(current_epoch)
+                logs.update(current_epoch)
+
+                progress_bar.reset()
+                current_epoch += 1
+                local_step = 1
+                gc.collect()
+
+        # End of training for fold
+        df = pd.DataFrame(
+                   {'val loss':val_loss_list,
+                    'epoch': epochs_list,
+                    })
+
+        df.to_csv(os.path.join(self.args.results, 'val_list' +  '.csv'), index=False)
+        # Save last model
+        print('Training complete...')
+        checkpoint.save_last_model(model)
+
+        K.clear_session()
+        del model, train_loader, val_loader
+        gc.collect()
+
+        # Run prediction on test set and write results to .nii.gz format
+
+
+        test_loader = get_validation_dataset(imgs=test_images,
+                                                 lbls=test_labels,
+                                                 batch_size=1,
+                                                 mode='eval',
+                                                 seed=42,
+                                                 num_workers=8)
+
+        # Bug fix: Strange behavior with numerical ids
+        test_df_ids = [pat.split('/')[-1].split('.')[0] for pat in test_images]
+        test_df = get_test_df(self.df, test_df_ids)
+
+        # print('Running inference on validation set...')
+        #print("check before ./inference/main_inference.py")
+        self.predict_and_evaluate_val(best_model_path, test_df, test_loader)
+        #print("check after ./inference/main_inference.py")
+        K.clear_session()
+        del test_loader
+        gc.collect()
+
+      
+
+        K.clear_session()
+        gc.collect()
+        # End train function
+
+
+
     def run(self):
         os.environ["TF_GPU_THREAD_MODE"] = "gpu_private"
         os.environ["TF_GPU_THREAD_COUNT"] = "1"
@@ -390,8 +636,10 @@ class RunTime:
         self.args.batch_size = self.args.batch_size // self.n_gpus
 
         # Run training pipeline
-        self.train()
-
+        if self.nofold == True:
+            self.train()
+        else:
+            self.train_nofold()
         # Get final statistics
         self.results_df = compute_results_stats(self.results_df)
 
@@ -420,3 +668,5 @@ class RunTime:
 
         K.clear_session()
         gc.collect()
+
+
