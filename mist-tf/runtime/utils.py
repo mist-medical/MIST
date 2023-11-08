@@ -187,7 +187,7 @@ def set_tf_flags(args):
     if len(args.gpus) > 1:
         tf.config.threading.set_inter_op_parallelism_threads(max(2, (multiprocessing.cpu_count() // len(args.gpus)) - 2))
     else:
-        tf.config.threading.set_inter_op_parallelism_threads(8)
+        tf.config.threading.set_inter_op_parallelism_threads(0)
 
 
 def set_seed(seed):

@@ -14,7 +14,7 @@ def get_predict_args():
     p.arg("--data", type=str, help="CSV or JSON file containing paths to data")
     p.arg("--output", type=str, help="Directory to save predictions")
     p.boolean_flag("--fast", default=False, help="Use only one model for prediction to speed up inference time")
-    p.arg("--gpu", type=non_negative_int, default=0, help="GPU id to run inference on")
+    p.arg("--gpu", type=int, default=0, help="GPU id to run inference on, -1 --> run on CPU")
     p.boolean_flag("--amp", default=False, help="Use automatic mixed precision")
     p.boolean_flag("--xla", default=False, help="Use XLA")
 
