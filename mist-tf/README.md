@@ -164,6 +164,7 @@ usage: main.py [-h] [--exec-mode {all,analyze,preprocess,train}] [--data DATA]
                [--model {nnunet,unet,resnet,densenet,hrnet}] [--depth DEPTH]
                [--init-filters INIT_FILTERS] [--deep-supervision [BOOLEAN]]
                [--pocket [BOOLEAN]] [--oversampling OVERSAMPLING]
+               [--use-n4-bias-correction [BOOLEAN]]
                [--use-precomputed-weights [BOOLEAN]]
                [--class-weights CLASS_WEIGHTS [CLASS_WEIGHTS ...]]
                [--loss {dice_ce,dice,gdl,gdl_ce}] [--sw-overlap SW_OVERLAP]
@@ -229,6 +230,9 @@ optional arguments:
   --oversampling OVERSAMPLING
                         Probability of crop centered on foreground voxel
                         (default: 0.4)
+  --use-n4-bias-correction [BOOLEAN]
+                        Use N4 bias field correction (only for MR images)
+                        (default: False)
   --use-precomputed-weights [BOOLEAN]
                         Use precomputed class weights (default: False)
   --class-weights CLASS_WEIGHTS [CLASS_WEIGHTS ...]

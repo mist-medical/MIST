@@ -111,8 +111,8 @@ def preprocess_example(config, image_list, mask):
         nzmask = (images[0] != 0).astype("float32")
 
         # Put nzmask into standard space
-        image = ants.reorient_image2(nzmask, "RAI")
-        image.set_direction(np.eye(3))
+        nzmask = ants.reorient_image2(nzmask, "RAI")
+        nzmask.set_direction(np.eye(3))
         if not np.array_equal(nzmask.spacing, config["target_spacing"]):
             nzmask = ants.resample_image(nzmask,
                                          resample_params=config['target_spacing'],

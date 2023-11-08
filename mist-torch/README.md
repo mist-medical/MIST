@@ -126,7 +126,7 @@ git clone https://github.com/aecelaya/MIST.git
 cd MIST/mist-torch
 ```
 
-Change the ```prefix``` line at the bottom of the ```mist-torch.ymal``` file to match your system
+Change the ```prefix``` line at the bottom of the ```mist-torch.yml``` file to match your system
 and then run the following line to create the environment.
 
 ```
@@ -194,11 +194,10 @@ python main.py --help
 
 The following output is printed when running the command above:
 ```
-usage: main.py [-h] [--exec-mode {all,analyze,preprocess,train,eval}]
-               [--data DATA] [--gpus GPUS [GPUS ...]]
-               [--num-workers NUM_WORKERS] [--seed SEED] [--tta [BOOLEAN]]
-               [--results RESULTS] [--numpy NUMPY] [--amp [BOOLEAN]]
-               [--batch-size BATCH_SIZE]
+usage: main.py [-h] [--exec-mode {all,analyze,preprocess,train}] [--data DATA]
+               [--gpus GPUS [GPUS ...]] [--num-workers NUM_WORKERS]
+               [--seed SEED] [--tta [BOOLEAN]] [--results RESULTS]
+               [--numpy NUMPY] [--amp [BOOLEAN]] [--batch-size BATCH_SIZE]
                [--patch-size PATCH_SIZE [PATCH_SIZE ...]]
                [--learning-rate LEARNING_RATE] [--exp_decay EXP_DECAY]
                [--lr-scheduler {constant,cosine_warm_restarts,exponential}]
@@ -209,7 +208,10 @@ usage: main.py [-h] [--exec-mode {all,analyze,preprocess,train,eval}]
                [--depth DEPTH] [--init-filters INIT_FILTERS]
                [--deep-supervision [BOOLEAN]]
                [--deep-supervision-heads DEEP_SUPERVISION_HEADS]
-               [--oversampling OVERSAMPLING] [--n4-bias-correction [BOOLEAN]]
+               [--vae-reg [BOOLEAN]] [--l2-reg [BOOLEAN]]
+               [--l2-penalty L2_PENALTY] [--l1-reg [BOOLEAN]]
+               [--l1-penalty L1_PENALTY] [--oversampling OVERSAMPLING]
+               [--use-n4-bias-correction [BOOLEAN]]
                [--use-precomputed-weights [BOOLEAN]]
                [--class-weights CLASS_WEIGHTS [CLASS_WEIGHTS ...]]
                [--loss {dice_ce,dice,gdl}] [--sw-overlap SW_OVERLAP]
@@ -220,9 +222,9 @@ usage: main.py [-h] [--exec-mode {all,analyze,preprocess,train,eval}]
 
 optional arguments:
   -h, --help            show this help message and exit
-  --exec-mode {all,analyze,preprocess,train,eval}
-                        Run all of the MIST pipeline or an individual
-                        component (default: all)
+  --exec-mode {all,analyze,preprocess,train}
+                        Run all of the MIST pipeline or an individual component
+                        (default: all)
   --data DATA           Path to dataset json file (default: None)
   --gpus GPUS [GPUS ...]
                         Which gpu(s) to use, defaults to all available GPUs
@@ -233,15 +235,15 @@ optional arguments:
   --tta [BOOLEAN]       Enable test time augmentation (default: False)
   --results RESULTS     Path to output of MIST pipeline (default: None)
   --numpy NUMPY         Path to save preprocessed numpy data (default: None)
-  --amp [BOOLEAN]       Enable automatic mixed precision (recommended)
-                        (default: False)
+  --amp [BOOLEAN]       Enable automatic mixed precision (recommended) (default:
+                        False)
   --batch-size BATCH_SIZE
                         Batch size (default: 2)
   --patch-size PATCH_SIZE [PATCH_SIZE ...]
                         Height, width, and depth of patch size to use for
                         cropping (default: [64, 64, 64])
   --learning-rate LEARNING_RATE
-                        Learning rate (default: 0.0003)
+                        Learning rate (default: 0.001)
   --exp_decay EXP_DECAY
                         Exponential decay factor (default: 0.9)
   --lr-scheduler {constant,cosine_warm_restarts,exponential}
@@ -264,10 +266,17 @@ optional arguments:
                         Use deep supervision (default: False)
   --deep-supervision-heads DEEP_SUPERVISION_HEADS
                         Number of deep supervision heads (default: 2)
+  --vae-reg [BOOLEAN]   Use VAE regularization (default: False)
+  --l2-reg [BOOLEAN]    Use L2 regularization (default: False)
+  --l2-penalty L2_PENALTY
+                        L2 penalty (default: 1e-05)
+  --l1-reg [BOOLEAN]    Use L1 regularization (default: False)
+  --l1-penalty L1_PENALTY
+                        L1 penalty (default: 1e-05)
   --oversampling OVERSAMPLING
                         Probability of crop centered on foreground voxel
                         (default: 0.4)
-  --n4-bias-correction [BOOLEAN]
+  --use-n4-bias-correction [BOOLEAN]
                         Use N4 bias field correction (only for MR images)
                         (default: False)
   --use-precomputed-weights [BOOLEAN]
@@ -295,8 +304,8 @@ optional arguments:
                         Which folds to run (default: [0, 1, 2, 3, 4])
   --epochs EPOCHS       Number of epochs (default: 300)
   --steps-per-epoch STEPS_PER_EPOCH
-                        Steps per epoch. By default ceil(training_dataset_size
-                        / batch_size / gpus) (default: None)
+                        Steps per epoch. By default ceil(training_dataset_size /
+                        batch_size / gpus) (default: None)
 ```
 
 ## Inference
@@ -346,7 +355,7 @@ python predict.py --help
 usage: predict.py [-h] [--models MODELS] [--config CONFIG] [--data DATA]
                   [--output OUTPUT] [--fast [BOOLEAN]] [--gpu GPU]
                   [--sw-overlap SW_OVERLAP] [--blend-mode {constant,gaussian}]
-                  [--tta [BOOLEAN]]
+                  [--tta [BOOLEAN]] [output_std [BOOLEAN]]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -366,6 +375,7 @@ optional arguments:
                         How to blend output of overlapping windows (default:
                         constant)
   --tta [BOOLEAN]       Use test time augmentation (default: False)
+  --output_std [BOOLEAN]Outputs standard deviation images (default: False)
 ```
 
 ## Evaluating

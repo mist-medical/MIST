@@ -94,12 +94,13 @@ if __name__ == "__main__":
     set_warning_levels()
     args = get_main_args()
 
-    assert np.max(args.folds) < args.nfolds or len(args.folds) > args.nfolds,  \
-        "More folds listed than specified! Make sure folds are zero-indexed"
+    if args.exec_mode == "all" or args.exec_mode == "train":
+        assert np.max(args.folds) < args.nfolds or len(args.folds) > args.nfolds,  \
+            "More folds listed than specified! Make sure folds are zero-indexed"
 
-    n_gpus = set_visible_devices(args)
-    assert args.batch_size % n_gpus == 0, \
-        "Batch size {} is not compatible with number of GPUs {}".format(args.batch_size, n_gpus)
+        n_gpus = set_visible_devices(args)
+        assert args.batch_size % n_gpus == 0, \
+            "Batch size {} is not compatible with number of GPUs {}".format(args.batch_size, n_gpus)
 
     set_seed(args.seed)
     main(args)

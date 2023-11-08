@@ -55,7 +55,7 @@ def apply_clean_mask(prediction, majority_label, cleanup=2):
 
     prediction *= prediction_binary
     prediction += holes
-    return prediction
+    return prediction.astype("uint8")
 
 
 def apply_largest_component(prediction, label, majority_label):
@@ -74,7 +74,7 @@ def apply_largest_component(prediction, label, majority_label):
     else:
         prediction = prediction * opposite_label_mask + label_mask_largest * label + holes
 
-    return prediction
+    return prediction.astype("uint8")
 
 
 class Postprocessor:
@@ -167,7 +167,7 @@ class Postprocessor:
 
             with progress as pb:
                 for j in pb.track(range(len(predictions))):
-                    # Get raw prediction and retain only the largest connected componentn for current label
+                    # Get raw prediction and retain only the largest connected component for current label
                     patient_id = predictions[j].split(".")[0]
                     raw_pred = ants.image_read(os.path.join(self.source_dir, predictions[j]))
                     new_pred = apply_largest_component(raw_pred, self.data["labels"][i], self.majority_label)
@@ -196,16 +196,16 @@ class Postprocessor:
         console.print(text)
 
         # Run morphological clean up
-        if not self.args.post_no_morph:
-            clean_mask = self.use_clean_mask()
-        else:
+        if self.args.post_no_morph:
             clean_mask = False
+        else:
+            clean_mask = self.use_clean_mask()
 
         # Run connected component analysis
-        if not self.args.post_no_largest:
-            use_postprocessing = self.connected_components_analysis()
-        else:
+        if self.args.post_no_largest:
             use_postprocessing = []
+        else:
+            use_postprocessing = self.connected_components_analysis()
 
         # Copy best results to final predictions folder
         cp_best_cmd = "cp -a {}/. {}".format(self.source_dir,
