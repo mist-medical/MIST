@@ -39,7 +39,7 @@ def main(args):
     set_warning_levels()
 
     # Set TF flags
-    set_tf_flags()
+    set_tf_flags(args)
 
     # Set visible device to GPU
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
