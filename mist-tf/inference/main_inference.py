@@ -215,7 +215,6 @@ def test_time_inference(df, dest, config_file, models, overlap, blend_mode, tta)
         if len(config['postprocess_labels']) > 0:
             for label in config['postprocess_labels']:
                 prediction = apply_largest_component(prediction,
-                                                     original_image,
                                                      label,
                                                      majority_label)
 
