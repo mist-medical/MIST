@@ -200,10 +200,10 @@ def preprocess_dataset(args):
     df = pd.read_csv(os.path.join(args.results, 'train_paths.csv'))
 
     # Create output directories if they do not exist
-    images_dir = os.path.join(args.numpy, 'images')
+    images_dir = os.path.join(args.processed_data, 'images')
     create_empty_dir(images_dir)
 
-    labels_dir = os.path.join(args.numpy, 'labels')
+    labels_dir = os.path.join(args.processed_data, 'labels')
     create_empty_dir(labels_dir)
 
     # Get class weights if they exist
