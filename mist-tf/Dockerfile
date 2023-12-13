@@ -39,8 +39,9 @@ RUN cp c3d-1.1.0-Linux-x86_64/bin/c?d /usr/local/bin/
 ENV PATH /opt/ants/install/bin:$PATH
 RUN apt-get install -y python2.7
 
-# mist working dir
-RUN mkdir /mist
+# need directory to mount external code for development
+RUN mkdir /home/devel
 
+# mist working dir
 WORKDIR /mist
 ADD . /mist
