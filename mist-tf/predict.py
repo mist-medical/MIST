@@ -52,7 +52,7 @@ def main(args):
         set_amp()
 
     if args.xla:
-        set_xla()
+        set_xla(args)
 
     # Handle inputs
     df = check_test_time_input(args.data, args.output)
