@@ -130,7 +130,7 @@ Change the ```prefix``` line at the bottom of the ```mist-torch.yml``` file to m
 and then run the following line to create the environment.
 
 ```
-conda env --create --file mist-torch.yml
+conda env create --file mist-torch.yml
 ```
 
 Once the Conda environment is ready, you can run (with all default values) the MIST pipeline with
