@@ -61,13 +61,13 @@ def main(args):
         preprocess_dataset(args)
 
     if args.exec_mode == "all" or args.exec_mode == "train":
-        # mist_trainer = Trainer(args)
-        # mist_trainer.fit()
-        #
-        # evaluate(args.data,
-        #          os.path.join(args.results, "train_paths.csv"),
-        #          os.path.join(args.results, "predictions", "train", "raw"),
-        #          os.path.join(args.results, "results.csv"))
+        mist_trainer = Trainer(args)
+        mist_trainer.fit()
+
+        evaluate(args.data,
+                 os.path.join(args.results, "train_paths.csv"),
+                 os.path.join(args.results, "predictions", "train", "raw"),
+                 os.path.join(args.results, "results.csv"))
 
         if args.postprocess:
             postprocess = Postprocessor(args)
