@@ -1,4 +1,4 @@
-name: mist-torch
+name: src
 channels:
   - defaults
 dependencies:
@@ -112,4 +112,4 @@ dependencies:
     - webcolors==1.13
     - werkzeug==2.3.6
     - zipp==3.15.0
-prefix: /home/aecelaya/miniconda3/envs/mist-torch
+prefix: /home/aecelaya/miniconda3/envs/src

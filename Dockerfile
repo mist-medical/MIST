@@ -49,4 +49,4 @@ RUN apt-get install -y python2.7
 RUN mkdir /mist
 
 WORKDIR /mist
-ADD . /mist
+ADD src /mist
