@@ -210,16 +210,16 @@ results/
 
 Here is a breakdown of what each file/directory contains.
 
-|     Directory/File    |                                                                           Description                                                                          |
-|:---------------------:|:--------------------------------------------------------------------------------------------------------------------------------------------------------------:|
-|      ```logs/```      | TensorBoard logs for each fold.                                                                                                                                |
-|     ```models/```     | PyTorch models for each fold and ```model_config.json```, which stores the settings (i.e., architecture, patch size) to load the model from the saved weights. |
-|   ```predictions/```  | Raw and postprocessed predictions from five fold cross validation and test set (if specified).                                                                 |
-|   ```config.json```   | JSON file containing all of the attributes of the dataset (i.e., target spacing, crop to foreground, etc.).                                                    |
-|   ```results.csv```   | CSV file with the Dice, 95th percentile Hausdorff, and average surface distance scores for all of the folds.                                                   |
+| Directory/File        | Description                                                                                                                                                    |
+|:----------------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ```logs/```           | TensorBoard logs for each fold.                                                                                                                                |
+| ```models/```         | PyTorch models for each fold and ```model_config.json```, which stores the settings (i.e., architecture, patch size) to load the model from the saved weights. |
+| ```predictions/```    | Raw and postprocessed predictions from five fold cross validation and test set (if specified).                                                                 |
+| ```config.json```     | JSON file containing all of the attributes of the dataset (i.e., target spacing, crop to foreground, etc.).                                                    |
+| ```results.csv```     | CSV file with the Dice, 95th percentile Hausdorff, and average surface distance scores for all of the folds.                                                   |
 | ```train_paths.csv``` | CSV file starting with columns ```id``` and ```fold``` specifying the patient ID and which fold they belong to, and paths to the mask and images.              |
-|  ```test_paths.csv``` | Same as ```train_paths.csv```, but for the test set if it's given.                                                                                             |
-|  ```fg_bboxes.csv```  | CSV file containing information about the bounding box around the foreground for each image.                                                                   |
+| ```test_paths.csv```  | Same as ```train_paths.csv```, but for the test set if it's given.                                                                                             |
+| ```fg_bboxes.csv```   | CSV file containing information about the bounding box around the foreground for each image.                                                                   |
 
 
 ### Advanced usage
