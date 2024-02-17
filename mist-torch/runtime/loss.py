@@ -48,7 +48,7 @@ class DiceCELoss(nn.Module):
         # Cross entropy loss
         loss_ce = self.cross_entropy(y_pred, y_true)
 
-        return loss_ce + loss_dice
+        return 0.5*(loss_ce + loss_dice)
 
 
 class WeightedDiceLoss(nn.Module):
@@ -114,7 +114,7 @@ class WeightedDiceCELoss(nn.Module):
         # Weighted cross entropy loss
         loss_weighted_ce = self.cross_entropy(y_pred, y_true)
 
-        return loss_weighted_dice + loss_weighted_ce
+        return 0.5*(loss_weighted_dice + loss_weighted_ce)
 
 
 class KLDivLoss(nn.Module):

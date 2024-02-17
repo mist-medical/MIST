@@ -4,16 +4,8 @@ import ants
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.model_selection import KFold
 
 # Rich progres bar
-from rich.progress import (
-    BarColumn,
-    MofNCompleteColumn,
-    Progress,
-    TextColumn,
-    TimeElapsedColumn
-)
 from rich.console import Console
 from rich.text import Text
 from runtime.progress_bar import TrainProgressBar, ValidationProgressBar
@@ -40,9 +32,9 @@ from runtime.utils import (
     get_optimizer,
     get_lr_schedule,
     Mean,
-    get_test_df,
     create_model_config_file,
-    load_model_from_config
+    load_model_from_config,
+    get_progress_bar
 )
 
 console = Console()
@@ -69,31 +61,23 @@ class Trainer:
         # Get patch size if not specified by user
         self.patch_size = self.args.patch_size
 
-        self.config['patch_size'] = self.patch_size
-        with open(self.config_file, 'w') as outfile:
+        self.config["patch_size"] = self.patch_size
+        with open(self.config_file, "w") as outfile:
             json.dump(self.config, outfile, indent=2)
 
-        # Get network depth based on patch size
-        if self.args.depth is None:
-            self.depth = np.min([int(np.log(np.min(self.patch_size) // 4) // np.log(2)), 5])
-        else:
-            self.depth = self.args.depth
-
-        # Get latent dimension for VAE regularization
-        self.latent_dim = int(np.prod(np.array(self.patch_size) // 2**self.depth))
+        # Get bounding box data
+        self.fg_bboxes = pd.read_csv(os.path.join(self.args.results, "fg_bboxes.csv"))
 
         # Create model configuration file for inference later
         self.model_config_path = os.path.join(self.args.results, "models", "model_config.json")
         self.model_config = create_model_config_file(self.args,
                                                      self.config,
                                                      self.data,
-                                                     self.depth,
-                                                     self.latent_dim,
                                                      self.model_config_path)
 
         # Get class weights if we are using them
-        if self.args.use_precomputed_class_weights:
-            self.class_weights = self.config['class_weights']
+        if self.args.use_config_class_weights:
+            self.class_weights = self.config["class_weights"]
         else:
             self.class_weights = None
 
@@ -110,45 +94,46 @@ class Trainer:
         model.to("cuda")
 
         # Set up rich progress bar
-        testing_progress = Progress(TextColumn("Testing on fold"),
-                                    BarColumn(),
-                                    MofNCompleteColumn(),
-                                    TextColumn("•"),
-                                    TimeElapsedColumn())
+        testing_progress = get_progress_bar("Testing on fold")
 
         # Run prediction on all samples and compute metrics
         with torch.no_grad(), testing_progress as pb:
             for i in pb.track(range(len(df))):
                 # Get original patient data
                 patient = df.iloc[i].to_dict()
-                image_list = list(patient.values())[2:len(patient)]
-                original_image = ants.image_read(image_list[0])
+                image_list = list(patient.values())[3:len(patient)]
+                og_ants_img = ants.image_read(image_list[0])
+                file = "{}.nii.gz".format(patient["id"])
 
                 # Get preprocessed image from DALI loader
                 data = loader.next()[0]
-                image = data["image"]
+                preproc_npy_img = data["image"]
+
+                # Get foreground mask if necessary
+                if self.config["crop_to_fg"]:
+                    fg_bbox = self.fg_bboxes.loc[self.fg_bboxes["id"] == patient["id"]].iloc[0].to_dict()
 
                 # Predict with model and put back into original image space
-                pred, _ = predict_single_example(image,
-                                              original_image,
-                                              self.config,
-                                              [model],
-                                              self.args.sw_overlap,
-                                              self.args.blend_mode,
-                                              self.args.tta)
+                pred, _ = predict_single_example(preproc_npy_img,
+                                                 og_ants_img,
+                                                 self.config,
+                                                 [model],
+                                                 self.args.sw_overlap,
+                                                 self.args.blend_mode,
+                                                 self.args.tta,
+                                                 output_std=False,
+                                                 fg_bbox=fg_bbox)
 
                 # Write prediction as .nii.gz file
-                prediction_filename = '{}.nii.gz'.format(patient['id'])
-                ants.image_write(pred,
-                                 os.path.join(self.args.results, 'predictions', 'train', 'raw', prediction_filename))
+                ants.image_write(pred, os.path.join(self.args.results, "predictions", "train", "raw", file))
 
         text = Text("\n")
         console.print(text)
 
     # Set up for distributed training
     def setup(self, rank, world_size):
-        os.environ['MASTER_ADDR'] = 'localhost'
-        os.environ['MASTER_PORT'] = self.args.master_port
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = self.args.master_port
         dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
     # Clean up processes after distributed training
@@ -162,24 +147,6 @@ class Trainer:
         # Set device rank for each process
         torch.cuda.set_device(rank)
 
-        # Get folds for k-fold cross validation
-        kfold = KFold(n_splits=self.args.nfolds, shuffle=True, random_state=42)
-
-        images_dir = os.path.join(self.args.numpy, 'images')
-        images = [os.path.join(images_dir, file) for file in os.listdir(images_dir)]
-
-        labels_dir = os.path.join(self.args.numpy, 'labels')
-        labels = [os.path.join(labels_dir, file) for file in os.listdir(labels_dir)]
-
-        splits = kfold.split(list(range(len(images))))
-
-        # Extract folds so that users can specify folds to train on
-        train_splits = list()
-        test_splits = list()
-        for split in splits:
-            train_splits.append(split[0])
-            test_splits.append(split[1])
-
         # Start training loop
         if rank == 0:
             text = Text("\nStarting training\n")
@@ -187,8 +154,10 @@ class Trainer:
             console.print(text)
 
         for fold in self.args.folds:
-            train_images = [images[idx] for idx in train_splits[fold]]
-            train_labels = [labels[idx] for idx in train_splits[fold]]
+            # Get training ids from dataframe
+            train_ids = list(self.df.loc[self.df["fold"] != fold]["id"])
+            train_images = [os.path.join(self.args.numpy, "images", "{}.npy".format(pat)) for pat in train_ids]
+            train_labels = [os.path.join(self.args.numpy, "labels", "{}.npy".format(pat)) for pat in train_ids]
 
             # Get validation set from training split
             train_images, val_images, train_labels, val_labels = train_test_split(train_images,
@@ -251,10 +220,10 @@ class Trainer:
                 best_loss = np.Inf
 
                 # Set up tensorboard summary writer
-                writer = SummaryWriter(os.path.join(self.args.results, 'logs', 'fold_{}'.format(fold)))
+                writer = SummaryWriter(os.path.join(self.args.results, "logs", "fold_{}".format(fold)))
 
                 # Best model path
-                best_model_name = os.path.join(self.args.results, 'models', 'fold_{}.pt'.format(fold))
+                best_model_name = os.path.join(self.args.results, "models", "fold_{}.pt".format(fold))
 
             # Function to perform a single training step
             def train_step(image, label):
@@ -371,7 +340,7 @@ class Trainer:
                 dist.barrier()
 
                 # Start validation
-                # We don't need gradients on to do reporting
+                # We don"t need gradients on to do reporting
                 model.eval()
                 with torch.no_grad():
                     if rank == 0:
@@ -418,8 +387,8 @@ class Trainer:
 
                 if rank == 0:
                     # Log the running loss for validation
-                    writer.add_scalars('Training vs. Validation Loss',
-                                       {'Training': running_loss, 'Validation': running_val_loss},
+                    writer.add_scalars("Training vs. Validation Loss",
+                                       {"Training": running_loss, "Validation": running_val_loss},
                                        epoch + 1)
                     writer.flush()
 
@@ -432,21 +401,15 @@ class Trainer:
                 writer.close()
 
                 # Prepare test set on rank 0 device only
-                test_images = [images[idx] for idx in test_splits[fold]]
-                test_images.sort()
-
-                test_labels = [labels[idx] for idx in test_splits[fold]]
-                test_labels.sort()
+                test_df = self.df.loc[self.df["fold"] == fold]
+                test_ids = list(test_df["id"])
+                test_images = [os.path.join(self.args.numpy, "images", "{}.npy".format(pat)) for pat in test_ids]
 
                 test_loader = get_test_dataset(test_images,
                                                seed=self.args.seed,
                                                num_workers=self.args.num_workers,
                                                rank=0,
                                                world_size=1)
-
-                # Bug fix: Strange behavior with numerical ids
-                test_df_ids = [pat.split('/')[-1].split('.')[0] for pat in test_images]
-                test_df = get_test_df(self.df, test_df_ids)
 
                 # Run inference on test set
                 self.predict_on_val(best_model_name, test_loader, test_df)

@@ -1,21 +1,19 @@
 from models.unet import UNet
 from models.nnunet import NNUnet
-from models.resnet import ResNet
-from models.densenet import DenseNet
+from models.attn_unet import MONAIAttnUNet
+from models.swin_unetr import MONAISwinUNETR
+
+"""
+Available models:
+    - nnUNet
+    - UNet
+    - Attention UNet
+    - Swin UNETR
+"""
 
 
 def get_model(**kwargs):
-    if kwargs["model_name"] == "unet":
-        model = UNet(kwargs["n_classes"],
-                     kwargs["n_channels"],
-                     kwargs["init_filters"],
-                     kwargs["depth"],
-                     kwargs["pocket"],
-                     kwargs["deep_supervision"],
-                     kwargs["deep_supervision_heads"],
-                     kwargs["vae_reg"],
-                     kwargs["latent_dim"])
-    elif kwargs["model_name"] == "nnunet":
+    if kwargs["model_name"] == "nnunet":
         model = NNUnet(kwargs["n_classes"],
                        kwargs["n_channels"],
                        kwargs["pocket"],
@@ -23,28 +21,28 @@ def get_model(**kwargs):
                        kwargs["deep_supervision_heads"],
                        kwargs["vae_reg"],
                        kwargs["patch_size"],
-                       kwargs["target_spacing"])
-    elif kwargs["model_name"] == "resnet":
-        model = ResNet(kwargs["n_classes"],
-                       kwargs["n_channels"],
-                       kwargs["init_filters"],
-                       kwargs["depth"],
-                       kwargs["pocket"],
-                       kwargs["deep_supervision"],
-                       kwargs["deep_supervision_heads"],
-                       kwargs["vae_reg"],
-                       kwargs["latent_dim"])
-    elif kwargs["model_name"] == "densenet":
-        model = DenseNet(kwargs["n_classes"],
-                         kwargs["n_channels"],
-                         kwargs["init_filters"],
-                         kwargs["depth"],
-                         kwargs["pocket"],
-                         kwargs["deep_supervision"],
-                         kwargs["deep_supervision_heads"],
-                         kwargs["vae_reg"],
-                         kwargs["latent_dim"])
+                       kwargs["target_spacing"],
+                       kwargs["use_res_block"])
+    elif kwargs["model_name"] == "unet":
+        model = UNet(kwargs["n_classes"],
+                     kwargs["n_channels"],
+                     kwargs["pocket"],
+                     kwargs["deep_supervision"],
+                     kwargs["deep_supervision_heads"],
+                     kwargs["vae_reg"],
+                     kwargs["patch_size"],
+                     kwargs["target_spacing"],
+                     kwargs["use_res_block"])
+    elif kwargs["model_name"] == "attn_unet":
+        model = MONAIAttnUNet(kwargs["n_classes"],
+                              kwargs["n_channels"],
+                              kwargs["pocket"],
+                              kwargs["patch_size"])
+    elif kwargs["model_name"] == "unetr":
+        model = MONAISwinUNETR(kwargs["n_classes"],
+                               kwargs["n_channels"],
+                               kwargs["patch_size"])
     else:
-        raise ValueError("Invalid model name!")
+        raise ValueError("Invalid model name")
 
     return model

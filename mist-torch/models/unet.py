@@ -1,49 +1,51 @@
+import numpy as np
 import torch.nn as nn
-from models.layers import ConvLayer, BaseModel
 
-conv_kwargs = {"norm": "batch",
-               "activation": "relu",
-               "negative_slope": 0.01,
-               "down_type": "maxpool",
-               "up_type": "transconv"}
-
-
-class UNetBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, **kwargs):
-        super(UNetBlock, self).__init__()
-        self.conv1 = ConvLayer(in_channels, out_channels, **kwargs)
-        self.conv2 = ConvLayer(out_channels, out_channels, **kwargs)
-
-    def forward(self, x):
-        x = self.conv1(x)
-        x = self.conv2(x)
-        return x
+from models.layers import (
+    BaseModel,
+    UNetBlock,
+    ResNetBlock
+)
 
 
 class UNet(nn.Module):
-
     def __init__(self,
                  n_classes,
                  n_channels,
-                 init_filters,
-                 depth,
                  pocket,
                  deep_supervision,
                  deep_supervision_heads,
                  vae_reg,
-                 latent_dim):
+                 patch_size,
+                 use_res_block):
         super(UNet, self).__init__()
 
-        self.base_model = BaseModel(UNetBlock,
-                                    n_classes,
-                                    n_channels,
-                                    init_filters,
-                                    depth,
-                                    pocket,
-                                    deep_supervision,
-                                    deep_supervision_heads,
-                                    vae_reg,
-                                    latent_dim,
+        conv_kwargs = {"norm": "instance",
+                       "activation": "prelu",
+                       "down_type": "maxpool",
+                       "up_type": "transconv"}
+
+        if use_res_block:
+            block = ResNetBlock
+        else:
+            block = UNetBlock
+
+        # Get network depth based on patch size
+        depth = np.min([int(np.log(np.min(patch_size) // 4) // np.log(2)), 5])
+
+        # Get latent dimension for VAE regularization
+        latent_dim = int(np.prod(np.array(patch_size) // 2 ** self.depth))
+
+        self.base_model = BaseModel(block=block,
+                                    n_classes=n_classes,
+                                    n_channels=n_channels,
+                                    init_filters=32,
+                                    depth=depth,
+                                    pocket=pocket,
+                                    deep_supervision=deep_supervision,
+                                    deep_supervision_heads=deep_supervision_heads,
+                                    vae_reg=vae_reg,
+                                    latent_dim=latent_dim,
                                     **conv_kwargs)
 
     def forward(self, x, **kwargs):

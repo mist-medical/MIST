@@ -5,7 +5,12 @@ import torch
 
 from runtime.args import non_negative_int, float_0_1, ArgParser
 from runtime.utils import set_warning_levels
-from inference.main_inference import check_test_time_input, load_test_time_models, test_time_inference
+
+from inference.main_inference import (
+    check_test_time_input,
+    load_test_time_models,
+    test_time_inference
+)
 
 
 def get_predict_args():
@@ -28,6 +33,7 @@ def get_predict_args():
           default="constant",
           help="How to blend output of overlapping windows")
     p.boolean_flag("--tta", default=False, help="Use test time augmentation")
+    p.boolean_flag("--no-preprocess", default=False, help="Turn off preprocessing")
     p.boolean_flag("--output_std", default=False, help="Outputs standard deviation image")
 
     args = p.parse_args()
@@ -57,6 +63,7 @@ def main(args):
                             args.sw_overlap,
                             args.blend_mode,
                             args.tta,
+                            args.no_preprocess,
                             args.output_std)
 
 

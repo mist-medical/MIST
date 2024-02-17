@@ -18,8 +18,8 @@ ENV HCOLL_ENABLE_MCAST 0
 
 # setup dependencies 
 RUN apt-get update
-
 RUN apt-get install -y cmake git
+
 # install ants
 RUN mkdir /opt/ants
 WORKDIR /opt/ants
@@ -34,6 +34,7 @@ RUN cmake -DCMAKE_INSTALL_PREFIX=/opt/ants/install ../ANTs 2>&1 | tee cmake.log
 RUN make -j 4 2>&1 | tee build.log
 WORKDIR /opt/ants/build/ANTS-build
 RUN make install 2>&1 | tee install.log
+
 # install c3d
 RUN mkdir /opt/c3d
 WORKDIR /opt/c3d/

@@ -1,4 +1,3 @@
-import gc
 import os
 import json
 import ants
@@ -7,216 +6,174 @@ import pandas as pd
 import numpy as np
 
 # Rich progres bar
-from rich.progress import (
-    BarColumn,
-    MofNCompleteColumn,
-    Progress,
-    TextColumn,
-    TimeElapsedColumn
-)
 from rich.console import Console
 from rich.text import Text
 
 from runtime.evaluate import evaluate
+from runtime.utils import (
+    get_largest_cc,
+    remove_small_objects,
+    fill_holes,
+    clean_mask,
+    get_progress_bar,
+    get_transform,
+    npy_make_onehot,
+    npy_fix_labels
+)
 
 console = Console()
 
 
-def compute_results_score(results_df):
-    results_cols = list(results_df.columns)
-    dice_cols = [col for col in results_cols if "dice" in col]
-    mean_dice = np.mean(results_df.iloc[-5][dice_cols])
-    return mean_dice
+def is_improvement(prev_best, current):
+    """
+    Check if the majority of Dice, Hausdroff, and average surface results across all classes
+    improve by at least 5%. If so, then use current strategy
+    """
+    dice_cols = [col for col in list(prev_best.columns) if "dice" in col]
+    haus_cols = [col for col in list(prev_best.columns) if "haus" in col]
+    avg_surf_cols = [col for col in list(prev_best.columns) if "avg_surf" in col]
+
+    # Check if dice increases by 5%
+    prev_best_dice = np.array(list(prev_best.iloc[-5][dice_cols]))
+    current_dice = np.array(list(current.iloc[-5][dice_cols]))
+    improvements_dice = list(current_dice >= 1.05*prev_best_dice)
+
+    # Check if hausdorff distance decreases by 5%
+    prev_best_haus = np.array(list(prev_best.iloc[-5][haus_cols]))
+    current_haus = np.array(list(current.iloc[-5][haus_cols]))
+    improvements_haus = list(current_haus <= 0.95*prev_best_haus)
+
+    # Check if average surface distance decreases by 5%
+    prev_best_avg_surf = np.array(list(prev_best.iloc[-5][avg_surf_cols]))
+    current_avg_surf = np.array(list(current.iloc[-5][avg_surf_cols]))
+    improvements_avg_surf = list(current_avg_surf <= 0.95 * prev_best_avg_surf)
+
+    improvements = improvements_dice + improvements_haus + improvements_avg_surf
+
+    return np.sum(improvements) >= (len(improvements) // 2)
 
 
-def get_majority_label(labels, class_weights):
-    majority_label = labels[np.where(class_weights == np.min(class_weights[1:]))[0][0]]
-    return majority_label
+def apply_transform(mask_ants, transform_type, all_labels, apply_to_labels):
+    transform = get_transform(transform_type)
 
-
-def apply_clean_mask(prediction, majority_label, cleanup=2):
-    # Get binary mask
-    prediction_binary = (prediction != 0.).astype("float32")
-
-    # Apply morphological closing
-    prediction_binary = ants.iMath(prediction_binary, "ME", cleanup)
-    prediction_binary = ants.iMath(prediction_binary, "GetLargestComponent")
-    prediction_binary = ants.iMath(prediction_binary, "MD", cleanup)
-
-    while cleanup > 0 and prediction_binary.min() == prediction_binary.max():
-        cleanup -= 1
-        prediction_binary = ants.iMath(prediction_binary, "ME", cleanup)
-        prediction_binary = ants.iMath(prediction_binary, "MD", cleanup)
-
-    # Fill holes
-    holes = ants.iMath(prediction_binary, "FillHoles").threshold_image(1, 2)
-    holes -= prediction_binary
-    holes *= majority_label
-
-    prediction *= prediction_binary
-    prediction += holes
-    return prediction.astype("uint8")
-
-
-def apply_largest_component(prediction, label, majority_label):
-    label_mask_largest = (prediction == label).astype("float32")
-    label_mask_original = (prediction == label).astype("float32")
-    background_mask = (prediction == 0).astype("float32")
-    opposite_label_mask = (prediction != label).astype("float32")
-    opposite_label_mask -= background_mask
-
-    label_mask_largest = ants.iMath(label_mask_largest, "GetLargestComponent")
-    holes = (label_mask_original - label_mask_largest) * majority_label
-    holes = holes.astype("float32")
-
-    if label == majority_label:
-        prediction = prediction * opposite_label_mask + label_mask_largest * label
+    old_pred_npy = mask_ants.numpy()
+    if transform_type == "fill_holes":
+        assert isinstance(apply_to_labels, int), "Labels argument must be an integer for fill_holes"
+        new_pred = transform(mask_npy=old_pred_npy, fill_label=apply_to_labels)
     else:
-        prediction = prediction * opposite_label_mask + label_mask_largest * label + holes
+        assert isinstance(apply_to_labels, list), "Labels must be a list for {}".format(transform_type)
+        new_pred = npy_make_onehot(old_pred_npy, all_labels)
 
-    return prediction.astype("uint8")
+        for i, label in enumerate(all_labels):
+            if label in apply_to_labels:
+                new_pred[..., i] = transform(new_pred[..., i])
+
+        new_pred = np.argmax(new_pred, axis=-1)
+        new_pred = npy_fix_labels(new_pred, all_labels)
+        new_pred = mask_ants.new_image_like(data=new_pred.astype("uint8"))
+    return new_pred
 
 
 class Postprocessor:
     def __init__(self, args):
 
         self.args = args
-        with open(self.args.data, "r") as file:
-            self.data = json.load(file)
-
         self.config_file = os.path.join(self.args.results, "config.json")
         with open(self.config_file, "r") as file:
             self.config = json.load(file)
 
-        self.n_channels = len(self.data["images"])
-        self.n_classes = len(self.data["labels"])
+        self.n_classes = len(self.config["labels"])
 
-        # Get baseline score and source directory
+        # Get baseline results and source directory
         self.best_results_df = pd.read_csv(os.path.join(self.args.results, "results.csv"))
-        self.best_results_df.to_csv(os.path.join(self.args.results, "predictions", "train", "postprocess",
-                                                 "results_raw.csv"), index=False)
-        self.best_score = compute_results_score(self.best_results_df)
         self.source_dir = os.path.join(self.args.results, "predictions", "train", "raw")
+        self.temp_dir = os.path.join(self.args.results, "predictions", "train", "temp")
+        self.dest_dir = os.path.join(self.args.results, "predictions", "train", "postprocessed")
+        self.new_results_csv = os.path.join(self.args.results, "predictions", "new_results.csv")
+        self.train_paths = os.path.join(self.args.results, "train_paths.csv")
 
-        # Get majority label
-        self.majority_label = get_majority_label(self.data["labels"], self.config["class_weights"])
+    def check_transform(self, transform_type, message):
+        transform = get_transform(transform_type)
 
-        # Get paths to dataset
-        self.paths = pd.read_csv(os.path.join(self.args.results, "train_paths.csv"))
-
-    def use_clean_mask(self):
-        # Set output directory
-        output_dir = os.path.join(self.args.results, "predictions", "train", "postprocess", "clean_mask")
-        results_csv = os.path.join(self.args.results, "predictions", "train", "postprocess", "clean_mask_results.csv")
-
-        # Get predictions
-        predictions = os.listdir(self.source_dir)
-
-        # Set up rich progress bar
-        progress = Progress(TextColumn("Running morphological clean up"),
-                            BarColumn(),
-                            MofNCompleteColumn(),
-                            TextColumn("•"),
-                            TimeElapsedColumn())
-
-        with progress as pb:
-            for j in pb.track(range(len(predictions))):
-                # Read raw prediction and apply morphological clean up
-                patient_id = predictions[j].split(".")[0]
-                raw_pred = ants.image_read(os.path.join(self.source_dir, predictions[j]))
-                new_pred = apply_clean_mask(raw_pred, self.majority_label, cleanup=2)
-                ants.image_write(new_pred, os.path.join(output_dir, "{}.nii.gz".format(patient_id)))
-
-        # Evaluate new predictions
-        evaluate(self.args.data,
-                 os.path.join(self.args.results, "train_paths.csv"),
-                 output_dir,
-                 results_csv)
-
-        # Compute new score
-        new_results_df = pd.read_csv(results_csv)
-        new_score = compute_results_score(new_results_df)
-        if new_score > self.best_score:
-            clean_mask = True
-            self.best_results_df = new_results_df
-            self.best_score = new_score
-            self.source_dir = output_dir
-        else:
-            clean_mask = False
-
-        return clean_mask
-
-    def connected_components_analysis(self):
-        use_postprocessing = list()
-        for i in range(1, len(self.data["labels"])):
-            # Set output directory
-            output_dir = os.path.join(self.args.results, "predictions", "train", "postprocess",
-                                      str(self.data["labels"][i]))
-            results_csv = os.path.join(self.args.results, "predictions", "train", "postprocess",
-                                       "connected_componentes_label_{}.csv".format(i))
-
-            # Get predictions
-            predictions = os.listdir(self.source_dir)
-
-            # Set up rich progress bar
-            progress = Progress(TextColumn("Connected components analysis - label {}".format(self.data["labels"][i])),
-                                BarColumn(),
-                                MofNCompleteColumn(),
-                                TextColumn("•"),
-                                TimeElapsedColumn())
+        out_messages = ""
+        apply_to_labels = list()
+        for i in self.config["labels"][1:]:
+            progress = get_progress_bar("{} - label {}".format(message, i))
 
             with progress as pb:
-                for j in pb.track(range(len(predictions))):
-                    # Get raw prediction and retain only the largest connected component for current label
-                    patient_id = predictions[j].split(".")[0]
-                    raw_pred = ants.image_read(os.path.join(self.source_dir, predictions[j]))
-                    new_pred = apply_largest_component(raw_pred, self.data["labels"][i], self.majority_label)
-                    ants.image_write(new_pred, os.path.join(output_dir, "{}.nii.gz".format(patient_id)))
+                for j in pb.track(range(len(self.best_results_df.iloc[:-5]))):
+                    # Read raw prediction and apply morphological clean up
+                    patient_id = self.best_results_df.iloc[j]["id"]
+                    old_pred = ants.image_read(os.path.join(self.source_dir, "{}.nii.gz".format(patient_id)))
+                    old_pred_npy = old_pred.numpy()
+
+                    if transform_type == "fill_holes":
+                        new_pred = transform(mask_npy=old_pred_npy, fill_label=i)
+                    else:
+                        old_pred_npy = (old_pred_npy == i)
+                        new_pred = transform(mask_npy=old_pred_npy)
+
+                    new_pred = old_pred.new_image_like(data=new_pred.astype("uint8"))
+                    ants.image_write(new_pred, os.path.join(self.temp_dir, "{}.nii.gz".format(patient_id)))
 
             # Evaluate new predictions
-            evaluate(self.args.data,
-                     os.path.join(self.args.results, "train_paths.csv"),
-                     output_dir,
-                     results_csv)
+            evaluate(self.config_file,
+                     self.train_paths,
+                     self.temp_dir,
+                     self.new_results_csv)
 
             # Compute new score
-            new_results_df = pd.read_csv(results_csv)
-            new_score = compute_results_score(new_results_df)
-            if new_score > self.best_score:
-                use_postprocessing.append(self.data["labels"][i])
+            new_results_df = pd.read_csv(self.new_results_csv)
+            improvement = is_improvement(self.best_results_df, new_results_df)
+            if improvement:
+                if transform_type == "fill_holes":
+                    apply_to_labels = i
+                else:
+                    apply_to_labels.append(i)
                 self.best_results_df = new_results_df
-                self.best_score = new_score
-                self.source_dir = output_dir
+                self.source_dir = self.dest_dir
 
-        return use_postprocessing
+                out_messages += "Improvement with {} - label {}\n".format(message.lower(), i)
+
+                # Transfer new predictions from temp folder to postprocessed
+                mv_temp_cmd = "mv {}/* {}".format(self.temp_dir, self.dest_dir)
+                subprocess.call(mv_temp_cmd, shell=True)
+            else:
+                apply_to_labels = None
+                out_messages += "No improvement with {} - label {}\n".format(message.lower(), i)
+
+                # Clear out temp directory for next iteration
+                rm_temp_cmd = "rm -r {}/*".format(self.temp_dir)
+                subprocess.call(rm_temp_cmd, shell=True)
+
+        # Print output messages
+        text = Text(out_messages)
+        console.print(text)
+
+        return apply_to_labels
 
     def run(self):
         text = Text("\nPostprocessing predictions\n")
         text.stylize("bold")
         console.print(text)
 
-        # Run morphological clean up
-        if self.args.post_no_morph:
-            clean_mask = False
-        else:
-            clean_mask = self.use_clean_mask()
+        # Define transforms and where to save results
+        transforms = ["remove_small_objects", "clean_mask", "get_largest_cc", "fill_holes"]
+        messages = ["Removing small objects", "Morph. cleaning", "Getting largest CC", "Fill holes"]
+        apply_to_labels = dict(zip(transforms, [None] * len(transforms)))
 
-        # Run connected component analysis
-        if self.args.post_no_largest:
-            use_postprocessing = []
-        else:
-            use_postprocessing = self.connected_components_analysis()
+        # Check different postprocessing strategies
+        for transform_name, message in zip(transforms, messages):
+            apply_to_labels[transform_name] = self.check_transform(transform_name, message)
+            self.config[transform_name] = apply_to_labels[transform_name]
 
-        # Copy best results to final predictions folder
-        cp_best_cmd = "cp -a {}/. {}".format(self.source_dir,
-                                             os.path.join(self.args.results, "predictions", "train", "final"))
-        subprocess.call(cp_best_cmd, shell=True)
+        # Update config file with best strategy
+        with open(self.config_file, "w") as outfile:
+            json.dump(self.config, outfile, indent=2)
 
         # Write new results to csv
         self.best_results_df.to_csv(os.path.join(self.args.results, "results.csv"), index=False)
 
-        # Update inferred parameters with post-processing method
-        self.config["cleanup_mask"] = clean_mask
-        self.config["postprocess_labels"] = use_postprocessing
-        with open(self.config_file, "w") as outfile:
-            json.dump(self.config, outfile, indent=2)
+        # Clean up files
+        os.remove(self.new_results_csv)
+        os.rmdir(self.temp_dir)

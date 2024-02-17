@@ -5,26 +5,30 @@ import json
 import ants
 import pandas as pd
 import numpy as np
-from tqdm import trange
-
-# Rich progres bar
-from rich.progress import (
-    BarColumn,
-    MofNCompleteColumn,
-    Progress,
-    TextColumn,
-    TimeElapsedColumn
-)
 
 from monai.inferers import sliding_window_inference
 
 import torch
 from torch.nn.functional import softmax
 
-from runtime.utils import convert_dict_to_df, get_flip_axes, create_empty_dir, load_model_from_config, \
-    resize_image_with_crop_or_pad
-from preprocess_data.preprocess import preprocess_example
-from postprocess_preds.postprocess import get_majority_label, apply_clean_mask, apply_largest_component
+from runtime.utils import (
+    convert_dict_to_df, 
+    get_flip_axes, 
+    create_empty_dir, 
+    load_model_from_config,
+    get_fg_mask_bbox,
+    decrop_from_fg,
+    get_progress_bar,
+    npy_fix_labels
+)
+
+from preprocess_data.preprocess import (
+    convert_nifti_to_numpy,
+    preprocess_example,
+    resample_mask
+)
+
+from postprocess_preds.postprocess import apply_transform
 
 
 def get_sw_prediction(image, model, patch_size, overlap, blend_mode, tta):
@@ -60,101 +64,92 @@ def get_sw_prediction(image, model, patch_size, overlap, blend_mode, tta):
     return prediction
 
 
-def argmax_and_fix_labels(prediction, labels):
-    prediction = torch.argmax(prediction, dim=1)
-    prediction = torch.squeeze(prediction, dim=0)
-
-    # Make sure that labels are correct in prediction
-    for j in range(len(labels)):
-        prediction[prediction == j] = labels[j]
-
-    prediction = prediction.to(torch.float32)
-    prediction = prediction.numpy()
-    return prediction
-
-def back_to_original_space(prediction, config, original_image, nzmask, original_cropped):
-    prediction = ants.from_numpy(prediction)
-    prediction.set_spacing(config['target_spacing'])
-
-    # Reorient prediction
-    original_orientation = ants.get_orientation(original_image)
-    prediction = ants.reorient_image2(prediction, original_orientation)
-    prediction.set_direction(original_image.direction)
+def back_to_original_space(pred, og_ants_img, config, fg_bbox):
+    pred = ants.from_numpy(data=pred)
+    pred.set_spacing(config["target_spacing"])
 
     # Resample prediction
-    prediction = ants.resample_image(prediction,
-                                     resample_params=list(original_image.spacing),
-                                     use_voxels=False,
-                                     interp_type=1)
-
-    prediction = prediction.numpy()
-
-    # Get original dimensions for final size correction if necessary
-    if config['use_nz_mask']:
-        original_dims = original_cropped.numpy().shape
+    # Enforce size for cropped images
+    if fg_bbox is not None:
+        new_size = [fg_bbox["x_end"] - fg_bbox["x_start"] + 1,
+                    fg_bbox["y_end"] - fg_bbox["y_start"] + 1,
+                    fg_bbox["z_end"] - fg_bbox["z_start"] + 1]
     else:
-        original_dims = original_image.numpy().shape
+        new_size = og_ants_img.shape
 
-    prediction_final = resize_image_with_crop_or_pad(prediction, original_dims)
+    pred = resample_mask(pred,
+                         labels=list(range(len(config["labels"]))),
+                         target_spacing=og_ants_img.spacing,
+                         new_size=new_size)
 
-    if config['use_nz_mask']:
-        prediction_final = original_cropped.new_image_like(data=prediction_final)
-        prediction_final = ants.decrop_image(prediction_final, nzmask)
+    # Return prediction to original image space
+    og_orientation = ants.get_orientation(og_ants_img)
+    pred = ants.reorient_image2(pred, og_orientation)
+    pred.set_direction(og_ants_img.direction)
+    pred.set_origin(og_ants_img.origin)
 
-        # Bug fix: ants.decrop_image can leave some strange artifacts in your final prediction
-        prediction_final = prediction_final.numpy()
-        prediction_final[prediction_final > np.max(config['labels'])] = 0.
-        prediction_final[prediction_final < np.min(config['labels'])] = 0.
+    # Appropriately pad back to original size
+    if fg_bbox is not None:
+        pred = decrop_from_fg(pred, fg_bbox)
 
-        # Multiply prediction by nonzero mask
-        prediction_final *= nzmask.numpy()
-
-    # Write final prediction in same space is original image
-    prediction_final = original_image.new_image_like(data=prediction_final)
-    return prediction_final
+    return pred
 
 
-def predict_single_example(image,
-                           original_image,
+def predict_single_example(torch_img,
+                           og_ants_img,
                            config,
                            models,
                            overlap,
                            blend_mode,
                            tta,
-                           output_std=False):
+                           output_std,
+                           fg_bbox):
     n_classes = len(config['labels'])
-    prediction = torch.zeros(1, n_classes, image.shape[2], image.shape[3], image.shape[4]).to("cuda")
-
-    std_images = []
+    pred = torch.zeros(1,
+                       n_classes,
+                       torch_img.shape[2],
+                       torch_img.shape[3],
+                       torch_img.shape[4]).to("cuda")
+    std_images = list()
 
     for model in models:
-        sw_prediction = get_sw_prediction(image,
-                                        model,
-                                        config['patch_size'],
-                                        overlap,
-                                        blend_mode,
-                                        tta)
-        prediction += sw_prediction
-        if output_std:
+        sw_prediction = get_sw_prediction(torch_img,
+                                          model,
+                                          config['patch_size'],
+                                          overlap,
+                                          blend_mode,
+                                          tta)
+        pred += sw_prediction
+        if output_std and len(models) > 1:
             std_images.append(sw_prediction)
-    
-    prediction /= len(models)
-    prediction = prediction.to("cpu")
-    prediction = argmax_and_fix_labels(prediction, config['labels'])
 
-    if config['use_nz_mask']:
-        nzmask = (original_image != 0).astype("uint8")
-        original_cropped = ants.crop_image(original_image, nzmask)
-    else:
-        nzmask = None
-        original_cropped = None
+    pred /= len(models)
+    pred = pred.to("cpu")
+    pred = torch.argmax(pred, dim=1)
+    pred = torch.squeeze(pred, dim=0)
+    pred = pred.to(torch.float32)
+    pred = pred.numpy()
 
-    prediction = back_to_original_space(prediction,
-                                        config,
-                                        original_image,
-                                        nzmask,
-                                        original_cropped)
-    # Creates standard deviation images
+    # Get foreground mask if necessary
+    if config["crop_to_fg"] and fg_bbox is None:
+        fg_bbox = get_fg_mask_bbox(og_ants_img)
+
+    # Place prediction back into original image space
+    pred = back_to_original_space(pred,
+                                  og_ants_img,
+                                  config,
+                                  fg_bbox)
+
+    # Fix labels if necessary
+    if list(range(n_classes)) != config["labels"]:
+        pred = pred.numpy()
+        pred = npy_fix_labels(pred, config["labels"])
+        pred = og_ants_img.new_image_like(data=pred)
+
+    # Cast prediction of uint8 format to reduce storage
+    pred = pred.astype("uint8")
+
+    # Creates standard deviation images for UQ if called for
     if output_std:
         std_images = torch.stack(std_images, dim=0)
         std_images = torch.std(std_images, dim=0)
@@ -163,11 +158,11 @@ def predict_single_example(image,
         std_images = std_images.to(torch.float32)
         std_images = std_images.numpy()
         std_images = [back_to_original_space(std_image,
-                                        config,
-                                        original_image,
-                                        nzmask,
-                                        original_cropped) for std_image in std_images]
-    return prediction.astype("uint8"), std_images
+                                             og_ants_img,
+                                             config,
+                                             fg_bbox) for std_image in std_images]
+
+    return pred, std_images
 
 
 def load_test_time_models(models_dir, fast):
@@ -198,20 +193,22 @@ def check_test_time_input(patients):
         raise ValueError("Invalid input format for test time")
 
 
-def test_time_inference(df, dest, config_file, models, overlap, blend_mode, tta, output_std=False):
+def test_time_inference(df,
+                        dest,
+                        config_file,
+                        models,
+                        overlap,
+                        blend_mode,
+                        tta,
+                        no_preprocess=False,
+                        output_std=False):
     with open(config_file, 'r') as file:
         config = json.load(file)
 
     create_empty_dir(dest)
 
-    majority_label = get_majority_label(config['labels'], config['class_weights'])
-
     # Set up rich progress bar
-    testing_progress = Progress(TextColumn("Testing on test set"),
-                                BarColumn(),
-                                MofNCompleteColumn(),
-                                TextColumn("•"),
-                                TimeElapsedColumn())
+    testing_progress = get_progress_bar("Testing")
 
     # Run prediction on all samples and compute metrics
     with testing_progress as pb:
@@ -220,59 +217,61 @@ def test_time_inference(df, dest, config_file, models, overlap, blend_mode, tta,
 
             # Create individual folders for each prediction if output_std is enabled
             if output_std:
-                new_dest = os.path.join(dest, str(patient['id']))
-                create_empty_dir(new_dest)
+                output_std_dest = os.path.join(dest, str(patient['id']))
+                create_empty_dir(output_std_dest)
             else:
-                new_dest = dest
+                output_std_dest = dest
 
-            if "mask" in df.columns:
+            if "mask" in df.columns and "fold" in df.columns:
+                image_list = list(patient.values())[3:]
+            elif "mask" in df.columns or "fold" in df.columns:
                 image_list = list(patient.values())[2:]
             else:
                 image_list = list(patient.values())[1:]
 
-            original_image = ants.image_read(image_list[0])
+            og_ants_img = ants.image_read(image_list[0])
 
-            image_npy, _, _ = preprocess_example(config, image_list, None)
+            if no_preprocess:
+                torch_img, _, fg_bbox = convert_nifti_to_numpy(image_list, None)
+            else:
+                torch_img, _, fg_bbox = preprocess_example(config, image_list, None, None)
 
             # Make image channels first and add batch dimension
-            image_npy = np.transpose(image_npy, axes=(3, 0, 1, 2))
-            image_npy = np.expand_dims(image_npy, axis=0)
+            torch_img = np.transpose(torch_img, axes=(3, 0, 1, 2))
+            torch_img = np.expand_dims(torch_img, axis=0)
 
-            image = torch.Tensor(image_npy.copy()).to(torch.float32)
-            image = image.to("cuda")
+            torch_img = torch.Tensor(torch_img.copy()).to(torch.float32)
+            torch_img = torch_img.to("cuda")
 
-            prediction, std_images = predict_single_example(image,
-                                                     original_image,
-                                                     config,
-                                                     models,
-                                                     overlap,
-                                                     blend_mode,
-                                                     tta,
-                                                     output_std)
+            prediction, std_images = predict_single_example(torch_img,
+                                                            og_ants_img,
+                                                            config,
+                                                            models,
+                                                            overlap,
+                                                            blend_mode,
+                                                            tta,
+                                                            output_std,
+                                                            fg_bbox)
 
-            # Apply postprocessing if called for in config file
-            # Apply morphological cleanup to nonzero mask
-            if config['cleanup_mask']:
-                prediction = apply_clean_mask(prediction, majority_label)
-
-            # Apply results of connected components analysis
-            if len(config['postprocess_labels']) > 0:
-                for label in config['postprocess_labels']:
-                    prediction = apply_largest_component(prediction,
-                                                         label,
-                                                         majority_label)
+            # Apply postprocessing if required
+            transforms = ["remove_small_objects", "clean_mask", "get_largest_cc", "fill_holes"]
+            for transform in transforms:
+                if config[transform] is not None:
+                    if not (transform == "fill_holes") and len(config[transform]) > 0:
+                        apply_transform(prediction, transform, config["labels"], config["transform"])
 
             # Write prediction mask to nifti file and save to disk
             prediction_filename = '{}.nii.gz'.format(str(patient['id']))
-            output = os.path.join(new_dest, prediction_filename)
+            output = os.path.join(output_std_dest, prediction_filename)
             ants.image_write(prediction, output)
 
-            # Write standard deviation image(s) to nifti file and save to disk
+            # Write standard deviation image(s) to nifti file and save to disk (only for foreground labels)
             if output_std:
                 for i in range(len(std_images)):
-                    std_image_filename = '{}_std_{}.nii.gz'.format(patient['id'], config['labels'][i])
-                    output = os.path.join(new_dest, std_image_filename)
-                    ants.image_write(std_images[i], output)
+                    if config["labels"][i] > 0:
+                        std_image_filename = '{}_std_{}.nii.gz'.format(patient['id'], config['labels'][i])
+                        output = os.path.join(output_std_dest, std_image_filename)
+                        ants.image_write(std_images[i], output)
 
         # Clean up
         gc.collect()

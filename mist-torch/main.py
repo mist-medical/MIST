@@ -10,16 +10,24 @@ from runtime.args import get_main_args
 from runtime.run import Trainer
 from postprocess_preds.postprocess import Postprocessor
 from runtime.evaluate import evaluate
-from runtime.utils import create_empty_dir, set_seed, set_warning_levels, set_visible_devices, has_test_data, \
+
+from runtime.utils import (
+    create_empty_dir,
+    set_seed,
+    set_warning_levels,
+    set_visible_devices,
+    has_test_data,
     get_files_df
-from inference.main_inference import test_time_inference, load_test_time_models
+)
+
+from inference.main_inference import (
+    test_time_inference,
+    load_test_time_models
+)
 
 
 def create_folders(args):
     data_path = os.path.abspath(args.data)
-    with open(data_path, "r") as file:
-        data = json.load(file)
-
     has_test = has_test_data(data_path)
 
     results = os.path.abspath(args.results)
@@ -29,16 +37,9 @@ def create_folders(args):
                       os.path.join(results, "models"),
                       os.path.join(results, "predictions"),
                       os.path.join(results, "predictions", "train"),
-                      os.path.join(results, "predictions", "train", "raw")]
-
-    if args.postprocess:
-        dirs_to_create += [os.path.join(results, "predictions", "train", "postprocess"),
-                           os.path.join(results, "predictions", "train", "postprocess", "clean_mask"),
-                           os.path.join(results, "predictions", "train", "final")]
-
-        labels = data["labels"]
-        for i in range(1, len(labels)):
-            dirs_to_create.append(os.path.join(results, "predictions", "train", "postprocess", str(labels[i])))
+                      os.path.join(results, "predictions", "train", "raw"),
+                      os.path.join(results, "predictions", "train", "temp"),
+                      os.path.join(results, "predictions", "train", "postprocessed")]
 
     if has_test:
         dirs_to_create.append(os.path.join(results, "predictions", "test"))
@@ -87,7 +88,9 @@ def main(args):
                                     models,
                                     args.sw_overlap,
                                     args.blend_mode,
-                                    args.tta)
+                                    args.tta,
+                                    args.no_preprocess,
+                                    args.output_std)
 
 
 if __name__ == "__main__":
@@ -95,7 +98,7 @@ if __name__ == "__main__":
     args = get_main_args()
 
     if args.exec_mode == "all" or args.exec_mode == "train":
-        assert np.max(args.folds) < args.nfolds or len(args.folds) > args.nfolds,  \
+        assert np.max(args.folds) < args.nfolds or len(args.folds) > args.nfolds, \
             "More folds listed than specified! Make sure folds are zero-indexed"
 
         n_gpus = set_visible_devices(args)

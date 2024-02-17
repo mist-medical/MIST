@@ -3,17 +3,28 @@ import json
 
 import ants
 import random
-import socket
 import warnings
+import skimage
 import pandas as pd
 import numpy as np
+import SimpleITK as sitk
+from sklearn.model_selection import KFold
+from skimage.measure import label
+from scipy import ndimage
 from collections import OrderedDict
+
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    TextColumn,
+    TimeElapsedColumn
+)
 
 import torch
 import torch.nn as nn
 
 from models.get_model import get_model
-from metrics.metrics import dice_sitk, hausdorff, surface_hausdorff
 
 
 def set_warning_levels():
@@ -30,6 +41,16 @@ def set_warning_levels():
 def create_empty_dir(path):
     if not (os.path.exists(path)):
         os.makedirs(path)
+
+
+def get_progress_bar(task):
+    # Set up rich progress bar
+    progress = Progress(TextColumn(task),
+                        BarColumn(),
+                        MofNCompleteColumn(),
+                        TextColumn("•"),
+                        TimeElapsedColumn())
+    return progress
 
 
 def get_files_list(path):
@@ -83,14 +104,28 @@ def get_files_df(params, mode):
     return df
 
 
-def get_test_df(df, test_df_ids):
-    test_df = pd.DataFrame(columns=df.columns)
-    for patient in test_df_ids:
-        row_dict = df.loc[df['id'].astype(str).isin([patient])].to_dict("list")
-        for key in row_dict.keys():
-            row_dict[key] = str(row_dict[key][0])
-        test_df = pd.concat([test_df, pd.DataFrame(row_dict, index=[0])], ignore_index=True)
-    return test_df
+def add_folds_to_df(df, n_splits=5):
+    # Get folds for k-fold cross validation
+    kfold = KFold(n_splits=5, shuffle=True, random_state=42)
+
+    splits = kfold.split(list(range(len(df))))
+
+    # Extract folds so that users can specify folds to train on
+    test_splits = list()
+    for split in splits:
+        test_splits.append(split[1])
+
+    folds = dict()
+
+    for i in range(n_splits):
+        for j in range(len(df)):
+            if j in test_splits[i]:
+                folds[j] = i
+
+    folds = pd.Series(data=folds, index=list(folds.keys()), name="fold")
+    df.insert(loc=1, column="fold", value=folds)
+    df = df.sort_values("fold", ignore_index=True)
+    return df
 
 
 def convert_dict_to_df(patients):
@@ -179,21 +214,19 @@ def set_seed(seed):
     torch.cuda.manual_seed(seed)
 
 
-def create_model_config_file(args, config, data, depth, latent_dim, output):
+def create_model_config_file(args, config, data, output):
     model_config = dict()
 
     model_config["model_name"] = args.model
     model_config["n_channels"] = int(len(data["images"]))
     model_config["n_classes"] = int(len(data["labels"]))
-    model_config["init_filters"] = int(args.init_filters)
-    model_config["depth"] = int(depth)
     model_config["deep_supervision"] = args.deep_supervision
     model_config["deep_supervision_heads"] = args.deep_supervision_heads
     model_config["pocket"] = args.pocket
     model_config["patch_size"] = config["patch_size"]
     model_config["target_spacing"] = config["target_spacing"]
-    model_config["latent_dim"] = latent_dim
     model_config["vae_reg"] = args.vae_reg
+    model_config["use_res_block"] = args.use_res_block
 
     with open(output, 'w') as outfile:
         json.dump(model_config, outfile, indent=2)
@@ -226,52 +259,16 @@ def get_flip_axes():
     return [[2], [3], [4], [2, 3], [2, 4], [3, 4], [2, 3, 4]]
 
 
-def init_results_df(data):
+def init_results_df(config):
     # Initialize new results dataframe
     metrics = ['dice', 'haus95', 'avg_surf']
     results_cols = ['id']
     for metric in metrics:
-        for key in data['final_classes'].keys():
+        for key in config['final_classes'].keys():
             results_cols.append('{}_{}'.format(key, metric))
 
     results_df = pd.DataFrame(columns=results_cols)
     return results_df
-
-
-def evaluate_prediction(prediction_final,
-                        original_mask,
-                        patient_id,
-                        data,
-                        pred_temp_filename,
-                        mask_temp_filename,
-                        key_names):
-    # Get dice and hausdorff distances for final prediction
-    row_dict = dict.fromkeys(list(key_names))
-    row_dict['id'] = patient_id
-    for key in data['final_classes'].keys():
-        class_labels = data['final_classes'][key]
-
-        pred_temp = np.zeros(prediction_final.shape)
-        pred_temp = prediction_final.new_image_like(pred_temp)
-
-        mask_temp = np.zeros(original_mask.shape)
-        mask_temp = original_mask.new_image_like(mask_temp)
-
-        for label in class_labels:
-            pred_label = (prediction_final == label).astype("uint8")
-            mask_label = (original_mask == label).astype("uint8")
-
-            pred_temp += pred_label
-            mask_temp += mask_label
-
-        ants.image_write(pred_temp, pred_temp_filename)
-        ants.image_write(mask_temp, mask_temp_filename)
-
-        row_dict['{}_dice'.format(key)] = dice_sitk(pred_temp_filename, mask_temp_filename)
-        row_dict['{}_haus95'.format(key)] = hausdorff(pred_temp_filename, mask_temp_filename, '95')
-        row_dict['{}_avg_surf'.format(key)] = surface_hausdorff(pred_temp_filename, mask_temp_filename, 'mean')
-
-    return row_dict
 
 
 def compute_results_stats(results_df):
@@ -334,3 +331,215 @@ def resize_image_with_crop_or_pad(image, img_size, **kwargs):
 
     # Pad the cropped image to extend the missing dimension
     return np.pad(image[tuple(slicer)], to_padding, **kwargs)
+
+
+"""
+Conversion between SimpleITK and ANTs
+"""
+
+
+def ants_to_sitk(img_ants):
+    spacing = img_ants.spacing
+    origin = img_ants.origin
+    direction = tuple(img_ants.direction.flatten())
+
+    img_sitk = sitk.GetImageFromArray(img_ants.numpy().T)
+    img_sitk.SetSpacing(spacing)
+    img_sitk.SetOrigin(origin)
+    img_sitk.SetDirection(direction)
+
+    return img_sitk
+
+
+def sitk_to_ants(img_sitk):
+    spacing = img_sitk.GetSpacing()
+    origin = img_sitk.GetOrigin()
+    direction_sitk = img_sitk.GetDirection()
+    dim = int(np.sqrt(len(direction_sitk)))
+    direction = np.reshape(np.array(direction_sitk), (dim, dim))
+
+    img_ants = ants.from_numpy(sitk.GetArrayFromImage(img_sitk).T)
+    img_ants.set_spacing(spacing)
+    img_ants.set_origin(origin)
+    img_ants.set_direction(direction)
+
+    return img_ants
+
+
+"""
+Morphological tools
+"""
+
+
+def get_largest_cc(mask_npy):
+    labels = label(mask_npy)
+    assert (labels.max() != 0)  # assume at least 1 CC
+    largest_cc = labels == np.argmax(np.bincount(labels.flat)[1:]) + 1
+    return largest_cc
+
+
+def remove_small_objects(mask_npy):
+    # Get connected components
+    labels = label(mask_npy)
+    label_cnts = np.bincount(labels.flat)[1:]
+
+    # Get threshold for small objects
+    small_obj_thresh = np.max([int(np.floor(np.percentile(label_cnts, 95))), 64])
+
+    # Remove small objects of size lower than our threshold
+    mask_npy = skimage.morphology.remove_small_objects(mask_npy.astype("bool"),
+                                                       min_size=small_obj_thresh)
+    return mask_npy
+
+
+def fill_holes(mask_npy, fill_label):
+    # Fill holes with specified label
+    mask_npy_binary = (mask_npy != 0)
+    holes = ndimage.binary_fill_holes(mask_npy_binary) - mask_npy
+    holes *= fill_label
+    return mask_npy + holes
+
+
+def clean_mask(mask_npy, middle_op="remove_small_objects", iterations=2):
+    mask_npy = ndimage.binary_erosion(mask_npy, iterations=iterations)
+    if middle_op == "remove_small_objects":
+        mask_npy = remove_small_objects(mask_npy)
+    elif middle_op == "get_largest_cc":
+        mask_npy = get_largest_cc(mask_npy)
+    else:
+        pass
+    mask_npy = ndimage.binary_dilation(mask_npy, iterations=iterations)
+    return mask_npy
+
+
+def get_transform(transform):
+    if transform == "clean_mask":
+        return clean_mask
+    elif transform == "fill_holes":
+        return fill_holes
+    elif transform == "remove_small_objects":
+        return remove_small_objects
+    elif transform == "get_largest_cc":
+        return get_largest_cc
+    else:
+        raise ValueError("Invalid morphological transform")
+
+
+def get_fg_mask_bbox(img_ants, patient_id=None):
+    image_npy = img_ants.numpy()
+
+    # Clip image to improve fg bbox
+    lower = np.percentile(image_npy, 33)
+    upper = np.percentile(image_npy, 99.5)
+    image_npy = np.clip(image_npy, lower, upper)
+
+    val = skimage.filters.threshold_otsu(image_npy)
+    fg_mask = (image_npy > val)
+    fg_mask = clean_mask(fg_mask, middle_op="get_largest_cc")
+    nz = np.nonzero(fg_mask)
+    og_size = img_ants.shape
+
+    fg_bbox = {"x_start": np.min(nz[0]), "x_end": np.max(nz[0]),
+               "y_start": np.min(nz[1]), "y_end": np.max(nz[1]),
+               "z_start": np.min(nz[2]), "z_end": np.max(nz[2]),
+               "x_og_size": og_size[0],
+               "y_og_size": og_size[1],
+               "z_og_size": og_size[2]}
+
+    if not (patient_id is None):
+        fg_bbox_with_id = {"id": patient_id}
+        fg_bbox_with_id.update(fg_bbox)
+        fg_bbox = fg_bbox_with_id
+
+    return fg_bbox
+
+
+"""
+Preprocessing tools
+"""
+
+
+def npy_make_onehot(mask_npy, labels):
+    mask_onehot = np.zeros((*mask_npy.shape, len(labels)))
+    for i, label in enumerate(labels):
+        mask_onehot[i] = (mask_npy == label)
+    return mask_onehot
+
+
+def npy_fix_labels(mask_npy, labels):
+    for i, label in enumerate(labels):
+        mask_npy[mask_npy == i] = label
+    return mask_npy
+
+
+def get_new_dims(img_sitk, target_spacing):
+    og_spacing = img_sitk.GetSpacing()
+    og_size = img_sitk.GetSize()
+    new_size = [int(np.round((og_size[0] * og_spacing[0]) / target_spacing[0])),
+                int(np.round((og_size[1] * og_spacing[1]) / target_spacing[1])),
+                int(np.round((og_size[2] * og_spacing[2]) / target_spacing[2]))]
+    return new_size
+
+
+def aniso_intermediate_resample(img_sitk, new_size, target_spacing, low_res_axis):
+    temp_spacing = list(img_sitk.GetSpacing())
+    temp_spacing[low_res_axis] = target_spacing[low_res_axis]
+
+    temp_size = list(img_sitk.GetSize())
+    temp_size[low_res_axis] = new_size[low_res_axis]
+
+    # Use nearest neighbor interpolation on low res axis
+    img_sitk = sitk.Resample(img_sitk,
+                             size=temp_size,
+                             transform=sitk.Transform(),
+                             interpolator=sitk.sitkNearestNeighbor,
+                             outputOrigin=img_sitk.GetOrigin(),
+                             outputSpacing=temp_spacing,
+                             outputDirection=img_sitk.GetDirection(),
+                             defaultPixelValue=0,
+                             outputPixelType=img_sitk.GetPixelID())
+
+    return img_sitk
+
+
+def check_anisotropic(img_sitk):
+    spacing = img_sitk.GetSpacing()
+    if np.max(spacing) / np.min(spacing) > 3:
+        anisotropic = True
+        low_res_axis = np.argmax(spacing)
+    else:
+        anisotropic = False
+        low_res_axis = None
+
+    return anisotropic, low_res_axis
+
+
+def make_onehot(mask_ants, labels):
+    spacing = mask_ants.spacing
+    origin = mask_ants.origin
+    direction = tuple(mask_ants.direction.flatten())
+
+    mask_npy = mask_ants.numpy()
+    masks_sitk = list()
+    for i in range(len(labels)):
+        sitk_label_i = sitk.GetImageFromArray((mask_npy == labels[i]).T.astype("float32"))
+        sitk_label_i.SetSpacing(spacing)
+        sitk_label_i.SetOrigin(origin)
+        sitk_label_i.SetDirection(direction)
+        masks_sitk.append(sitk_label_i)
+
+    return masks_sitk
+
+
+def decrop_from_fg(img_ants, fg_bbox):
+    padding = [(np.max([0, fg_bbox["x_start"]]), np.max([0, fg_bbox["x_og_size"] - fg_bbox["x_end"]]) - 1),
+               (np.max([0, fg_bbox["y_start"]]), np.max([0, fg_bbox["y_og_size"] - fg_bbox["y_end"]]) - 1),
+               (np.max([0, fg_bbox["z_start"]]), np.max([0, fg_bbox["z_og_size"] - fg_bbox["z_end"]]) - 1)]
+    return ants.pad_image(img_ants, pad_width=padding)
+
+
+def crop_to_fg(img_ants, fg_bbox):
+    img_ants = ants.crop_indices(img_ants,
+                                 lowerind=[fg_bbox["x_start"], fg_bbox["y_start"], fg_bbox["z_start"]],
+                                 upperind=[fg_bbox["x_end"] + 1, fg_bbox["y_end"] + 1, fg_bbox["z_end"] + 1])
+    return img_ants

@@ -149,6 +149,40 @@ class VAEDecoderBlock(nn.Module):
         return x
 
 
+class UNetBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, **kwargs):
+        super(UNetBlock, self).__init__()
+        self.conv1 = ConvLayer(in_channels, out_channels, **kwargs)
+        self.conv2 = ConvLayer(out_channels, out_channels, **kwargs)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        return x
+
+
+class ResNetBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, **kwargs):
+        super(ResNetBlock, self).__init__()
+        self.conv1 = ConvLayer(in_channels, out_channels, **kwargs)
+        self.conv2 = ConvLayer(out_channels, out_channels, use_norm=True, use_activation=False, **kwargs)
+
+        self.residual_conv = nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=1)
+        self.residual_norm = get_norm(kwargs["norm"], out_channels, **kwargs)
+        self.final_act = get_activation(kwargs["activation"], in_channels=out_channels, **kwargs)
+
+    def forward(self, x):
+        res = self.residual_conv(x)
+        res = self.residual_norm(res)
+
+        x = self.conv1(x)
+        x = self.conv2(x)
+
+        x = torch.add(x, res)
+        x = self.final_act(x)
+        return x
+
+
 class BaseModel(nn.Module):
 
     def __init__(self,
@@ -225,7 +259,7 @@ class BaseModel(nn.Module):
         # Define main decoder branch
         self.decoder = nn.ModuleList()
         if self.deep_supervision:
-            self.head_ids =[head for head in range(1, self.deep_supervision_heads + 1)]
+            self.head_ids = [head for head in range(1, self.deep_supervision_heads + 1)]
             self.deep_supervision_out = nn.ModuleList()
         for i in range(self.depth - 1, -1, -1):
             in_channels = self.init_filters * self.mul_on_downsample ** (i + 1)

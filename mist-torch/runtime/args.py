@@ -70,8 +70,7 @@ def get_main_args():
 
     # Training hyperparameters
     p.arg("--batch-size", type=positive_int, default=2, help="Batch size")
-    p.arg("--patch-size", nargs="+", default=[64, 64, 64], type=int, help="Height, width, and depth of patch size to "
-                                                                          "use for cropping")
+    p.arg("--patch-size", nargs="+", default=[64, 64, 64], type=int, help="Height, width, and depth of patch size")
     p.arg("--learning-rate", type=float, default=0.001, help="Learning rate")
     p.arg("--exp_decay", type=float, default=0.9, help="Exponential decay factor")
     p.arg("--lr-scheduler",
@@ -93,7 +92,8 @@ def get_main_args():
     p.arg("--model",
           type=str,
           default="nnunet",
-          choices=["nnunet", "unet", "resnet", "densenet"])
+          choices=["nnunet", "unet", "attn_unet", "unetr"])
+    p.boolean_flag("--use-res-block", default=False, help="Use residual blocks for nnUNet or UNet")
     p.boolean_flag("--pocket", default=False, help="Use pocket version of network")
     p.arg("--depth", type=non_negative_int, help="Depth of U-Net or similar architecture")
     p.arg("--init-filters", type=non_negative_int, default=32, help="Number of filters to start network")
@@ -113,8 +113,9 @@ def get_main_args():
           help="Probability of crop centered on foreground voxel")
 
     # Preprocessing
+    p.boolean_flag("--no-preprocess", default=False, help="Turn off preprocessing")
     p.boolean_flag("--use-n4-bias-correction", default=False, help="Use N4 bias field correction (only for MR images)")
-    p.boolean_flag("--use-precomputed-class-weights", default=False, help="Use precomputed class weights")
+    p.boolean_flag("--use-config-class-weights", default=False, help="Use class weights in config file")
     p.arg("--class-weights", nargs="+", type=float, help="Specify class weights")
 
     # Loss function
@@ -137,12 +138,6 @@ def get_main_args():
 
     # Postprocessing
     p.boolean_flag("--postprocess", default=False, help="Run post processing on MIST output")
-    p.boolean_flag("--post-no-morph",
-                   default=False,
-                   help="Do not try morphological smoothing for postprocessing")
-    p.boolean_flag("--post-no-largest",
-                   default=False,
-                   help="Do not run connected components analysis for postprocessing")
 
     # Validation
     p.arg("--nfolds", type=positive_int, default=5, help="Number of cross-validation folds")
@@ -151,6 +146,9 @@ def get_main_args():
     p.arg("--steps-per-epoch",
           type=positive_int,
           help="Steps per epoch. By default ceil(training_dataset_size / batch_size / gpus)")
+
+    # Uncertainty
+    p.boolean_flag("--output-std", default=False, help="Output standard deviation for ensemble predictions")
 
     args = p.parse_args()
     return args

@@ -414,7 +414,8 @@ class NNUnet(nn.Module):
                  deep_supervision_heads,
                  vae_reg,
                  patch_size,
-                 target_spacing):
+                 target_spacing,
+                 use_res_block):
         super(NNUnet, self).__init__()
         kernels, strides, size = self.get_unet_params(patch_size, target_spacing)
 
@@ -428,7 +429,7 @@ class NNUnet(nn.Module):
         self.n_channels = n_channels
         self.deep_supervision = deep_supervision
         self.deep_supervision_heads = deep_supervision_heads
-        self.use_res_block = True
+        self.use_res_block = use_res_block
 
         self.vae_reg = vae_reg
         self.latent_dim = int(np.prod(size))
