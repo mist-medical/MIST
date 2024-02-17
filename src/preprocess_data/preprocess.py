@@ -112,24 +112,19 @@ def window_and_normalize(image, config):
         if config["use_nz_mask"]:
             image *= nzmask
     else:
-        if config["use_nz_mask"]:
-            # Window image
-            lower = np.percentile(nonzeros, 0.5)
-            upper = np.percentile(nonzeros, 99.5)
-            image = np.clip(image, lower, upper)
+        # Window image
+        lower = np.percentile(nonzeros, 0.5)
+        upper = np.percentile(nonzeros, 99.5)
+        image = np.clip(image, lower, upper)
 
-            # Normalize image
+        if config["use_nz_mask"]:
+            # Normalize nonzero values image
             mean = np.mean(nonzeros)
             std = np.std(nonzeros)
             image = (image - mean) / std
             image *= nzmask
         else:
-            # Window image
-            lower = np.percentile(image, 0.5)
-            upper = np.percentile(image, 99.5)
-            image = np.clip(image, lower, upper)
-
-            # Normalize image
+            # Normalize whole image
             mean = np.mean(image)
             std = np.std(image)
             image = (image - mean) / std
@@ -270,6 +265,3 @@ def preprocess_dataset(args):
 
                 fg_bbox = fg_bboxes.iloc[i].to_dict()
                 image_npy, mask_npy, _ = preprocess_example(config, image_list, mask, fg_bbox)
-
-    with open(config_file, "w") as outfile:
-        json.dump(config, outfile, indent=2)

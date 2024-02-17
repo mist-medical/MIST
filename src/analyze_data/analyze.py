@@ -1,7 +1,5 @@
 import os
 import json
-import pdb
-
 import ants
 import pandas as pd
 import numpy as np
@@ -110,7 +108,7 @@ class Analyzer:
 
         # Either compute class weights or use user provided weights
         if self.args.class_weights is None:
-            class_weights = [0. for i in range(len(self.labels))]
+            class_weights = [0. for _ in range(len(self.labels))]
             progress = get_progress_bar("Computing class weights")
 
             with progress as pb:
