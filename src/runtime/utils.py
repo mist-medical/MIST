@@ -373,31 +373,42 @@ Morphological tools
 
 def get_largest_cc(mask_npy):
     labels = label(mask_npy)
-    assert (labels.max() != 0)  # assume at least 1 CC
-    largest_cc = labels == np.argmax(np.bincount(labels.flat)[1:]) + 1
+    if labels.max() > 0:
+        largest_cc = labels == np.argmax(np.bincount(labels.flat)[1:]) + 1
+    else:
+        largest_cc = mask_npy
     return largest_cc
 
 
 def remove_small_objects(mask_npy):
     # Get connected components
     labels = label(mask_npy)
-    label_cnts = np.bincount(labels.flat)[1:]
 
-    # Get threshold for small objects
-    small_obj_thresh = np.max([int(np.floor(np.percentile(label_cnts, 95))), 64])
+    # Assume at least one component
+    if labels.max() > 0:
+        # Count connected component sizes to get threshold
+        label_cnts = np.bincount(labels.flat)[1:]
 
-    # Remove small objects of size lower than our threshold
-    mask_npy = skimage.morphology.remove_small_objects(mask_npy.astype("bool"),
-                                                       min_size=small_obj_thresh)
+        # Get threshold for small objects
+        small_obj_thresh = np.max([int(np.floor(np.percentile(label_cnts, 99.5))), 64])
+
+        # Remove small objects of size lower than our threshold
+        mask_npy = skimage.morphology.remove_small_objects(mask_npy.astype("bool"),
+                                                           min_size=small_obj_thresh)
     return mask_npy
 
 
 def fill_holes(mask_npy, fill_label):
-    # Fill holes with specified label
-    mask_npy_binary = (mask_npy != 0)
-    holes = ndimage.binary_fill_holes(mask_npy_binary) - mask_npy
-    holes *= fill_label
-    return mask_npy + holes
+    labels = label(mask_npy)
+
+    if labels.max() > 0:
+        # Fill holes with specified label
+        mask_npy_binary = (mask_npy != 0)
+        holes = ndimage.binary_fill_holes(mask_npy_binary) - mask_npy_binary
+        holes *= fill_label
+        mask_npy += holes
+
+    return mask_npy
 
 
 def clean_mask(mask_npy, middle_op="remove_small_objects", iterations=2):
