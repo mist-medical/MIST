@@ -1,0 +1,72 @@
+[project]
+name = "mist-medical"
+version = "0.2.4-alpha"
+requires-python = ">= 3.8"
+description = "MIST is a simple, fully automated framework for 3D medical imaging segmentation."
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Adrian Celaya", email = "aecelaya@rice.edu"},
+    {name = "David Fuentes", email = "dtfuentes@mdanderson.org"},
+    {name = "Beatrice Riviere", email = "riviere@rice.edu"},
+    {name = "Evan Lim", email = "EMLim@mdanderson.org"},
+    {name = "Rachel Glenn", email = "rglenn1@mdanderson.org"},
+    {name = "Alex Balsells", email = "atb8@rice.edu"},
+    {name = "Rice University"},
+    {name = "The University of Texas MD Anderson Cancer Center"}
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Medical Science Apps."
+]
+keywords = [
+    "deep learning",
+    "image segmentation",
+    "semantic segmentation",
+    "medical image analysis",
+    "medical image segmentation",
+    "nnU-Net",
+    "nnunet",
+    "U-Net",
+    "unet",
+    "vision transformers",
+    "UNETR",
+    "unetr"
+]
+dependencies = [
+    "torch==2.0.1",
+    "monai==1.3.0",
+    "antspyx==0.3.8",
+    "simpleitk==2.2.1",
+    "numpy",
+    "pandas",
+    "rich",
+    "tqdm",
+    "scipy",
+    "scikit-learn",
+    "scikit-image",
+    "nvidia-dali-cuda110",
+    "tensorboard"
+]
+
+[project.urls]
+homepage = "https://github.com/aecelaya/MIST"
+repository = "https://github.com/aecelaya/MIST"
+
+[project.scripts]
+mist_run_all = "mist.scripts.run_all_entrypoint:run_all_entry"
+mist_analyze = "mist.scripts.analyze_entrypoint:analyze_entry"
+mist_preprocess = "mist.scripts.preprocess_entrypoint:preprocess_entry"
+mist_train = "mist.scripts.train_entrypoint:train_entry"
+mist_predict = "mist.predict:mist_predict_entry"
+mist_evaluate = "mist.eval_preds:mist_eval_entry"
+mist_convert_dataset = "mist.convert_to_mist:convert_to_mist_entry"
+
+[tool.codespell]
+skip = ".git"
+
+[tool.setuptools]
+py-modules = []

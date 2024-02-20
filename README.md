@@ -8,7 +8,7 @@ medical imaging segmentation. The following architectures are implemented on MIS
 * nnUNet
 * U-Net
 * Attention U-Net
-* U-NetTR
+* UNETR
 
 The following features are supported by MIST: 
 
@@ -23,6 +23,7 @@ Please cite the following if you use this code for your work:
 
 
 ## What's New
+* Feb. 2024 - MIST is now available as PyPI package and as a Docker image on DockerHub.
 * Feb. 2024 - Major improvements to the analysis, preprocessing, and postprocessing pipelines, 
 and new network architectures like UNETR added.
 * Feb. 2024 - We have moved the TensorFlow version of MIST to [mist-tf](https://github.com/aecelaya/mist-tf).
@@ -31,33 +32,32 @@ and new network architectures like UNETR added.
 
 - [Overview](#overview)
 - [Setup](#setup)
-    * [Requirements](#requirements)
+    * [Install](#install)
     * [Data Format](#data-format)
-    * [Getting Started](#getting-started)
-    * [Output](#output)
-    * [Advanced Usage](#advanced-usage)
-- [Inference](#inference)
-    * [Overview](#overview)
-    * [Advanced Usage](#advanced-usage)
-- [MSD and CSV Formatted Data](#msd-and-csv-formatted-data)
+- [Getting Started](#getting-started)
+- [Output](#output)
+- [Advanced Usage](#advanced-usage)
 
  
 ## Setup
-### Requirements
-#### Conda
-We include a YAML file for building the correct Conda environment to run the MIST pipeline. Please
-be sure to have [Conda](https://docs.conda.io/en/latest/) installed.
+MIST assumes that your system as at least one GPU and sufficient memory to handle 3D medical images.
 
-#### Docker
-We include a Dockerfile in this repository that builds the necessary Docker container and installs the 
-dependencies. Please make sure to have the following components ready.
+### Install
+To install the latest version of MIST as an out-of-the-box segmentation pipeline, use 
+```
+pip install mist-medical
+```
 
-* [Docker](https://www.docker.com/)
-* [NVIDIA Container Toolkit](https://github.com/NVIDIA/nvidia-docker)
+If you want to install MIST and customize the underlying code (i.e., add a loss function or new architecture), 
+then clone the MIST repo and install as follows:
+```
+git clone https://github.com/aecelaya/MIST.git
+cd MIST
+pip install -e .
+```
 
 ### Data Format
-The MIST pipeline assumes that your train and test data directories 
-are set up in the following structure.
+The MIST pipeline assumes that your train and test data directories are set up in the following structure.
 ```
 data/
 │   └── patient_1
@@ -119,81 +119,94 @@ Here is an example for the BraTS 2023 dataset.
 }
 ```
 
-Examples for several datasets are provided in the ```examples/dataset-json``` directory.
+Examples for several datasets are provided in the [examples/dataset-json](MIST/examples/dataset-json) directory.
 
-### Getting Started
-#### Conda
-To start running the MIST pipeline via a Conda environment, first clone this repository and build
-the environment via the YAML file provided.
+## Getting Started
+The MIST pipeline consists of three stages:
+1. Analyze - Gathering parameters about the dataset like target spacing, normalization parameters, etc. This produces a ```config.json``` file, which will be used for the rest of the pipeline.
 
+2. Preprocess - Use the learned parameters from the analysis phase of the MIST pipeline to preprocess the data (i.e., reorient, resample, etc.) and convert it to numpy files.
 
+3. Train/Postprocess - Train on preprocessed data using a five-fold cross validation to produce a final set of models for inference. After training, a postprocessing analysis pipeline is activated to determine optimal postprocessing procedures.
+
+Additionally, MIST provides auxiliary commands that handle test-time prediction, evaluating a given set of predictions, and converting other datasets to the MIST format.
+
+When you install the MIST package, the following commands are included:
+
+* ```mist_run_all```: This command runs the entire MIST pipeline and requires the following arguments:
+	- ```--data```: The full path to your dataset JSON file
+	- ```--numpy```: The full path to the directory to save preprocessed Numpy files
+	- ```--results```: The full path to the directory to save the output of the MIST pipeline
+    - ```--amp```: Optional, but highly recommended, if your system supports AMP
+    - ```--pocket```: Optional, but highly recommended, for using smaller, but just as accurate networks
+	
+* ```mist_analyze```: This command runs only the analysis portion of the pipeline and requires the following arguments:
+	- ```--data```: The full path to your dataset JSON file
+	- ```--results```: The full path to the directory to save the output of the MIST pipeline
+
+* ```mist_preprocess```: This command runs only the preprocessing pipeline and assumes that the output of the analysis pipeline (or a modified version of it) are in the ```--results``` folder. This command requires the following arguments:
+	- ```--data```: The full path to your dataset JSON file
+	- ```--numpy```: The full path to the directory to save preprocessed Numpy files
+	- ```--results```: The full path to the directory to save the output of the MIST pipeline
+
+* ```mist_train```: This command runs only the training pipeline and assumes that the results of the previous two commands are in the ```--results``` and ```--numpy``` folders. This command requires the following arguments:
+	- ```--data```: The full path to your dataset JSON file
+	- ```--numpy```: The full path to the directory to save preprocessed Numpy files
+	- ```--results```: The full path to the directory to save the output of the MIST pipeline
+    - ```--amp```: Optional, but highly recommended, if your system supports AMP
+    - ```--pocket```: Optional, but highly recommended, for using smaller, but just as accurate networks
+
+* ```mist_predict```: This command runs test time inference on a given set of test data given as either a JSON or CSV file. This command is a stand alone command that can be used anytime outside of the MIST pipeline. To run this command, we need the following arguments:
+	- ```--models```: The full path to the ```models``` folder in the output of the MIST pipeline
+	- ```--config```: The full path to the directory to the ```config.json``` file in the output of the MIST pipeline
+	- ```--data```: The full path to the JSON or CSV file, which contains the path to your test data
+	- ```--output```: The full path to the directory to save the predictions
+
+  For CSV formatted data, the CSV file must, at a minimum, have an ```id``` column with the new patient IDs and one column for each image type. A column for the ```mask``` is allowed if you want to run the evaluation portion of the pipeline. For example, for the BraTS dataset, our CSV header would look like the following.
+
+  | id         | mask (optional) | t1               | t2               | tc               | fl               |
+  |------------|-----------------|------------------|------------------|------------------|------------------|
+  | Patient ID | Path to mask    | Path to t1 image | Path to t2 image | Path to tc image | Path to fl image |
+
+  Similarly, for JSON formatted data, we would have the following.
+  ```
+  {
+      "Patient ID": {
+          "mask": "Path to mask", *** (optional) ***
+          "t1": "Path to t1 image",
+          "t2": "Path to t2 image",
+          "tc": "Path to tc image", 
+          "fl": "Path to fl image"
+      }
+  }
+  ```
+  
+* ```mist_evaluate```: This command is used to evaluate a set of predictions and requires the following arguments:
+	- ```--paths```: The full paths to the ground truth masks formated in either CSV or JSON format (see ```mist_predict```)
+	- ```--config```: The full path to the directory to the ```config.json``` file in the output of the MIST pipeline
+	- ```--preds-dir```: The full path to the directory where the predictions are saved
+	- ```--output-csv```: The full path to the CSV file where the results will be saved
+
+* ```mist_convert_dataset```: This command converts either MSD or CSV formated datasets into MIST formatted data. The following arguments are required for this command:
+	- ```--format```: The format of the given dataset, which can be either ```msd``` or ```csv```
+	- ```--msd-source```: The full path to the MSD dataset, if that is what you are converting
+	- ```--csv-source```: The full path to the CSV dataset, if that is what you are using
+	- ```--dest```: The full path to the new MIST formatted dataset
+	
+	Note that the CSV file should mirror the CSV format shown in the ```mist_predict``` command. Additionally, this command will reformat the CSV dataset to a MIST-compatible one but will require the user to fill in details in its corresponding dataset JSON file.
+    
+### Docker
+Except for ```mist_convert_dataset```, each of the commands described above is also available as a separate Docker application. Start by pulling the Docker image you need with the following command:
 ```
-git clone https://github.com/aecelaya/MIST.git
-cd MIST
+docker pull mistmedical/mist_run_all:latest
 ```
 
-Change the ```prefix``` line at the bottom of the ```mist-torch.yml``` file to match your system
-and then run the following line to create the environment.
-
+To run this, use the following command:
 ```
-conda env --create --file mist-torch.yml
+docker run --rm -it -u $(id -u):$(id -g) --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 -v /your/working/directory/:/workspace mist_run_all [--your arguments]
 ```
 
-Once the Conda environment is ready, you can run (with all default values) the MIST pipeline with
-the following command:
-
-```
-conda activate mist-torch
-cd MIST/src
-python main.py --data examples/brats.json \
---numpy /path/to/save/numpy/files \
---results /path/to/save/results
-```
-
-For more options see the [Advanced Usage](#advanced-usage) section below.
-
-If your system can support AMP, then we strongly recommend running the MIST pipeline with the ```--amp``` flag.
-
-
-#### Docker
-To start running the MIST pipeline via Docker, first clone this repository.
-
-```
-git clone https://github.com/aecelaya/MIST.git
-cd MIST/mist-torch
-```
-
-Next we use Dockerfile in this repository to build a Docker image named ```mist-torch```.
-```
-docker build -t mist-torch .
-```
-
-Once the container is ready, we launch an interactive session with the following command. 
-Notice that we mount a directory to the ```/workspace``` directory in the container. The idea 
-is to mount the local directory containing our data to the workspace directory. Please modify 
-this command to match your system.
-```
-docker run --rm -it -u $(id -u):$(id -g) \ 
---gpus all --ipc=host --ulimit memlock=-1 \ 
---ulimit stack=67108864 \ 
--v /your/working/directory/:/workspace \
- mist-torch
-```
-
-Once inside the container, we can run the MIST pipeline (with all default values) with the 
-following command.
-```
-cd src
-python main.py --data examples/brats.json \
---numpy /workspace/path/to/brats/numpy/files \
---results /workspace/path/to/save/results
-```
-For more options see the [Advanced Usage](#advanced-usage) section below.
-
-Again, if your system can support AMP, then we strongly recommend running the MIST pipeline with the ```--amp``` flag.
-
-
-### Output
+## Output
 The output of the MIST pipeline has the following structure:
 ```
 results/
@@ -222,42 +235,43 @@ Here is a breakdown of what each file/directory contains.
 | ```fg_bboxes.csv```   | CSV file containing information about the bounding box around the foreground for each image.                                                                   |
 
 
-### Advanced usage
-To see the complete list of available options and their descriptions, use the -h or --help command-line option, for example:
+## Advanced Usage
+All MIST commands come with ```--help``` or ```-h``` option, which allows you to see all the available settings/arguments for that command.
 
+For the ```mist_run_all```, ```mist_analyze```, ```mist_preprocess```, and ```mist_train``` commands, here is a complete list of the available arguments:
 ```
-python main.py --help
-```
-
-The following output is printed when running the command above:
-```
-usage: main.py [-h] [--exec-mode {all,analyze,preprocess,train}] [--data DATA]
-               [--gpus GPUS [GPUS ...]] [--num-workers NUM_WORKERS]
-               [--master-port MASTER_PORT] [--seed SEED] [--tta [BOOLEAN]]
-               [--results RESULTS] [--numpy NUMPY] [--amp [BOOLEAN]]
-               [--batch-size BATCH_SIZE]
-               [--patch-size PATCH_SIZE [PATCH_SIZE ...]]
-               [--learning-rate LEARNING_RATE] [--exp_decay EXP_DECAY]
-               [--lr-scheduler {constant,cosine_warm_restarts,exponential}]
-               [--cosine-first-steps COSINE_FIRST_STEPS]
-               [--optimizer {sgd,adam,adamw}] [--clip-norm [BOOLEAN]]
-               [--clip-norm-max CLIP_NORM_MAX]
-               [--model {nnunet,unet,attn_unet,unetr}]
-               [--use-res-block [BOOLEAN]] [--pocket [BOOLEAN]]
-               [--depth DEPTH] [--init-filters INIT_FILTERS]
-               [--deep-supervision [BOOLEAN]]
-               [--deep-supervision-heads DEEP_SUPERVISION_HEADS]
-               [--vae-reg [BOOLEAN]] [--vae-penalty VAE_PENALTY]
-               [--l2-reg [BOOLEAN]] [--l2-penalty L2_PENALTY]
-               [--l1-reg [BOOLEAN]] [--l1-penalty L1_PENALTY]
-               [--oversampling OVERSAMPLING] [--no-preprocess [BOOLEAN]]
-               [--use-n4-bias-correction [BOOLEAN]]
-               [--use-config-class-weights [BOOLEAN]]
-               [--class-weights CLASS_WEIGHTS [CLASS_WEIGHTS ...]]
-               [--loss {dice_ce,dice,gdl,gdl_ce}] [--sw-overlap SW_OVERLAP]
-               [--blend-mode {constant,gaussian}] [--postprocess [BOOLEAN]]
-               [--nfolds NFOLDS] [--folds FOLDS [FOLDS ...]] [--epochs EPOCHS]
-               [--steps-per-epoch STEPS_PER_EPOCH] [--output-std [BOOLEAN]]
+usage: mist_run_all [-h] [--exec-mode {all,analyze,preprocess,train}]
+                    [--data DATA] [--gpus GPUS [GPUS ...]]
+                    [--num-workers NUM_WORKERS] [--master-port MASTER_PORT]
+                    [--seed_val SEED_VAL] [--tta [BOOLEAN]]
+                    [--results RESULTS] [--numpy NUMPY] [--amp [BOOLEAN]]
+                    [--batch-size BATCH_SIZE]
+                    [--patch-size PATCH_SIZE [PATCH_SIZE ...]]
+                    [--max-patch-size MAX_PATCH_SIZE [MAX_PATCH_SIZE ...]]
+                    [--learning-rate LEARNING_RATE] [--exp_decay EXP_DECAY]
+                    [--lr-scheduler {constant,cosine_warm_restarts,exponential}]
+                    [--cosine-first-steps COSINE_FIRST_STEPS]
+                    [--optimizer {sgd,adam,adamw}] [--clip-norm [BOOLEAN]]
+                    [--clip-norm-max CLIP_NORM_MAX]
+                    [--model {nnunet,unet,attn_unet,unetr}]
+                    [--use-res-block [BOOLEAN]] [--pocket [BOOLEAN]]
+                    [--depth DEPTH] [--init-filters INIT_FILTERS]
+                    [--deep-supervision [BOOLEAN]]
+                    [--deep-supervision-heads DEEP_SUPERVISION_HEADS]
+                    [--vae-reg [BOOLEAN]] [--vae-penalty VAE_PENALTY]
+                    [--l2-reg [BOOLEAN]] [--l2-penalty L2_PENALTY]
+                    [--l1-reg [BOOLEAN]] [--l1-penalty L1_PENALTY]
+                    [--oversampling OVERSAMPLING] [--no-preprocess [BOOLEAN]]
+                    [--use-n4-bias-correction [BOOLEAN]]
+                    [--use-config-class-weights [BOOLEAN]]
+                    [--class-weights CLASS_WEIGHTS [CLASS_WEIGHTS ...]]
+                    [--loss {dice_ce,dice,gdl,gdl_ce}]
+                    [--sw-overlap SW_OVERLAP]
+                    [--blend-mode {constant,gaussian}]
+                    [--no-postprocess [BOOLEAN]] [--nfolds NFOLDS]
+                    [--folds FOLDS [FOLDS ...]] [--epochs EPOCHS]
+                    [--steps-per-epoch STEPS_PER_EPOCH]
+                    [--output-std [BOOLEAN]]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -272,7 +286,7 @@ optional arguments:
                         Number of workers to use for data loading (default: 8)
   --master-port MASTER_PORT
                         Master port for multi-gpu training (default: 12355)
-  --seed SEED           Random seed (default: 42)
+  --seed_val SEED_VAL   Random seed (default: 42)
   --tta [BOOLEAN]       Enable test time augmentation (default: False)
   --results RESULTS     Path to output of MIST pipeline (default: None)
   --numpy NUMPY         Path to save preprocessed numpy data (default: None)
@@ -281,8 +295,9 @@ optional arguments:
   --batch-size BATCH_SIZE
                         Batch size (default: 2)
   --patch-size PATCH_SIZE [PATCH_SIZE ...]
-                        Height, width, and depth of patch size (default: [64,
-                        64, 64])
+                        Height, width, and depth of patch size (default: None)
+  --max-patch-size MAX_PATCH_SIZE [MAX_PATCH_SIZE ...]
+                        Max patch size (default: [256, 256, 128])
   --learning-rate LEARNING_RATE
                         Learning rate (default: 0.001)
   --exp_decay EXP_DECAY
@@ -339,7 +354,7 @@ optional arguments:
   --blend-mode {constant,gaussian}
                         How to blend output of overlapping windows (default:
                         constant)
-  --postprocess [BOOLEAN]
+  --no-postprocess [BOOLEAN]
                         Run post processing on MIST output (default: False)
   --nfolds NFOLDS       Number of cross-validation folds (default: 5)
   --folds FOLDS [FOLDS ...]
@@ -353,53 +368,13 @@ optional arguments:
                         (default: False)
 ```
 
-## Inference
-### Overview
-Once the MIST pipeline finishes running, the saved models are in the ```models/``` directory in 
-the specified ```--results``` folder. Additionally, the MIST pipeline outputs a file 
-called ```config.json``` at the top level of the user-defined ```--results``` folder. 
-We can run the MIST pipeline on new test data using the following command.
-
+Here are the available arguments for ```mist_predict```:
 ```
-python predict.py --models /path/to/entire/models/directory \  *** PLEASE PASS ENTIRE MODELS DIRECTORY HERE ***
---config /path/to/config.json \
---data /path/to/new-data.csv/or/new-data.json \
---output /path/to/save/new/predictions
-```
-
-MIST supports two formats for test data: CSV and JSON. For CSV formatted data, the CSV file must,
-at a minimum, have an ```id``` column with the new patient IDs and one column for each image type.
-A column for the ```mask``` is allowed if you want to run the evaluation portion of the pipeline
-(see below). For example, for the BraTS dataset, our CSV header would look like the following.
-
-| id         | mask (optional) | t1               | t2               | tc               | fl               |
-|------------|-----------------|------------------|------------------|------------------|------------------|
-| Patient ID | Path to mask    | Path to t1 image | Path to t2 image | Path to tc image | Path to fl image |
-
-Similarly, for JSON formatted data, we would have the following.
-```
-{
-    "Patient ID": {
-        "mask": "Path to mask", *** (optional) ***
-        "t1": "Path to t1 image",
-        "t2": "Path to t2 image",
-        "tc": "Path to tc image", 
-        "fl": "Path to fl image"
-    }
-}
-```
-Note that the order of the image types should be the same as the order given in the JSON file
-input to the MIST training pipeline.
-
-### Advanced Usage
-A complete list of available options and their descriptions, can be accessed by 
-using ```-h``` or ```--help``` command-line option, for example:
-```
-usage: predict.py [-h] [--models MODELS] [--config CONFIG] [--data DATA]
-                  [--output OUTPUT] [--fast [BOOLEAN]] [--gpu GPU]
-                  [--sw-overlap SW_OVERLAP] [--blend-mode {constant,gaussian}]
-                  [--tta [BOOLEAN]] [--no-preprocess [BOOLEAN]]
-                  [--output_std [BOOLEAN]]
+usage: mist_predict [-h] [--models MODELS] [--config CONFIG] [--data DATA]
+                    [--output OUTPUT] [--fast [BOOLEAN]] [--gpu GPU]
+                    [--sw-overlap SW_OVERLAP]
+                    [--blend-mode {constant,gaussian}] [--tta [BOOLEAN]]
+                    [--no-preprocess [BOOLEAN]] [--output_std [BOOLEAN]]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -425,27 +400,15 @@ optional arguments:
                         Outputs standard deviation image (default: False)
 ```
 
-## Evaluating
-If you have a set of predictions that you want to evaluate, then run the ```eval_preds.py``` script
-as follows:
-
+Here are the available arguments for ```mist_evaluate```:
 ```
-python eval_preds.py --data-json /path/to/dataset.json \
---paths /path/to/original-paths.csv/or/original-paths.json \
---preds-dir /path/to/directory/with/predictions \ 
---output-csv /path/to/evaluation/output.csv
-```
-
-A full list of options for the evaluation scirpt is below.
-
-```
-usage: eval_preds.py [-h] [--data-json DATA_JSON] [--paths PATHS]
+usage: mist_evaluate [-h] [--config CONFIG] [--paths PATHS]
                      [--preds-dir PREDS_DIR] [--output-csv OUTPUT_CSV]
 
 optional arguments:
   -h, --help            show this help message and exit
-  --data-json DATA_JSON
-                        Path to dataset JSON file (default: None)
+  --config CONFIG       Path to config.json file from MIST output (default:
+                        None)
   --paths PATHS         Path to CSV or JSON file with original mask/data
                         (default: None)
   --preds-dir PREDS_DIR
@@ -456,29 +419,11 @@ optional arguments:
                         None)
 ```
 
-## MSD and CSV Formatted Data
-If your dataset in the MSD or CSV format, then you can use the ```convert_to_mist.py``` script to convert your dataset to the standard MIST format described above. For example, if your dataset is in the MSD format, then use the following command to convert it to the standard MSD format.
+Here are the available arguments for ```mist_convert_dataset```:
 ```
-python convert_to_mist.py --msd-source /path/to/msd/dataset \
---dest /path/to/mist/format/dataset
-```
-This will reformat the MSD dataset to the MIST format and produce the corresponding JSON file to run the MIST pipeline.
-
-If your dataset is given as a CSV file with ```id```, ```mask```, and columns for each image type, then use the following command to convert it to a MIST-compatible dataset.
-```
-python convert_to_mist.py --format csv \
---train-csv /path/to/csv/dataset.csv \
---dest /path/to/mist/format/dataset
-```
-Like the MSD formatted dataset, this command will reformat the CSV dataset to a MIST-compatible 
-one but will require the user to fill in details in its corresponding JSON file.
-
-A complete list of available options and their descriptions, can be accessed by 
-using ```-h``` or ```--help``` command-line option, for example:
-```
-usage: convert_to_mist.py [-h] [--format {msd,csv}] [--msd-source MSD_SOURCE]
-                          [--train-csv TRAIN_CSV] [--test-csv TEST_CSV]
-                          [--dest DEST]
+usage: mist_convert_dataset [-h] [--format {msd,csv}]
+                            [--msd-source MSD_SOURCE] [--train-csv TRAIN_CSV]
+                            [--test-csv TEST_CSV] [--dest DEST]
 
 optional arguments:
   -h, --help            show this help message and exit

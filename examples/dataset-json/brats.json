@@ -1,43 +1,43 @@
 {
-    "task": "brats2020",
+    "task": "brats2023",
     "modality": "mr",
-    "train-data": "/workspace/data/brats_2020/raw/train",
-    "test-data": "/workspace/data/brats_2020/raw/validation",
+    "train-data": "/workspace/data/brats2023/raw/train",
+    "test-data": "/workspace/data/brats2023/raw/validation",
     "mask": [
         "seg.nii.gz"
       ],
     "images": {
         "t1": [
-          "t1.nii.gz"
+          "t1n.nii.gz"
         ],
         "t2": [
-          "t2.nii.gz"
+          "t2w.nii.gz"
         ],
         "tc": [
-          "t1ce.nii.gz"
+          "t1c.nii.gz"
         ],
         "fl": [
-          "flair.nii.gz"
+          "t2f.nii.gz"
         ]
       },
     "labels": [
         0,
         1,
         2,
-        4
+        3
       ],
     "final_classes": {
         "WT": [
           1,
           2,
-          4
+          3
         ],
         "TC": [
           1,
-          4
+          3
         ],
         "ET": [
-          4
+          3
         ]
       }
 }
