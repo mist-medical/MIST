@@ -1,0 +1,61 @@
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+# GitHub recommends pinning actions to a commit SHA.
+# To get a newer version, you will need to update the SHA.
+# You can also reference a tag or branch, but the action may change without warning.
+
+name: Publish Docker Images
+
+on:
+  workflow_run:
+    workflows: [Upload Python Package]
+    types: [completed]
+
+jobs:
+  push_to_registry:
+    name: Push Docker image to Docker Hub
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - dockerfile: ./dockerfiles/mist.dockerfile
+          - image: mistmedical/mist:latest
+          - dockerfile: ./dockerfiles/mist_run_all.dockerfile
+          - image: mistmedical/mist_run_all:latest
+          - dockerfile: ./dockerfiles/mist_analyze.dockerfile
+          - image: mistmedical/mist_analyze:latest
+          - dockerfile: ./dockerfiles/mist_preprocess.dockerfile
+          - image: mistmedical/mist_preprocess:latest
+          - dockerfile: ./dockerfiles/mist_train.dockerfile
+          - image: mistmedical/mist_train:latest
+          - dockerfile: ./dockerfiles/mist_predict.dockerfile
+          - image: mistmedical/mist_predict:latest
+          - dockerfile: ./dockerfiles/mist_evaluate.dockerfile
+          - image: mistmedical/mist_evaluate:latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+        with:
+          images: ${{ matrix.image }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
