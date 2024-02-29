@@ -14,7 +14,7 @@ on:
     workflows: [Upload Python Package]
     types: [completed]
 
-  workflow_dispatch
+  workflow_dispatch:
 
 jobs:
   push_to_registry:
