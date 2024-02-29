@@ -201,15 +201,31 @@ When you install the MIST package, the following commands are included:
 	Note that the CSV file should mirror the CSV format shown in the ```mist_predict``` command. Additionally, this command will reformat the CSV dataset to a MIST-compatible one but will require the user to fill in details in its corresponding dataset JSON file.
     
 ### Docker
-Except for ```mist_convert_dataset```, each of the commands described above is also available as a separate Docker application. Start by pulling the Docker image you need with the following command:
+The MIST package is also available as a Docker image. Start by pulling the ```mistmedical/mist``` image from DockerHub:
 ```
-docker pull mistmedical/mist_run_all:latest
+docker pull mistmedical/mist:latest
 ```
 
-To run this, use the following command:
+Use the following command to run an interactive Docker container with the MIST package:
 ```
-docker run --rm -it -u $(id -u):$(id -g) --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 -v /your/working/directory/:/workspace mist_run_all [--your arguments]
+docker run --rm -it -u $(id -u):$(id -g) --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 -v /your/working/directory/:/workspace mist
 ```
+
+From there, you can run any of the commands described above inside the Docker container. Additionally, you can create and build a separate 
+Docker image for a given command as its entry point. For example, to create a Docker image to run the ```mist_predict``` command, 
+you can create the following Dockerfile,
+```
+ARG FROM_IMAGE_NAME=mistmedical/mist:latest
+FROM ${FROM_IMAGE_NAME}
+
+ENTRYPOINT ["mist_predict"]
+```
+
+build the image, and run it with the following command:
+```a
+docker run --rm -it -u $(id -u):$(id -g) --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 -v /your/working/directory/:/workspace <your image> --<your args>
+```
+
 
 ## Output
 The output of the MIST pipeline has the following structure:
