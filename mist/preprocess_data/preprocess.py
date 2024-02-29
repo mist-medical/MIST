@@ -251,6 +251,9 @@ def preprocess_dataset(args):
     else:
         progress = get_progress_bar("Preprocessing")
 
+    if config["crop_to_fg"] and not args.no_preprocess:
+        fg_bboxes = pd.read_csv(os.path.join(args.results, "fg_bboxes.csv"))
+
     with progress as pb:
         for i in pb.track(range(len(df))):
             # Get paths to images for single patient
@@ -266,7 +269,9 @@ def preprocess_dataset(args):
                 image_npy, mask_npy, _ = convert_nifti_to_numpy(image_list, mask)
             else:
                 if config["crop_to_fg"]:
-                    fg_bboxes = pd.read_csv(os.path.join(args.results, "fg_bboxes.csv"))
+                    fg_bbox = fg_bboxes.loc[fg_bboxes["id"] == patient["id"]].iloc[0].to_dict()
 
-                fg_bbox = fg_bboxes.iloc[i].to_dict()
                 image_npy, mask_npy, _ = preprocess_example(config, image_list, mask, fg_bbox)
+
+            np.save(os.path.join(args.numpy, images_dir, f"{patient['id']}.npy"), image_npy.astype("float32"))
+            np.save(os.path.join(args.numpy, labels_dir, f"{patient['id']}.npy"), mask_npy.astype("uint8"))

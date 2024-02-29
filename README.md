@@ -7,6 +7,8 @@ medical imaging segmentation. The following architectures are implemented on MIS
 
 * nnUNet
 * U-Net
+* FMG-Net
+* W-Net
 * Attention U-Net
 * UNETR
 
@@ -16,10 +18,13 @@ The following features are supported by MIST:
 * [Automatic mixed precision (AMP)](https://www.tensorflow.org/guide/mixed_precision)
 * [Multi-GPU training with DistributedDataParallel](https://pytorch.org/tutorials/intermediate/ddp_tutorial.html)
 
-Please cite the following if you use this code for your work:
+Please cite the following papers if you use this code for your work:
 
 > [A. Celaya et al., "PocketNet: A Smaller Neural Network For Medical Image Analysis," in IEEE Transactions on 
 > Medical Imaging, doi: 10.1109/TMI.2022.3224873.](https://ieeexplore.ieee.org/document/9964128)
+
+> [A. Celaya et al, "FMG-Net and W-Net: Multigrid Inspired Deep Learning Architectures For Medical Imaging Segmentation", in
+> Proceedings of LatinX in AI (LXAI) Research Workshop @ NeurIPS 2023, doi: 10.52591/lxai202312104](https://research.latinxinai.org/papers/neurips/2023/pdf/Adrian_Celaya.pdf)
 
 
 ## What's New

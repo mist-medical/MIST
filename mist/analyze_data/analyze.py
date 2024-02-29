@@ -19,15 +19,16 @@ from mist.runtime.utils import (
 
 
 def compare_headers(header1, header2):
-    is_valid = True
-
     if header1["dimensions"] != header2["dimensions"]:
         is_valid = False
-    if not np.array_equal(np.array(header1["spacing"]), np.array(header2["spacing"])):
+    elif header1["origin"] != header2["origin"]:
         is_valid = False
-    if not np.array_equal(header1["direction"], header2["direction"]):
+    elif not np.array_equal(np.array(header1["spacing"]), np.array(header2["spacing"])):
         is_valid = False
-
+    elif not np.array_equal(header1["direction"], header2["direction"]):
+        is_valid = False
+    else:
+        is_valid = True
     return is_valid
 
 
@@ -57,9 +58,6 @@ class Analyzer:
 
         self.config = dict()
         self.df = get_files_df(self.data, "train")
-
-        # Add folds to paths dataframe
-        self.df = add_folds_to_df(self.df, n_splits=self.args.nfolds)
 
     def check_crop_fg(self):
         """
@@ -342,7 +340,7 @@ class Analyzer:
                     continue
 
                 # Get list of image paths and segmentation mask
-                image_list = list(patient.values())[3:len(patient)]
+                image_list = list(patient.values())[2:len(patient)]
                 mask_header = ants.image_header_info(patient["mask"])
                 for image_path in image_list:
                     image_header = ants.image_header_info(image_path)
@@ -389,6 +387,9 @@ class Analyzer:
 
         rows_to_drop = self.df.index[bad_data]
         self.df.drop(rows_to_drop, inplace=True)
+
+        # Add folds to paths dataframe
+        self.df = add_folds_to_df(self.df, n_splits=self.args.nfolds)
 
         self.df.to_csv(self.train_paths_csv, index=False)
 

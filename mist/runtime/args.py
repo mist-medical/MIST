@@ -72,7 +72,7 @@ def get_main_args():
     p.arg("--batch-size", type=positive_int, default=2, help="Batch size")
     p.arg("--patch-size", nargs="+", type=int, help="Height, width, and depth of patch size")
     p.arg("--max-patch-size", default=[256, 256, 128], nargs="+", type=int, help="Max patch size")
-    p.arg("--learning-rate", type=float, default=0.001, help="Learning rate")
+    p.arg("--learning-rate", type=float, default=0.0003, help="Learning rate")
     p.arg("--exp_decay", type=float, default=0.9, help="Exponential decay factor")
     p.arg("--lr-scheduler",
           type=str,
@@ -93,15 +93,14 @@ def get_main_args():
     p.arg("--model",
           type=str,
           default="nnunet",
-          choices=["nnunet", "unet", "attn_unet", "unetr"])
+          choices=["nnunet", "unet", "fmgnet", "wnet", "attn_unet", "unetr"])
     p.boolean_flag("--use-res-block", default=False, help="Use residual blocks for nnUNet or UNet")
     p.boolean_flag("--pocket", default=False, help="Use pocket version of network")
     p.arg("--depth", type=non_negative_int, help="Depth of U-Net or similar architecture")
-    p.arg("--init-filters", type=non_negative_int, default=32, help="Number of filters to start network")
     p.boolean_flag("--deep-supervision", default=False, help="Use deep supervision")
     p.arg("--deep-supervision-heads", type=positive_int, default=2, help="Number of deep supervision heads")
     p.boolean_flag("--vae-reg", default=False, help="Use VAE regularization")
-    p.arg("--vae-penalty", type=float_0_1, default=0.1, help="Weight for VAE regularization loss")
+    p.arg("--vae-penalty", type=float_0_1, default=0.05, help="Weight for VAE regularization loss")
     p.boolean_flag("--l2-reg", default=False, help="Use L2 regularization")
     p.arg("--l2-penalty", type=float_0_1, default=0.00001, help="L2 penalty")
     p.boolean_flag("--l1-reg", default=False, help="Use L1 regularization")
@@ -110,7 +109,7 @@ def get_main_args():
     # Data loading
     p.arg("--oversampling",
           type=float_0_1,
-          default=0.40,
+          default=0.4,
           help="Probability of crop centered on foreground voxel")
 
     # Preprocessing
@@ -134,7 +133,7 @@ def get_main_args():
     p.arg("--blend-mode",
           type=str,
           choices=["constant", "gaussian"],
-          default="constant",
+          default="gaussian",
           help="How to blend output of overlapping windows")
 
     # Postprocessing

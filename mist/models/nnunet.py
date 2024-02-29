@@ -5,7 +5,12 @@ from torch.nn.functional import interpolate
 
 from monai.networks.blocks.convolutions import Convolution
 from monai.networks.layers.factories import Act, Norm
-from monai.networks.blocks.dynunet_block import UnetBasicBlock, UnetOutBlock, UnetResBlock, UnetUpBlock
+from monai.networks.blocks.dynunet_block import (
+    UnetBasicBlock,
+    UnetOutBlock,
+    UnetResBlock,
+    UnetUpBlock
+)
 
 
 def get_padding(kernel_size, stride):
@@ -88,9 +93,19 @@ class UnetVAEUpBlock(nn.Module):
     ):
         super().__init__()
         upsample_stride = upsample_kernel_size
-        self.transp_conv = get_conv_layer(
+        self.conv_block = UnetBasicBlock(
             3,
             in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            stride=1,
+            dropout=dropout,
+            norm_name=norm_name,
+            act_name=act_name,
+        )
+        self.transp_conv = get_conv_layer(
+            3,
+            out_channels,
             out_channels,
             kernel_size=upsample_kernel_size,
             stride=upsample_stride,
@@ -101,21 +116,10 @@ class UnetVAEUpBlock(nn.Module):
             conv_only=False,
             is_transposed=True,
         )
-        self.conv_block = UnetBasicBlock(
-            3,
-            out_channels,
-            out_channels,
-            kernel_size=kernel_size,
-            stride=1,
-            dropout=dropout,
-            norm_name=norm_name,
-            act_name=act_name,
-        )
 
     def forward(self, inp):
-        # number of channels for skip should equals to out_channels
-        out = self.transp_conv(inp)
-        out = self.conv_block(out)
+        out = self.conv_block(inp)
+        out = self.transp_conv(out)
         return out
 
 
@@ -132,6 +136,7 @@ class DynUNet(nn.Module):
             strides,
             upsample_kernel_size,
             filters,
+            latent_dim,
             dropout=None,
             norm_name=("INSTANCE", {"affine": True}),
             act_name=("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
@@ -140,7 +145,6 @@ class DynUNet(nn.Module):
             res_block=False,
             trans_bias=False,
             vae_reg=False,
-            latent_dim=64
     ):
 
         super().__init__()
@@ -247,7 +251,7 @@ class DynUNet(nn.Module):
             x_vae = mu + torch.exp(0.5 * log_var) * self.normal_dist.sample(mu.shape)
 
             # Reshape for decoder
-            x_vae = torch.reshape(x_vae, (x.shape[0], 1, x.shape[2], x.shape[3], x.shape[4]))
+            x_vae = torch.reshape(x_vae, (x.shape[0], self.in_channels, x.shape[2], x.shape[3], x.shape[4]))
 
             # Start VAE decoder
             for decoder_block in self.upsamples_vae:
@@ -358,7 +362,7 @@ class DynUNet(nn.Module):
             strides,
             conv_block,
             upsample_kernel_size=None,
-            trans_bias=False,):
+            trans_bias=False, ):
         layers = []
         if upsample_kernel_size is not None:
             for in_c, out_c, kernel, stride, up_kernel in zip(
@@ -407,8 +411,8 @@ class DynUNet(nn.Module):
 
 class NNUnet(nn.Module):
     def __init__(self,
-                 n_classes,
                  n_channels,
+                 n_classes,
                  pocket,
                  deep_supervision,
                  deep_supervision_heads,
@@ -432,7 +436,7 @@ class NNUnet(nn.Module):
         self.use_res_block = use_res_block
 
         self.vae_reg = vae_reg
-        self.latent_dim = int(np.prod(size))
+        self.latent_dim = int(np.prod(size)) * self.n_channels
 
         self.unet = DynUNet(
             self.n_channels,
@@ -441,14 +445,14 @@ class NNUnet(nn.Module):
             strides,
             strides[1:],
             filters=filters,
+            latent_dim=self.latent_dim,
             norm_name=("INSTANCE", {"affine": True}),
             act_name=("leakyrelu", {"inplace": False, "negative_slope": 0.01}),
             deep_supervision=self.deep_supervision,
             deep_supr_num=self.deep_supervision_heads,
             res_block=self.use_res_block,
             trans_bias=True,
-            vae_reg=self.vae_reg,
-            latent_dim=self.latent_dim
+            vae_reg=self.vae_reg
         )
 
     def forward(self, x):

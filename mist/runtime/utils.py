@@ -439,23 +439,32 @@ def get_transform(transform):
 def get_fg_mask_bbox(img_ants, patient_id=None):
     image_npy = img_ants.numpy()
 
-    # Clip image to improve fg bbox
-    lower = np.percentile(image_npy, 33)
-    upper = np.percentile(image_npy, 99.5)
-    image_npy = np.clip(image_npy, lower, upper)
+    # # Clip image to improve fg bbox
+    # lower = np.percentile(image_npy, 33)
+    # upper = np.percentile(image_npy, 99.5)
+    # image_npy = np.clip(image_npy, lower, upper)
 
     val = skimage.filters.threshold_otsu(image_npy)
     fg_mask = (image_npy > val)
-    fg_mask = clean_mask(fg_mask, middle_op="get_largest_cc")
+    # fg_mask = clean_mask(fg_mask, middle_op="get_largest_cc")
     nz = np.nonzero(fg_mask)
     og_size = img_ants.shape
 
-    fg_bbox = {"x_start": np.min(nz[0]), "x_end": np.max(nz[0]),
-               "y_start": np.min(nz[1]), "y_end": np.max(nz[1]),
-               "z_start": np.min(nz[2]), "z_end": np.max(nz[2]),
-               "x_og_size": og_size[0],
-               "y_og_size": og_size[1],
-               "z_og_size": og_size[2]}
+    if np.sum(fg_mask) > 0:
+        fg_bbox = {"x_start": np.min(nz[0]), "x_end": np.max(nz[0]),
+                   "y_start": np.min(nz[1]), "y_end": np.max(nz[1]),
+                   "z_start": np.min(nz[2]), "z_end": np.max(nz[2]),
+                   "x_og_size": og_size[0],
+                   "y_og_size": og_size[1],
+                   "z_og_size": og_size[2]}
+    else:
+        # Fail case if fg_mask is empty
+        fg_bbox = {"x_start": 0, "x_end": og_size[0] - 1,
+                   "y_start": 0, "y_end": og_size[1] - 1,
+                   "z_start": 0, "z_end": og_size[2] - 1,
+                   "x_og_size": og_size[0],
+                   "y_og_size": og_size[1],
+                   "z_og_size": og_size[2]}
 
     if not (patient_id is None):
         fg_bbox_with_id = {"id": patient_id}

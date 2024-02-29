@@ -3,7 +3,7 @@ from mist.runtime.utils import set_warning_levels
 from mist.runtime.args import get_main_args
 
 
-def preprocessing_entry():
+def preprocess_entry():
     set_warning_levels()
     args = get_main_args()
     args.exec_mode = "preprocess"
