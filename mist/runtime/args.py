@@ -100,7 +100,7 @@ def get_main_args():
     p.boolean_flag("--deep-supervision", default=False, help="Use deep supervision")
     p.arg("--deep-supervision-heads", type=positive_int, default=2, help="Number of deep supervision heads")
     p.boolean_flag("--vae-reg", default=False, help="Use VAE regularization")
-    p.arg("--vae-penalty", type=float_0_1, default=0.05, help="Weight for VAE regularization loss")
+    p.arg("--vae-penalty", type=float_0_1, default=0.01, help="Weight for VAE regularization loss")
     p.boolean_flag("--l2-reg", default=False, help="Use L2 regularization")
     p.arg("--l2-penalty", type=float_0_1, default=0.00001, help="L2 penalty")
     p.boolean_flag("--l1-reg", default=False, help="Use L1 regularization")
@@ -142,10 +142,15 @@ def get_main_args():
     # Validation
     p.arg("--nfolds", type=positive_int, default=5, help="Number of cross-validation folds")
     p.arg("--folds", nargs="+", default=[0, 1, 2, 3, 4], type=int, help="Which folds to run")
-    p.arg("--epochs", type=positive_int, default=300, help="Number of epochs")
+    p.arg("--epochs", type=positive_int, default=1000, help="Number of epochs")
     p.arg("--steps-per-epoch",
           type=positive_int,
           help="Steps per epoch. By default ceil(training_dataset_size / batch_size / gpus)")
+
+    # Evaluation
+    p.boolean_flag("--use-native-spacing",
+                   default=False,
+                   help="Use native image spacing to compute Hausdorff distances")
 
     # Uncertainty
     p.boolean_flag("--output-std", default=False, help="Output standard deviation for ensemble predictions")

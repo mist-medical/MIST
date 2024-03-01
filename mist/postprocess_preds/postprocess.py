@@ -23,7 +23,7 @@ console = Console()
 def is_improvement(prev_best, current):
     """
     Check if the majority of Dice, Hausdroff, and average surface results across all classes
-    improve by at least 5%. If so, then use current strategy
+    improve. If so, then use current strategy
     """
     dice_cols = [col for col in list(prev_best.columns) if "dice" in col]
     haus_cols = [col for col in list(prev_best.columns) if "haus" in col]
@@ -32,17 +32,17 @@ def is_improvement(prev_best, current):
     # Check if dice increases by 5%
     prev_best_dice = np.array(list(prev_best.iloc[-5][dice_cols]))
     current_dice = np.array(list(current.iloc[-5][dice_cols]))
-    improvements_dice = list(current_dice >= 1.05*prev_best_dice)
+    improvements_dice = list(current_dice >= prev_best_dice)
 
     # Check if hausdorff distance decreases by 5%
     prev_best_haus = np.array(list(prev_best.iloc[-5][haus_cols]))
     current_haus = np.array(list(current.iloc[-5][haus_cols]))
-    improvements_haus = list(current_haus <= 0.95*prev_best_haus)
+    improvements_haus = list(current_haus <= prev_best_haus)
 
     # Check if average surface distance decreases by 5%
     prev_best_avg_surf = np.array(list(prev_best.iloc[-5][avg_surf_cols]))
     current_avg_surf = np.array(list(current.iloc[-5][avg_surf_cols]))
-    improvements_avg_surf = list(current_avg_surf <= 0.95 * prev_best_avg_surf)
+    improvements_avg_surf = list(current_avg_surf <= prev_best_avg_surf)
 
     improvements = improvements_dice + improvements_haus + improvements_avg_surf
 
@@ -116,7 +116,8 @@ class Postprocessor:
             evaluate(self.config_file,
                      self.train_paths,
                      self.temp_dir,
-                     self.new_results_csv)
+                     self.new_results_csv,
+                     self.args.use_native_spacing)
 
             # Compute new score
             new_results_df = pd.read_csv(self.new_results_csv)
@@ -154,8 +155,8 @@ class Postprocessor:
         console.print(text)
 
         # Define transforms and where to save results
-        transforms = ["clean_mask", "remove_small_objects", "get_largest_cc", "fill_holes"]
-        messages = ["Morph. cleaning", "Removing small objects", "Getting largest CC", "Fill holes"]
+        transforms = ["remove_small_objects", "top_k", "get_largest_cc", "clean_mask", "fill_holes"]
+        messages = ["Removing small objects", "Getting top 2 CC", "Getting largest CC", "Morph. cleaning", "Fill holes"]
         apply_to_labels = dict(zip(transforms, [None] * len(transforms)))
 
         # Check different postprocessing strategies

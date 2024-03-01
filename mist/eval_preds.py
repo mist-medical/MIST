@@ -12,6 +12,9 @@ def get_eval_args():
     p.arg("--paths", type=str, help="Path to CSV or JSON file with original mask/data")
     p.arg("--preds-dir", type=str, help="Path to directory containing predictions")
     p.arg("--output-csv", type=str, help="Path to CSV containing evaluation results")
+    p.boolean_flag("--use-native-spacing",
+                   default=False,
+                   help="Use native image spacing to compute Hausdorff distances")
 
     args = p.parse_args()
     return args
@@ -22,7 +25,11 @@ def main(args):
     set_warning_levels()
 
     # Evaluate predictions
-    evaluate(args.config, args.paths, args.preds_dir, args.output_csv)
+    evaluate(args.config,
+             args.paths,
+             args.preds_dir,
+             args.output_csv,
+             args.use_native_spacing)
 
 
 def mist_eval_entry():

@@ -23,7 +23,7 @@ Please cite the following papers if you use this code for your work:
 > [A. Celaya et al., "PocketNet: A Smaller Neural Network For Medical Image Analysis," in IEEE Transactions on 
 > Medical Imaging, doi: 10.1109/TMI.2022.3224873.](https://ieeexplore.ieee.org/document/9964128)
 
-> [A. Celaya et al, "FMG-Net and W-Net: Multigrid Inspired Deep Learning Architectures For Medical Imaging Segmentation", in
+> [A. Celaya et al., "FMG-Net and W-Net: Multigrid Inspired Deep Learning Architectures For Medical Imaging Segmentation", in
 > Proceedings of LatinX in AI (LXAI) Research Workshop @ NeurIPS 2023, doi: 10.52591/lxai202312104](https://research.latinxinai.org/papers/neurips/2023/pdf/Adrian_Celaya.pdf)
 
 
@@ -187,12 +187,12 @@ When you install the MIST package, the following commands are included:
   ```
   
 * ```mist_evaluate```: This command is used to evaluate a set of predictions and requires the following arguments:
-	- ```--paths```: The full paths to the ground truth masks formated in either CSV or JSON format (see ```mist_predict```)
+	- ```--paths```: The full paths to the ground truth masks formatted in either CSV or JSON format (see ```mist_predict```)
 	- ```--config```: The full path to the directory to the ```config.json``` file in the output of the MIST pipeline
 	- ```--preds-dir```: The full path to the directory where the predictions are saved
 	- ```--output-csv```: The full path to the CSV file where the results will be saved
 
-* ```mist_convert_dataset```: This command converts either MSD or CSV formated datasets into MIST formatted data. The following arguments are required for this command:
+* ```mist_convert_dataset```: This command converts either MSD or CSV formatted datasets into MIST formatted data. The following arguments are required for this command:
 	- ```--format```: The format of the given dataset, which can be either ```msd``` or ```csv```
 	- ```--msd-source```: The full path to the MSD dataset, if that is what you are converting
 	- ```--csv-source```: The full path to the CSV dataset, if that is what you are using
@@ -274,10 +274,9 @@ usage: mist_run_all [-h] [--exec-mode {all,analyze,preprocess,train}]
                     [--cosine-first-steps COSINE_FIRST_STEPS]
                     [--optimizer {sgd,adam,adamw}] [--clip-norm [BOOLEAN]]
                     [--clip-norm-max CLIP_NORM_MAX]
-                    [--model {nnunet,unet,attn_unet,unetr}]
+                    [--model {nnunet,unet,fmgnet,wnet,attn_unet,unetr}]
                     [--use-res-block [BOOLEAN]] [--pocket [BOOLEAN]]
-                    [--depth DEPTH] [--init-filters INIT_FILTERS]
-                    [--deep-supervision [BOOLEAN]]
+                    [--depth DEPTH] [--deep-supervision [BOOLEAN]]
                     [--deep-supervision-heads DEEP_SUPERVISION_HEADS]
                     [--vae-reg [BOOLEAN]] [--vae-penalty VAE_PENALTY]
                     [--l2-reg [BOOLEAN]] [--l2-penalty L2_PENALTY]
@@ -292,7 +291,7 @@ usage: mist_run_all [-h] [--exec-mode {all,analyze,preprocess,train}]
                     [--no-postprocess [BOOLEAN]] [--nfolds NFOLDS]
                     [--folds FOLDS [FOLDS ...]] [--epochs EPOCHS]
                     [--steps-per-epoch STEPS_PER_EPOCH]
-                    [--output-std [BOOLEAN]]
+                    [--use-native-spacing [BOOLEAN]] [--output-std [BOOLEAN]]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -320,7 +319,7 @@ optional arguments:
   --max-patch-size MAX_PATCH_SIZE [MAX_PATCH_SIZE ...]
                         Max patch size (default: [256, 256, 128])
   --learning-rate LEARNING_RATE
-                        Learning rate (default: 0.001)
+                        Learning rate (default: 0.0003)
   --exp_decay EXP_DECAY
                         Exponential decay factor (default: 0.9)
   --lr-scheduler {constant,cosine_warm_restarts,exponential}
@@ -334,21 +333,19 @@ optional arguments:
                         Use gradient clipping (default: False)
   --clip-norm-max CLIP_NORM_MAX
                         Max threshold for global norm clipping (default: 1.0)
-  --model {nnunet,unet,attn_unet,unetr}
+  --model {nnunet,unet,fmgnet,wnet,attn_unet,unetr}
   --use-res-block [BOOLEAN]
                         Use residual blocks for nnUNet or UNet (default:
                         False)
   --pocket [BOOLEAN]    Use pocket version of network (default: False)
   --depth DEPTH         Depth of U-Net or similar architecture (default: None)
-  --init-filters INIT_FILTERS
-                        Number of filters to start network (default: 32)
   --deep-supervision [BOOLEAN]
                         Use deep supervision (default: False)
   --deep-supervision-heads DEEP_SUPERVISION_HEADS
                         Number of deep supervision heads (default: 2)
   --vae-reg [BOOLEAN]   Use VAE regularization (default: False)
   --vae-penalty VAE_PENALTY
-                        Weight for VAE regularization loss (default: 0.1)
+                        Weight for VAE regularization loss (default: 0.01)
   --l2-reg [BOOLEAN]    Use L2 regularization (default: False)
   --l2-penalty L2_PENALTY
                         L2 penalty (default: 1e-05)
@@ -374,16 +371,19 @@ optional arguments:
                         inference (default: 0.25)
   --blend-mode {constant,gaussian}
                         How to blend output of overlapping windows (default:
-                        constant)
+                        gaussian)
   --no-postprocess [BOOLEAN]
                         Run post processing on MIST output (default: False)
   --nfolds NFOLDS       Number of cross-validation folds (default: 5)
   --folds FOLDS [FOLDS ...]
                         Which folds to run (default: [0, 1, 2, 3, 4])
-  --epochs EPOCHS       Number of epochs (default: 300)
+  --epochs EPOCHS       Number of epochs (default: 1000)
   --steps-per-epoch STEPS_PER_EPOCH
                         Steps per epoch. By default ceil(training_dataset_size
                         / batch_size / gpus) (default: None)
+  --use-native-spacing [BOOLEAN]
+                        Use native image spacing to compute Hausdorff
+                        distances (default: False)
   --output-std [BOOLEAN]
                         Output standard deviation for ensemble predictions
                         (default: False)
@@ -425,6 +425,7 @@ Here are the available arguments for ```mist_evaluate```:
 ```
 usage: mist_evaluate [-h] [--config CONFIG] [--paths PATHS]
                      [--preds-dir PREDS_DIR] [--output-csv OUTPUT_CSV]
+                     [--use-native-spacing [BOOLEAN]]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -438,6 +439,9 @@ optional arguments:
   --output-csv OUTPUT_CSV
                         Path to CSV containing evaluation results (default:
                         None)
+  --use-native-spacing [BOOLEAN]
+                        Use native image spacing to compute Hausdorff
+                        distances (default: False)
 ```
 
 Here are the available arguments for ```mist_convert_dataset```:

@@ -10,11 +10,12 @@
 name: Publish Docker Images
 
 on:
-  workflow_run:
-    workflows: [Upload Python Package]
-    types: [completed]
-
   workflow_dispatch:
+
+# TODO: Docker images are too large right now. Fix this later.
+#  workflow_run:
+#    workflows: [Upload Python Package]
+#    types: [completed]
 
 jobs:
   push_to_registry:

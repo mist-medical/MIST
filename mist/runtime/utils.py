@@ -372,12 +372,13 @@ Morphological tools
 
 
 def get_largest_cc(mask_npy):
+    # Get connected components
     labels = label(mask_npy)
+
+    # Assume at least one component
     if labels.max() > 0:
-        largest_cc = labels == np.argmax(np.bincount(labels.flat)[1:]) + 1
-    else:
-        largest_cc = mask_npy
-    return largest_cc
+        mask_npy = labels == np.argmax(np.bincount(labels.flat)[1:]) + 1
+    return mask_npy
 
 
 def remove_small_objects(mask_npy):
@@ -386,16 +387,24 @@ def remove_small_objects(mask_npy):
 
     # Assume at least one component
     if labels.max() > 0:
-        # Count connected component sizes to get threshold
-        label_cnts = np.bincount(labels.flat)[1:]
-
-        # Get threshold for small objects
-        small_obj_thresh = np.max([int(np.floor(np.percentile(label_cnts, 99.5))), 64])
-
         # Remove small objects of size lower than our threshold
-        mask_npy = skimage.morphology.remove_small_objects(mask_npy.astype("bool"),
-                                                           min_size=small_obj_thresh)
+        mask_npy = skimage.morphology.remove_small_objects(mask_npy.astype("bool"), min_size=64)
     return mask_npy
+
+
+def get_top_k_components(mask_npy, k=2):
+    # Get connected components
+    labels = label(mask_npy)
+    label_bin_cnts = list(np.bincount(labels.flat)[1:])
+    label_bin_cnts_sort = sorted(label_bin_cnts, reverse=True)
+
+    # Assume at least one component
+    temp = np.zeros(mask_npy.shape)
+    if labels.max() > 0 and len(label_bin_cnts) >= k:
+        for i in range(k):
+            temp += labels == np.where(label_bin_cnts == label_bin_cnts_sort[i])[0][0] + 1
+
+    return temp
 
 
 def fill_holes(mask_npy, fill_label):
@@ -411,14 +420,9 @@ def fill_holes(mask_npy, fill_label):
     return mask_npy
 
 
-def clean_mask(mask_npy, middle_op="remove_small_objects", iterations=2):
+def clean_mask(mask_npy, iterations=2):
     mask_npy = ndimage.binary_erosion(mask_npy, iterations=iterations)
-    if middle_op == "remove_small_objects":
-        mask_npy = remove_small_objects(mask_npy)
-    elif middle_op == "get_largest_cc":
-        mask_npy = get_largest_cc(mask_npy)
-    else:
-        pass
+    mask_npy = get_largest_cc(mask_npy)
     mask_npy = ndimage.binary_dilation(mask_npy, iterations=iterations)
     return mask_npy
 
@@ -432,6 +436,8 @@ def get_transform(transform):
         return remove_small_objects
     elif transform == "get_largest_cc":
         return get_largest_cc
+    elif transform == "top_k":
+        return get_top_k_components
     else:
         raise ValueError("Invalid morphological transform")
 

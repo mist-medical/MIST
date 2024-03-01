@@ -254,7 +254,7 @@ def test_time_inference(df,
                                                             fg_bbox)
 
             # Apply postprocessing if required
-            transforms = ["clean_mask", "remove_small_objects", "get_largest_cc", "fill_holes"]
+            transforms = ["remove_small_objects", "top_k", "get_largest_cc", "clean_mask", "fill_holes"]
             for transform in transforms:
                 if config[transform] is not None:
                     if not (transform == "fill_holes") and len(config[transform]) > 0:

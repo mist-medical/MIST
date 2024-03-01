@@ -408,7 +408,7 @@ class Analyzer:
             self.analyze_dataset()
 
         # Add default postprocessing arguments
-        transforms = ["clean_mask", "remove_small_objects", "get_largest_cc", "fill_holes"]
+        transforms = ["remove_small_objects", "top_k", "get_largest_cc", "clean_mask", "fill_holes"]
         for transform in transforms:
             self.config[transform] = None
 

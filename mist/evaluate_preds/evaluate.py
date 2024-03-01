@@ -18,7 +18,7 @@ from mist.runtime.utils import (
 )
 
 
-def evaluate_single_example(pred, truth, patient_id, config):
+def evaluate_single_example(pred, truth, patient_id, config, use_native_spacing):
     # Get dice and hausdorff distances for final prediction
     row_dict = dict()
     row_dict['id'] = patient_id
@@ -26,7 +26,10 @@ def evaluate_single_example(pred, truth, patient_id, config):
     # Read prediction and truth nifti files
     pred = ants.image_read(pred)
     truth = ants.image_read(truth)
-    spacing = truth.spacing
+    if use_native_spacing:
+        spacing = truth.spacing
+    else:
+        spacing = (1, 1, 1)
 
     # Convert to numpy
     pred = pred.numpy()
@@ -52,7 +55,7 @@ def evaluate_single_example(pred, truth, patient_id, config):
     return row_dict
 
 
-def evaluate(config_json, paths, source_dir, output_csv):
+def evaluate(config_json, paths, source_dir, output_csv, use_native_spacing):
     with open(config_json, 'r') as file:
         config = json.load(file)
 
@@ -88,7 +91,8 @@ def evaluate(config_json, paths, source_dir, output_csv):
             eval_results = evaluate_single_example(pred,
                                                    truth,
                                                    patient_id,
-                                                   config)
+                                                   config,
+                                                   use_native_spacing)
             results_df = pd.concat([results_df, pd.DataFrame(eval_results, index=[0])], ignore_index=True)
 
     results_df = compute_results_stats(results_df)

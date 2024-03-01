@@ -67,7 +67,8 @@ def main(args):
         evaluate(args.data,
                  os.path.join(args.results, "train_paths.csv"),
                  os.path.join(args.results, "predictions", "train", "raw"),
-                 os.path.join(args.results, "results.csv"))
+                 os.path.join(args.results, "results.csv"),
+                 args.use_native_spacing)
 
         if not args.no_postprocess:
             postprocess = Postprocessor(args)
