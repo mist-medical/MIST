@@ -39,7 +39,8 @@ class GenericPipeline(Pipeline):
             num_gpus,
             shuffle_input=True,
             input_x_files=None,
-            input_y_files=None
+            input_y_files=None,
+            input_dtm_files=None
     ):
         super().__init__(
             batch_size=batch_size,
@@ -64,6 +65,40 @@ class GenericPipeline(Pipeline):
                 num_shards=num_gpus,
                 shuffle=shuffle_input,
             )
+        if input_dtm_files is not None:
+            self.input_dtm = get_numpy_reader(
+                files=input_dtm_files,
+                shard_id=shard_id,
+                seed=seed,
+                num_shards=num_gpus,
+                shuffle=shuffle_input,
+            )
+
+    @staticmethod
+    def slice_fn(img):
+        return fn.slice(img, 1, 3, axes=[0])
+
+    @staticmethod
+    def noise_fn(img):
+        img_noised = img + fn.random.normal(img, stddev=fn.random.uniform(range=(0.0, 0.33)))
+        return random_augmentation(0.15, img_noised, img)
+
+    @staticmethod
+    def blur_fn(img):
+        img_blurred = fn.gaussian_blur(img, sigma=fn.random.uniform(range=(0.5, 1.5)))
+        return random_augmentation(0.15, img_blurred, img)
+
+    @staticmethod
+    def brightness_fn(img):
+        brightness_scale = random_augmentation(0.15, fn.random.uniform(range=(0.7, 1.3)), 1.0)
+        return img * brightness_scale
+
+    @staticmethod
+    def contrast_fn(img):
+        min_, max_ = fn.reductions.min(img), fn.reductions.max(img)
+        scale = random_augmentation(0.15, fn.random.uniform(range=(0.65, 1.5)), 1.0)
+        img = math.clamp(img * scale, min_, max_)
+        return img
 
 
 class TrainPipeline(GenericPipeline):
@@ -72,10 +107,14 @@ class TrainPipeline(GenericPipeline):
                  lbls,
                  oversampling,
                  patch_size,
+                 labels,
+                 class_weights,
                  **kwargs):
         super().__init__(input_x_files=imgs, input_y_files=lbls, shuffle_input=True, **kwargs)
         self.oversampling = oversampling
         self.patch_size = patch_size
+        self.labels = labels
+        self.class_weights = class_weights
 
         self.crop_shape = types.Constant(np.array(self.patch_size), dtype=types.INT64)
         self.crop_shape_float = types.Constant(np.array(self.patch_size), dtype=types.FLOAT)
@@ -85,10 +124,6 @@ class TrainPipeline(GenericPipeline):
         img, lbl = fn.reshape(img, layout="DHWC"), fn.reshape(lbl, layout="DHWC")
         return img, lbl
 
-    @staticmethod
-    def slice_fn(img):
-        return fn.slice(img, 1, 3, axes=[0])
-
     def biased_crop_fn(self, img, lbl):
         # Pad image and label to have dimensions at least the same as the patch size
         img = fn.pad(img, axes=(0, 1, 2), shape=self.patch_size)
@@ -97,6 +132,9 @@ class TrainPipeline(GenericPipeline):
         roi_start, roi_end = fn.segmentation.random_object_bbox(
             lbl,
             format="start_end",
+            background=0,
+            classes=self.labels,
+            class_weights=self.class_weights,
             foreground_prob=self.oversampling,
             k_largest=2,
             device="cpu",
@@ -117,7 +155,6 @@ class TrainPipeline(GenericPipeline):
             out_of_bounds_policy="pad",
             device="cpu",
         )
-
         return img.gpu(), lbl.gpu()
 
     def zoom_fn(self, img, lbl):
@@ -133,30 +170,14 @@ class TrainPipeline(GenericPipeline):
         lbl = fn.resize(lbl, interp_type=types.DALIInterpType.INTERP_NN, size=self.crop_shape_float)
         return img, lbl
 
-    def noise_fn(self, img):
-        img_noised = img + fn.random.normal(img, stddev=fn.random.uniform(range=(0.0, 0.33)))
-        return random_augmentation(0.15, img_noised, img)
-
-    def blur_fn(self, img):
-        img_blurred = fn.gaussian_blur(img, sigma=fn.random.uniform(range=(0.5, 1.5)))
-        return random_augmentation(0.15, img_blurred, img)
-
-    def brightness_fn(self, img):
-        brightness_scale = random_augmentation(0.15, fn.random.uniform(range=(0.7, 1.3)), 1.0)
-        return img * brightness_scale
-
-    def contrast_fn(self, img):
-        min_, max_ = fn.reductions.min(img), fn.reductions.max(img)
-        scale = random_augmentation(0.15, fn.random.uniform(range=(0.65, 1.5)), 1.0)
-        img = math.clamp(img * scale, min_, max_)
-        return img
-
-    def flips_fn(self, img, lbl):
+    @staticmethod
+    def flips_fn(img, lbl):
         kwargs = {
-            'horizontal': fn.random.coin_flip(probability=0.5),
-            'vertical': fn.random.coin_flip(probability=0.5),
-            'depthwise': fn.random.coin_flip(probability=0.5)
+            "horizontal": fn.random.coin_flip(probability=0.5),
+            "vertical": fn.random.coin_flip(probability=0.5),
+            "depthwise": fn.random.coin_flip(probability=0.5)
         }
+
         return fn.flip(img, **kwargs), fn.flip(lbl, **kwargs)
 
     def define_graph(self):
@@ -174,6 +195,92 @@ class TrainPipeline(GenericPipeline):
         lbl = fn.transpose(lbl, perm=[3, 0, 1, 2])
 
         return img, lbl
+
+
+class TrainPipelineDTM(GenericPipeline):
+    def __init__(self,
+                 imgs,
+                 lbls,
+                 dtms,
+                 oversampling,
+                 patch_size,
+                 labels,
+                 class_weights,
+                 **kwargs):
+        super().__init__(input_x_files=imgs, input_y_files=lbls, input_dtm_files=dtms, shuffle_input=True, **kwargs)
+        self.oversampling = oversampling
+        self.patch_size = patch_size
+        self.labels = labels
+        self.class_weights = class_weights
+
+        self.crop_shape = types.Constant(np.array(self.patch_size), dtype=types.INT64)
+        self.crop_shape_float = types.Constant(np.array(self.patch_size), dtype=types.FLOAT)
+
+    def load_data(self):
+        img, lbl, dtm = self.input_x(name="ReaderX"), self.input_y(name="ReaderY"), self.input_dtm(name="ReaderDTM")
+        img, lbl, dtm = fn.reshape(img, layout="DHWC"), fn.reshape(lbl, layout="DHWC"), fn.reshape(dtm,
+                                                                                                   layout="DHWC")
+        return img, lbl, dtm
+
+    def biased_crop_fn(self, img, lbl, dtm):
+        # Pad image and label to have dimensions at least the same as the patch size
+        img = fn.pad(img, axes=(0, 1, 2), shape=self.patch_size)
+        lbl = fn.pad(lbl, axes=(0, 1, 2), shape=self.patch_size)
+        dtm = fn.pad(dtm, axes=(0, 1, 2), shape=self.patch_size)
+
+        roi_start, roi_end = fn.segmentation.random_object_bbox(
+            lbl,
+            format="start_end",
+            background=0,
+            classes=self.labels,
+            class_weights=self.class_weights,
+            foreground_prob=self.oversampling,
+            k_largest=2,
+            device="cpu",
+            cache_objects=True,
+        )
+        anchor = fn.roi_random_crop(
+            lbl,
+            roi_start=roi_start,
+            roi_end=roi_end,
+            crop_shape=[*self.patch_size, 1],
+        )
+        anchor = fn.slice(anchor, 0, 3, axes=[0])  # drop channel from anchor
+        img, lbl, dtm = fn.slice(
+            [img, lbl, dtm],
+            anchor,
+            self.crop_shape,
+            axis_names="DHW",
+            out_of_bounds_policy="pad",
+            device="cpu",
+        )
+
+        return img.gpu(), lbl.gpu(), dtm.gpu()
+
+    @staticmethod
+    def flips_fn(img, lbl, dtm):
+        kwargs = {
+            'horizontal': fn.random.coin_flip(probability=0.5),
+            'vertical': fn.random.coin_flip(probability=0.5),
+            'depthwise': fn.random.coin_flip(probability=0.5)
+        }
+        return fn.flip(img, **kwargs), fn.flip(lbl, **kwargs), fn.flip(dtm, **kwargs)
+
+    def define_graph(self):
+        img, lbl, dtm = self.load_data()
+        img, lbl, dtm = self.biased_crop_fn(img, lbl, dtm)
+        img, lbl, dtm = self.flips_fn(img, lbl, dtm)
+        img = self.noise_fn(img)
+        img = self.blur_fn(img)
+        img = self.brightness_fn(img)
+        img = self.contrast_fn(img)
+
+        # Change format to CDWH for pytorch compatibility
+        img = fn.transpose(img, perm=[3, 0, 1, 2])
+        lbl = fn.transpose(lbl, perm=[3, 0, 1, 2])
+        dtm = fn.transpose(dtm, perm=[3, 0, 1, 2])
+
+        return img, lbl, dtm
 
 
 class TestPipeline(GenericPipeline):
@@ -213,9 +320,12 @@ def check_dataset(imgs, lbls):
 
 def get_training_dataset(imgs,
                          lbls,
+                         dtms,
                          batch_size,
                          oversampling,
                          patch_size,
+                         labels,
+                         class_weights,
                          seed,
                          num_workers,
                          rank,
@@ -231,8 +341,12 @@ def get_training_dataset(imgs,
         "shard_id": rank
     }
 
-    pipeline = TrainPipeline(imgs, lbls, oversampling, patch_size, **pipe_kwargs)
-    dali_iter = DALIGenericIterator(pipeline, ['image', 'label'])
+    if dtms is None:
+        pipeline = TrainPipeline(imgs, lbls, oversampling, patch_size, labels, class_weights, **pipe_kwargs)
+        dali_iter = DALIGenericIterator(pipeline, ["image", "label"])
+    else:
+        pipeline = TrainPipelineDTM(imgs, lbls, dtms, oversampling, patch_size, labels, class_weights, **pipe_kwargs)
+        dali_iter = DALIGenericIterator(pipeline, ["image", "label", "dtm"])
     return dali_iter
 
 
@@ -249,12 +363,11 @@ def get_validation_dataset(imgs, lbls, seed, num_workers, rank, world_size):
     }
 
     pipeline = EvalPipeline(imgs, lbls, **pipe_kwargs)
-    dali_iter = DALIGenericIterator(pipeline, ['image', 'label'])
+    dali_iter = DALIGenericIterator(pipeline, ["image", "label"])
     return dali_iter
 
 
 def get_test_dataset(imgs, seed, num_workers, rank=0, world_size=1):
-
     pipe_kwargs = {
         "num_gpus": world_size,
         "seed": seed,
@@ -265,5 +378,5 @@ def get_test_dataset(imgs, seed, num_workers, rank=0, world_size=1):
     }
 
     pipeline = TestPipeline(imgs, **pipe_kwargs)
-    dali_iter = DALIGenericIterator(pipeline, ['image'])
+    dali_iter = DALIGenericIterator(pipeline, ["image"])
     return dali_iter

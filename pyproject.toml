@@ -1,6 +1,6 @@
 [project]
 name = "mist-medical"
-version = "0.2.6-alpha"
+version = "0.3.0-alpha"
 requires-python = ">= 3.8"
 description = "MIST is a simple, fully automated framework for 3D medical imaging segmentation."
 readme = "README.md"
@@ -69,4 +69,4 @@ mist_convert_dataset = "mist.convert_to_mist:convert_to_mist_entry"
 skip = ".git"
 
 [tool.setuptools]
-py-modules = []
+py-modules = ["mist"]

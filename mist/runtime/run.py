@@ -30,7 +30,7 @@ from mist.data_loading.dali_loader import (
     get_test_dataset
 )
 
-from mist.models.get_model import get_model
+from mist.models.get_model import get_model, load_model_from_config, configure_pretrained_model
 from mist.runtime.loss import get_loss, DiceLoss, VAELoss
 from mist.inference.main_inference import predict_single_example
 
@@ -39,8 +39,9 @@ from mist.runtime.utils import (
     get_lr_schedule,
     Mean,
     create_model_config_file,
-    load_model_from_config,
-    get_progress_bar
+    create_pretrained_config_file,
+    get_progress_bar,
+    AlphaSchedule,
 )
 
 console = Console()
@@ -68,8 +69,6 @@ class Trainer:
         if self.args.patch_size is not None:
             self.patch_size = self.args.patch_size
             self.config["patch_size"] = self.args.patch_size
-            with open(self.config_file, "w") as outfile:
-                json.dump(self.config, outfile, indent=2)
         else:
             self.patch_size = self.config["patch_size"]
 
@@ -78,16 +77,32 @@ class Trainer:
 
         # Create model configuration file for inference later
         self.model_config_path = os.path.join(self.args.results, "models", "model_config.json")
-        self.model_config = create_model_config_file(self.args,
-                                                     self.config,
-                                                     self.data,
-                                                     self.model_config_path)
+        if self.args.model != "pretrained":
+            self.model_config = create_model_config_file(self.args,
+                                                         self.config,
+                                                         self.data,
+                                                         self.model_config_path)
+        else:
+            assert self.args.pretrained_model_path is not None, "No pretrained model path given!"
+            self.model_config = create_pretrained_config_file(self.args.pretrained_model_path,
+                                                              self.data,
+                                                              self.model_config_path)
+            self.patch_size = self.model_config["patch_size"]
+
+        with open(self.config_file, "w") as outfile:
+            json.dump(self.config, outfile, indent=2)
 
         # Get class weights if we are using them
         if self.args.use_config_class_weights:
             self.class_weights = self.config["class_weights"]
         else:
             self.class_weights = None
+
+        self.alpha = AlphaSchedule(self.args.epochs,
+                                   self.args.boundary_loss_schedule,
+                                   constant=self.args.loss_schedule_constant,
+                                   init_pause=self.args.linear_schedule_pause,
+                                   step_length=self.args.step_schedule_step_length)
 
         # Get standard dice loss for validation
         self.val_loss = DiceLoss()
@@ -167,11 +182,28 @@ class Trainer:
             train_images = [os.path.join(self.args.numpy, "images", "{}.npy".format(pat)) for pat in train_ids]
             train_labels = [os.path.join(self.args.numpy, "labels", "{}.npy".format(pat)) for pat in train_ids]
 
-            # Get validation set from training split
-            train_images, val_images, train_labels, val_labels = train_test_split(train_images,
-                                                                                  train_labels,
-                                                                                  test_size=0.1,
-                                                                                  random_state=self.args.seed_val)
+            if self.args.use_dtms:
+                train_dtms = [os.path.join(self.args.numpy, "dtms", "{}.npy".format(pat)) for pat in train_ids]
+
+                zip_labels_dtms = [vol for vol in zip(train_labels, train_dtms)]
+
+                # Get validation set from training split with DTMs
+                train_images, val_images, train_labels_dtms, val_labels_dtms = train_test_split(train_images,
+                                                                                                zip_labels_dtms,
+                                                                                                test_size=0.1,
+                                                                                                random_state=self.args.seed_val)
+
+                train_labels = [vol[0] for vol in train_labels_dtms]
+                train_dtms = [vol[1] for vol in train_labels_dtms]
+                val_labels = [vol[0] for vol in val_labels_dtms]
+            else:
+                # Get validation set from training split
+                train_images, val_images, train_labels, val_labels = train_test_split(train_images,
+                                                                                      train_labels,
+                                                                                      test_size=0.1,
+                                                                                      random_state=self.args.seed_val)
+
+                train_dtms = None
 
             # Get number of validation steps per epoch
             # Divide by world size since this dataset is sharded across all GPUs
@@ -180,9 +212,12 @@ class Trainer:
             # Get DALI loaders
             train_loader = get_training_dataset(train_images,
                                                 train_labels,
+                                                train_dtms,
                                                 batch_size=self.args.batch_size // world_size,
                                                 oversampling=self.args.oversampling,
                                                 patch_size=self.patch_size,
+                                                labels=self.config["labels"][1:],
+                                                class_weights=self.config["class_weights"][1:],
                                                 seed=self.args.seed_val,
                                                 num_workers=self.args.num_workers,
                                                 rank=rank,
@@ -204,8 +239,19 @@ class Trainer:
             # Get loss function
             loss_fn = get_loss(self.args, class_weights=self.class_weights)
 
+            # Make sure we are using/have DTMs for boundary-based loss functions
+            if self.args.loss in ["bl", "hdl", "gsl"]:
+                assert self.args.use_dtms, f"For {self.args.loss}, use --use_dtms flag."
+                assert len(train_images) == len(train_labels) == len(train_dtms), \
+                    ("Number of distance transforms does not match number of training images and labels. Please "
+                        "check that distance transforms were computed.")
+
             # Get model
-            model = get_model(**self.model_config)
+            if self.args.model != "pretrained":
+                model = get_model(**self.model_config)
+            else:
+                model = configure_pretrained_model(self.args.pretrained_model_path, self.n_channels, self.n_classes)
+
             model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
             model.to(rank)
             model = DDP(model, device_ids=[rank])
@@ -234,12 +280,15 @@ class Trainer:
                 best_model_name = os.path.join(self.args.results, "models", "fold_{}.pt".format(fold))
 
             # Function to perform a single training step
-            def train_step(image, label):
+            def train_step(image, label, dtm, alpha):
                 # Loss computation
                 def compute_loss():
                     output = model(image)
 
-                    loss = loss_fn(label, output["prediction"])
+                    if dtm is None:
+                        loss = loss_fn(label, output["prediction"])
+                    else:
+                        loss = loss_fn(label, output["prediction"], dtm, alpha)
 
                     if self.args.deep_supervision:
                         for k, p in enumerate(output["deep_supervision"]):
@@ -319,10 +368,13 @@ class Trainer:
                     with TrainProgressBar(epoch + 1, fold, self.args.epochs, self.args.steps_per_epoch) as pb:
                         for i in range(self.args.steps_per_epoch):
                             data = train_loader.next()[0]
-                            image, label = data["image"], data["label"]
-
-                            # Compute loss for single step
-                            loss = train_step(image, label)
+                            if self.args.use_dtms:
+                                alpha = self.alpha(epoch)
+                                image, label, dtm = data["image"], data["label"], data["dtm"]
+                                loss = train_step(image, label, dtm, alpha)
+                            else:
+                                image, label = data["image"], data["label"]
+                                loss = train_step(image, label, None, None)
 
                             # Update lr schedule
                             scheduler.step()
@@ -337,10 +389,16 @@ class Trainer:
                 else:
                     for i in range(self.args.steps_per_epoch):
                         data = train_loader.next()[0]
-                        image, label = data["image"], data["label"]
+                        if self.args.use_dtms:
+                            alpha = self.alpha(epoch)
+                            image, label, dtm = data["image"], data["label"], data["dtm"]
+                            loss = train_step(image, label, dtm, alpha)
+                        else:
+                            image, label = data["image"], data["label"]
+                            loss = train_step(image, label, None, None)
 
-                        # Compute loss for single step
-                        loss = train_step(image, label)
+                        # Update lr schedule
+                        scheduler.step()
 
                         # Send loss to device 0
                         dist.reduce(loss, dst=0)

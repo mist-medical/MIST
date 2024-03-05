@@ -11,11 +11,12 @@ from monai.inferers import sliding_window_inference
 import torch
 from torch.nn.functional import softmax
 
+from mist.models.get_model import load_model_from_config
+
 from mist.runtime.utils import (
     convert_dict_to_df, 
     get_flip_axes, 
     create_empty_dir, 
-    load_model_from_config,
     get_fg_mask_bbox,
     decrop_from_fg,
     get_progress_bar,
@@ -232,9 +233,9 @@ def test_time_inference(df,
             og_ants_img = ants.image_read(image_list[0])
 
             if no_preprocess:
-                torch_img, _, fg_bbox = convert_nifti_to_numpy(image_list, None)
+                torch_img, _, fg_bbox, _ = convert_nifti_to_numpy(image_list, None)
             else:
-                torch_img, _, fg_bbox = preprocess_example(config, image_list, None, None)
+                torch_img, _, fg_bbox, _ = preprocess_example(config, image_list, None, False, None)
 
             # Make image channels first and add batch dimension
             torch_img = np.transpose(torch_img, axes=(3, 0, 1, 2))

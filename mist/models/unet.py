@@ -34,11 +34,11 @@ class UNet(nn.Module):
         self.patch_size = patch_size
         self.init_filters = 32
 
-        conv_kwargs = {"norm": "instance",
-                       "activation": "prelu",
-                       "down_type": "conv",
-                       "up_type": "transconv",
-                       "groups": self.init_filters}
+        self.conv_kwargs = {"norm": "instance",
+                            "activation": "prelu",
+                            "down_type": "conv",
+                            "up_type": "transconv",
+                            "groups": self.init_filters}
 
         self.pocket = pocket
         self.deep_supervision = deep_supervision
@@ -68,46 +68,46 @@ class UNet(nn.Module):
         # First convolutional layer
         self.first_conv = ConvLayer(in_channels=self.n_channels,
                                     out_channels=self.init_filters,
-                                    **conv_kwargs)
+                                    **self.conv_kwargs)
 
         # Get in and out channels for encoder
-        channels = list()
+        self.channels = list()
         for i in range(self.depth + 1):
             in_channels = int(np.min([self.init_filters * self.mul_on_downsample ** np.max([i - 1, 0]), 320]))
             out_channels = int(np.min([self.init_filters * self.mul_on_downsample ** i, 320]))
-            channels.append([in_channels, out_channels])
+            self.channels.append([in_channels, out_channels])
 
         # Main encoder branch
         self.encoder = nn.ModuleList()
-        for channel in channels[:-1]:
+        for channel in self.channels[:-1]:
             encoder_block = EncoderBlock(in_channels=channel[0],
                                          out_channels=channel[1],
                                          block=block,
-                                         **conv_kwargs)
+                                         **self.conv_kwargs)
             self.encoder.append(encoder_block)
 
         # Bottleneck
-        self.bottleneck = Bottleneck(in_channels=channels[-1][0],
-                                     out_channels=channels[-1][1],
+        self.bottleneck = Bottleneck(in_channels=self.channels[-1][0],
+                                     out_channels=self.channels[-1][1],
                                      block=block,
-                                     **conv_kwargs)
+                                     **self.conv_kwargs)
 
         # Reverse channels for decoders
-        channels.reverse()
-        channels = [[channel_pair[1], channel_pair[0]] for channel_pair in channels]
+        self.channels.reverse()
+        self.channels = [[channel_pair[1], channel_pair[0]] for channel_pair in self.channels]
 
         # VAE Regularization
         if self.vae_reg:
             self.normal_dist = torch.distributions.Normal(0, 1)
-            self.normal_dist.loc = self.normal_dist.loc.cuda()
-            self.normal_dist.scale = self.normal_dist.scale.cuda()
+            self.normal_dist.loc = self.normal_dist.loc  # .cuda()
+            self.normal_dist.scale = self.normal_dist.scale  # .cuda()
 
             self.global_maxpool = GlobalMaxPooling3D()
-            self.mu = nn.Linear(channels[0][0], self.latent_dim)
-            self.sigma = nn.Linear(channels[0][0], self.latent_dim)
+            self.mu = nn.Linear(self.channels[0][0], self.latent_dim)
+            self.sigma = nn.Linear(self.channels[0][0], self.latent_dim)
 
             self.vae_decoder = nn.ModuleList()
-            for i, channel_pair in enumerate(channels[:-1]):
+            for i, channel_pair in enumerate(self.channels[:-1]):
                 if i == 0:
                     in_channels = self.n_channels
                 else:
@@ -116,24 +116,24 @@ class UNet(nn.Module):
                 vae_decoder_block = VAEDecoderBlock(in_channels=in_channels,
                                                     out_channels=channel_pair[1],
                                                     block=block,
-                                                    **conv_kwargs)
+                                                    **self.conv_kwargs)
                 self.vae_decoder.append(vae_decoder_block)
 
-            self.vae_out = nn.Conv3d(in_channels=channels[-1][0], out_channels=self.n_channels, kernel_size=1)
+            self.vae_out = nn.Conv3d(in_channels=self.channels[-1][0], out_channels=self.n_channels, kernel_size=1)
 
         # Main decoder branch
         self.decoder = nn.ModuleList()
-        for channel_pair in channels[:-1]:
+        for channel_pair in self.channels[:-1]:
             decoder_block = DecoderBlock(in_channels=channel_pair[0],
                                          out_channels=channel_pair[1],
                                          block=block,
-                                         **conv_kwargs)
+                                         **self.conv_kwargs)
             self.decoder.append(decoder_block)
 
         # Deep supervision
         if self.deep_supervision:
             self.heads = nn.ModuleList()
-            for channel_pair in channels[-(self.deep_supervision_heads + 1):-1]:
+            for channel_pair in self.channels[-(self.deep_supervision_heads + 1):-1]:
                 head = nn.Conv3d(in_channels=channel_pair[0],
                                  out_channels=self.n_classes,
                                  kernel_size=1)
@@ -143,16 +143,6 @@ class UNet(nn.Module):
         self.out = nn.Conv3d(in_channels=self.init_filters,
                              out_channels=self.n_classes,
                              kernel_size=1)
-
-        # Initialize weights
-        self.apply(self.initialize_weights)
-
-    @staticmethod
-    def initialize_weights(module):
-        if isinstance(module, (nn.Conv3d, nn.Conv2d, nn.ConvTranspose3d, nn.ConvTranspose2d)):
-            module.weight = nn.init.kaiming_normal_(module.weight, a=0.01)
-            if module.bias is not None:
-                module.bias = nn.init.constant_(module.bias, 0)
 
     def forward(self, x):
         # Initial convolution

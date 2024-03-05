@@ -182,11 +182,11 @@ class MGNet(nn.Module):
         self.vae_reg = vae_reg
         self.global_maxpool = GlobalMaxPooling3D()
 
-        conv_kwargs = {"norm": "instance",
-                       "activation": "prelu",
-                       "down_type": "conv",
-                       "up_type": "transconv",
-                       "groups": self.out_channels}
+        self.conv_kwargs = {"norm": "instance",
+                            "activation": "prelu",
+                            "down_type": "conv",
+                            "up_type": "transconv",
+                            "groups": self.out_channels}
 
         if use_res_block:
             block = ResNetBlock
@@ -215,7 +215,7 @@ class MGNet(nn.Module):
         # First convolution
         self.first_conv = ConvLayer(in_channels=self.n_channels,
                                     out_channels=self.out_channels,
-                                    **conv_kwargs)
+                                    **self.conv_kwargs)
 
         # Main encoder branch
         self.encoder = nn.ModuleList()
@@ -224,13 +224,13 @@ class MGNet(nn.Module):
                                              out_channels=self.out_channels,
                                              block=block,
                                              down_only=False,
-                                             **conv_kwargs))
+                                             **self.conv_kwargs))
 
         # First bottleneck
         self.bottleneck = Bottleneck(in_channels=self.out_channels,
                                      out_channels=self.out_channels,
                                      block=block,
-                                     **conv_kwargs)
+                                     **self.conv_kwargs)
 
         # Spikes
         self.spikes = nn.ModuleList()
@@ -244,7 +244,7 @@ class MGNet(nn.Module):
                                         in_decoder_channels=channels,
                                         global_depth=self.depth,
                                         previous_peak_height=previous_height,
-                                        **conv_kwargs))
+                                        **self.conv_kwargs))
 
         # VAE regularization
         if self.vae_reg:
@@ -265,7 +265,7 @@ class MGNet(nn.Module):
                 self.vae_decoder.append(VAEDecoderBlock(in_channels=in_channels,
                                                         out_channels=self.out_channels,
                                                         block=block,
-                                                        **conv_kwargs))
+                                                        **self.conv_kwargs))
 
             self.vae_out = nn.Conv3d(in_channels=self.out_channels,
                                      out_channels=self.n_channels,
@@ -277,7 +277,7 @@ class MGNet(nn.Module):
             self.decoder.append(DecoderBlock(in_channels=channels,
                                              out_channels=self.out_channels,
                                              block=block,
-                                             **conv_kwargs))
+                                             **self.conv_kwargs))
 
         # Deep supervision
         if self.deep_supervision:

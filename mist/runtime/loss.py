@@ -117,6 +117,90 @@ class WeightedDiceCELoss(nn.Module):
         return 0.5*(loss_weighted_dice + loss_weighted_ce)
 
 
+class BoundaryLoss(nn.Module):
+    def __init__(self):
+        super(BoundaryLoss, self).__init__()
+        self.region_loss = DiceCELoss()
+        self.alpha = 0.5
+
+    def forward(self, y_true, y_pred, dtm, alpha):
+        # Compute region based loss
+        region_loss = self.region_loss(y_true, y_pred)
+
+        # Prepare inputs
+        y_pred = softmax(y_pred, dim=1)
+
+        # Compute boundary loss
+        boundary_loss = torch.mean(dtm * y_pred)
+
+        return alpha * region_loss + (1. - alpha) * boundary_loss
+
+
+class HDOneSidedLoss(nn.Module):
+    def __init__(self):
+        super(HDOneSidedLoss, self).__init__()
+        self.region_loss = DiceCELoss()
+        self.alpha = 0.5
+
+    def forward(self, y_true, y_pred, dtm, alpha):
+        # Compute region based loss
+        region_loss = self.region_loss(y_true, y_pred)
+
+        # Prepare inputs
+        y_true = get_one_hot(y_true, y_pred.shape[1])
+        y_pred = softmax(y_pred, dim=1)
+
+        # Compute boundary loss
+        boundary_loss = torch.mean(torch.square(y_true - y_pred) * torch.square(dtm))
+
+        return alpha * region_loss + (1. - alpha) * boundary_loss
+
+
+class GenSurfLoss(nn.Module):
+    def __init__(self, class_weights):
+        super(GenSurfLoss, self).__init__()
+        self.region_loss = DiceCELoss()
+
+        # Define class weight scheme
+        # Move weights to cuda if already given by user
+        if not (class_weights is None):
+            self.class_weights = torch.Tensor(class_weights).to("cuda")
+        else:
+            self.class_weights = None
+
+        self.alpha = 0.5
+        self.smooth = 1e-6
+        self.axes = (2, 3, 4)
+
+    def forward(self, y_true, y_pred, dtm, alpha):
+        # Compute region based loss
+        region_loss = self.region_loss(y_true, y_pred)
+
+        # Prepare inputs
+        y_true = get_one_hot(y_true, y_pred.shape[1])
+        y_pred = softmax(y_pred, dim=1)
+
+        if self.class_weights is None:
+            class_weights = torch.sum(y_true, dim=self.axes)
+            class_weights = 1. / (torch.square(class_weights) + 1.)
+        else:
+            class_weights = self.class_weights
+
+        # Compute loss
+        num = torch.sum(torch.square(dtm * (1 - (y_true + y_pred))), axis=self.axes)
+        num *= class_weights
+
+        den = torch.sum(torch.square(dtm), axis=self.axes)
+        den *= class_weights
+        den += self.smooth
+
+        boundary_loss = torch.sum(num, axis=1) / torch.sum(den, axis=1)
+        boundary_loss = torch.mean(boundary_loss)
+        boundary_loss = 1. - boundary_loss
+
+        return alpha * region_loss + (1. - alpha) * boundary_loss
+
+
 class KLDivLoss(nn.Module):
     def forward(self, z_mean, z_log_var):
         loss = -0.5 * (1. + z_log_var - torch.square(z_mean) - torch.exp(z_log_var))
@@ -142,5 +226,11 @@ def get_loss(args, **kwargs):
         return WeightedDiceLoss(class_weights=kwargs["class_weights"])
     elif args.loss == "gdl_ce":
         return WeightedDiceCELoss(class_weights=kwargs["class_weights"])
+    elif args.loss == "bl":
+        return BoundaryLoss()
+    elif args.loss == "hdl":
+        return HDOneSidedLoss()
+    elif args.loss == "gsl":
+        return GenSurfLoss(class_weights=kwargs["class_weights"])
     else:
         raise ValueError("Invalid loss function")

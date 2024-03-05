@@ -11,7 +11,6 @@ import SimpleITK as sitk
 from sklearn.model_selection import KFold
 from skimage.measure import label
 from scipy import ndimage
-from collections import OrderedDict
 
 from rich.progress import (
     BarColumn,
@@ -23,9 +22,6 @@ from rich.progress import (
 
 import torch
 import torch.nn as nn
-
-from mist.models.get_model import get_model
-
 
 def set_warning_levels():
     warnings.simplefilter(action='ignore',
@@ -234,25 +230,20 @@ def create_model_config_file(args, config, data, output):
     return model_config
 
 
-def load_model_from_config(weights_path, model_config_path):
+def create_pretrained_config_file(pretrained_model_path, data, output):
+    model_config_path = os.path.join(pretrained_model_path, "model_config.json")
+
     # Get model configuration
     with open(model_config_path, "r") as file:
         model_config = json.load(file)
 
-    # Load model
-    model = get_model(**model_config)
+    model_config["n_channels"] = int(len(data["images"]))
+    model_config["n_classes"] = int(len(data["labels"]))
 
-    # Trick for loading DDP model
-    state_dict = torch.load(weights_path)
-    new_state_dict = OrderedDict()
-    for k, v in state_dict.items():
-        # remove 'module.' of DataParallel/DistributedDataParallel
-        name = k[7:]
+    with open(output, 'w') as outfile:
+        json.dump(model_config, outfile, indent=2)
 
-        new_state_dict[name] = v
-
-    model.load_state_dict(new_state_dict)
-    return model
+    return model_config
 
 
 def get_flip_axes():
@@ -445,14 +436,13 @@ def get_transform(transform):
 def get_fg_mask_bbox(img_ants, patient_id=None):
     image_npy = img_ants.numpy()
 
-    # # Clip image to improve fg bbox
-    # lower = np.percentile(image_npy, 33)
-    # upper = np.percentile(image_npy, 99.5)
-    # image_npy = np.clip(image_npy, lower, upper)
+    # Clip image to improve fg bbox
+    lower = np.percentile(image_npy, 33)
+    upper = np.percentile(image_npy, 99.5)
+    image_npy = np.clip(image_npy, lower, upper)
 
     val = skimage.filters.threshold_otsu(image_npy)
     fg_mask = (image_npy > val)
-    # fg_mask = clean_mask(fg_mask, middle_op="get_largest_cc")
     nz = np.nonzero(fg_mask)
     og_size = img_ants.shape
 
@@ -557,6 +547,12 @@ def make_onehot(mask_ants, labels):
     return masks_sitk
 
 
+def sitk_get_min_max(image):
+    stats_filter = sitk.StatisticsImageFilter()
+    stats_filter.Execute(image)
+    return stats_filter.GetMinimum(), stats_filter.GetMaximum()
+
+
 def decrop_from_fg(img_ants, fg_bbox):
     padding = [(np.max([0, fg_bbox["x_start"]]), np.max([0, fg_bbox["x_og_size"] - fg_bbox["x_end"]]) - 1),
                (np.max([0, fg_bbox["y_start"]]), np.max([0, fg_bbox["y_og_size"] - fg_bbox["y_end"]]) - 1),
@@ -583,3 +579,77 @@ def get_best_patch_size(med_img_size, max_size):
         else:
             patch_size.append(int(2 ** np.floor(np.log2(med_sz))))
     return patch_size
+
+
+"""
+Alpha schedule functions
+"""
+
+
+class ConstantSchedule:
+    def __init__(self, constant):
+        self.constant = constant
+
+    def __call__(self, epoch):
+        return self.constant
+
+
+class StepSchedule:
+    def __init__(self, num_epochs, step_length):
+        self.step_length = step_length
+        self.num_steps = num_epochs // step_length
+        self.num_epochs = num_epochs + step_length
+
+    def __call__(self, epoch):
+        if epoch >= self.num_epochs - self.step_length:
+            return 0
+        step = epoch // self.step_length
+        return max(0, 1 - step / self.num_steps)
+
+
+class CosineSchedule:
+    def __init__(self, num_epochs, min_val=0, max_val=1):
+        self.num_epochs = num_epochs - 1
+        self.min_val = min_val
+        self.max_val = max_val
+
+    def __call__(self, epoch):
+        cos_out = (1 + np.cos(np.pi * epoch / self.num_epochs)) / 2
+        return self.min_val + (self.max_val - self.min_val) * cos_out
+
+
+class LinearSchedule:
+    def __init__(self, num_epochs, init_pause):
+        # if num_epochs <= init_pause:
+        #     raise ValueError("The number of epochs must be greater than the initial pause.")
+        self.num_epochs = num_epochs - 1
+        self.init_pause = init_pause
+
+    def __call__(self, epoch):
+        # if epoch > self.num_epochs:
+        #     raise ValueError("The current epoch is greater than the total number of epochs.")
+        if epoch > self.init_pause:
+            return min(1, max(0, 1.0 - (float(epoch - self.init_pause) / (self.num_epochs - self.init_pause))))
+        else:
+            return 1.0
+
+
+class AlphaSchedule:
+    def __init__(self, n_epochs, schedule, **kwargs):
+        self.schedule = schedule
+        self.constant = ConstantSchedule(constant=kwargs["constant"])
+        self.linear = LinearSchedule(n_epochs, init_pause=kwargs["init_pause"])
+        self.step = StepSchedule(n_epochs - kwargs["step_length"], step_length=kwargs["step_length"])
+        self.cosine = CosineSchedule(n_epochs)
+
+    def __call__(self, epoch):
+        if self.schedule == "constant":
+            return self.constant(epoch)
+        if self.schedule == "linear":
+            return self.linear(epoch)
+        elif self.schedule == "step":
+            return self.step(epoch)
+        elif self.schedule == "cosine":
+            return self.cosine(epoch).astype('float32')
+        else:
+            raise ValueError("Enter valid schedule type")

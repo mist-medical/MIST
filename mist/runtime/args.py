@@ -69,9 +69,9 @@ def get_main_args():
     p.boolean_flag("--amp", default=False, help="Enable automatic mixed precision (recommended)")
 
     # Training hyperparameters
-    p.arg("--batch-size", type=positive_int, default=2, help="Batch size")
+    p.arg("--batch-size", type=positive_int, help="Batch size")
     p.arg("--patch-size", nargs="+", type=int, help="Height, width, and depth of patch size")
-    p.arg("--max-patch-size", default=[256, 256, 128], nargs="+", type=int, help="Max patch size")
+    p.arg("--max-patch-size", default=[256, 256, 256], nargs="+", type=int, help="Max patch size")
     p.arg("--learning-rate", type=float, default=0.0003, help="Learning rate")
     p.arg("--exp_decay", type=float, default=0.9, help="Exponential decay factor")
     p.arg("--lr-scheduler",
@@ -93,7 +93,8 @@ def get_main_args():
     p.arg("--model",
           type=str,
           default="nnunet",
-          choices=["nnunet", "unet", "fmgnet", "wnet", "attn_unet", "unetr"])
+          choices=["nnunet", "unet", "fmgnet", "wnet", "attn_unet", "unetr", "pretrained"])
+    p.arg("--pretrained-model-path", type=str, help="Full path to pretrained mist models directory")
     p.boolean_flag("--use-res-block", default=False, help="Use residual blocks for nnUNet or UNet")
     p.boolean_flag("--pocket", default=False, help="Use pocket version of network")
     p.arg("--depth", type=non_negative_int, help="Depth of U-Net or similar architecture")
@@ -116,19 +117,37 @@ def get_main_args():
     p.boolean_flag("--no-preprocess", default=False, help="Turn off preprocessing")
     p.boolean_flag("--use-n4-bias-correction", default=False, help="Use N4 bias field correction (only for MR images)")
     p.boolean_flag("--use-config-class-weights", default=False, help="Use class weights in config file")
+    p.boolean_flag("--use-dtms", default=False, help="Compute and use DTMs during training")
     p.arg("--class-weights", nargs="+", type=float, help="Specify class weights")
 
     # Loss function
     p.arg("--loss",
           type=str,
           default="dice_ce",
-          choices=["dice_ce", "dice", "gdl", "gdl_ce"],
+          choices=["dice_ce", "dice", "gdl", "gdl_ce", "bl", "hdl", "gsl"],
           help="Loss function for training")
+    p.arg("--boundary-loss-schedule",
+          default="constant",
+          choices=["constant", "linear", "step", "cosine"],
+          help="Weighting schedule for boundary losses")
+    p.arg("--loss-schedule-constant",
+          type=float_0_1,
+          default=0.5,
+          help="Constant for fixed alpha schedule")
+    p.arg("--linear-schedule-pause",
+          type=positive_int,
+          default=5,
+          help="Number of epochs before linear alpha scheduler starts")
+    p.arg("--step-schedule-step-length",
+          type=positive_int,
+          default=5,
+          help="Number of epochs before in each section of the step-wise alpha scheduler")
+
 
     # Sliding window inference
     p.arg("--sw-overlap",
           type=float_0_1,
-          default=0.25,
+          default=0.5,
           help="Amount of overlap between scans during sliding window inference")
     p.arg("--blend-mode",
           type=str,

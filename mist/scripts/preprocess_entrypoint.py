@@ -7,6 +7,10 @@ def preprocess_entry():
     set_warning_levels()
     args = get_main_args()
     args.exec_mode = "preprocess"
+
+    if args.loss in ["bl", "hdl", "gsl"]:
+        args.use_dtm = True
+
     main(args)
 
 

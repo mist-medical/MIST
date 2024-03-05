@@ -1,8 +1,6 @@
 import os
 import json
-import pdb
 
-import skimage
 import ants
 import warnings
 import pandas as pd
@@ -23,6 +21,7 @@ from mist.runtime.utils import (
     aniso_intermediate_resample,
     check_anisotropic,
     make_onehot,
+    sitk_get_min_max,
     get_progress_bar
 )
 
@@ -137,7 +136,38 @@ def window_and_normalize(image, config):
     return image
 
 
-def preprocess_example(config, image_list, mask, fg_bbox=None):
+"""
+Compute distance transform maps
+"""
+
+
+def compute_dtm(mask_ants, labels):
+    dtms_sitk = list()
+    masks_sitk = make_onehot(mask_ants, labels)
+
+    for i, mask in enumerate(masks_sitk):
+        dtm_i = sitk.SignedMaurerDistanceMap(sitk.Cast(masks_sitk[i], sitk.sitkUInt8),
+                                             squaredDistance=False,
+                                             useImageSpacing=False)
+
+        dtm_int = sitk.Cast((dtm_i < 0), sitk.sitkFloat32)
+        dtm_int *= dtm_i
+        int_min, _ = sitk_get_min_max(dtm_int)
+
+        dtm_ext = sitk.Cast((dtm_i > 0), sitk.sitkFloat32)
+        dtm_ext *= dtm_i
+        _, ext_max = sitk_get_min_max(dtm_ext)
+
+        dtm_i = (dtm_ext / ext_max) - (dtm_int / int_min)
+
+        dtms_sitk.append(dtm_i)
+
+    dtm = sitk_to_ants(sitk.JoinSeries(dtms_sitk))
+    dtm = dtm.numpy()
+    return dtm
+
+
+def preprocess_example(config, image_list, mask, use_dtm=False, fg_bbox=None):
     training = True
     if mask is None:
         training = False
@@ -182,10 +212,16 @@ def preprocess_example(config, image_list, mask, fg_bbox=None):
         if not np.array_equal(mask.spacing, config["target_spacing"]):
             mask = resample_mask(mask, labels=config["labels"], target_spacing=config["target_spacing"])
 
+        if use_dtm:
+            dtm = compute_dtm(mask, labels=config["labels"])
+        else:
+            dtm = None
+
         # Add channel axis to mask
         mask = np.expand_dims(mask.numpy(), axis=-1)
     else:
         mask = None
+        dtm = None
 
     # Apply windowing and normalization to images
     # Get dimensions of image in standard space
@@ -196,7 +232,7 @@ def preprocess_example(config, image_list, mask, fg_bbox=None):
 
         image[..., i] = img
 
-    return image, mask, fg_bbox
+    return image, mask, fg_bbox, dtm
 
 
 def convert_nifti_to_numpy(image_list, mask):
@@ -216,10 +252,11 @@ def convert_nifti_to_numpy(image_list, mask):
     else:
         mask_npy = None
 
-    # Don't return a fg bounding box
+    # Don't return a fg bounding box or dtm
     fg_bbox = None
+    dtm = None
 
-    return image_npy, mask_npy, fg_bbox
+    return image_npy, mask_npy, fg_bbox, dtm
 
 
 def preprocess_dataset(args):
@@ -241,6 +278,10 @@ def preprocess_dataset(args):
 
     labels_dir = os.path.join(args.numpy, "labels")
     create_empty_dir(labels_dir)
+
+    if args.use_dtms:
+        dtm_dir = os.path.join(args.numpy, "dtms")
+        create_empty_dir(dtm_dir)
 
     text = Text("\nPreprocessing dataset\n")
     text.stylize("bold")
@@ -266,12 +307,19 @@ def preprocess_dataset(args):
             # If already given preprocessed data, then just convert it to numpy data.
             # Otherwise, run preprocessing
             if args.no_preprocess:
-                image_npy, mask_npy, _ = convert_nifti_to_numpy(image_list, mask)
+                image_npy, mask_npy, _, _ = convert_nifti_to_numpy(image_list, mask)
             else:
                 if config["crop_to_fg"]:
                     fg_bbox = fg_bboxes.loc[fg_bboxes["id"] == patient["id"]].iloc[0].to_dict()
 
-                image_npy, mask_npy, _ = preprocess_example(config, image_list, mask, fg_bbox)
+                image_npy, mask_npy, _, dtm_npy = preprocess_example(config,
+                                                                     image_list,
+                                                                     mask,
+                                                                     args.use_dtms,
+                                                                     fg_bbox)
 
             np.save(os.path.join(args.numpy, images_dir, f"{patient['id']}.npy"), image_npy.astype("float32"))
             np.save(os.path.join(args.numpy, labels_dir, f"{patient['id']}.npy"), mask_npy.astype("uint8"))
+
+            if args.use_dtms:
+                np.save(os.path.join(args.numpy, dtm_dir, f"{patient['id']}.npy"), dtm_npy.astype("float32"))

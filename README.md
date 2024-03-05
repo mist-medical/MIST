@@ -28,6 +28,8 @@ Please cite the following papers if you use this code for your work:
 
 
 ## What's New
+* March 2024 - Support for using transfer learning with pretrained MIST models is now available.
+* March 2024 - Boundary-based loss functions are now available.
 * Feb. 2024 - MIST is now available as PyPI package and as a Docker image on DockerHub.
 * Feb. 2024 - Major improvements to the analysis, preprocessing, and postprocessing pipelines, 
 and new network architectures like UNETR added.
@@ -274,7 +276,8 @@ usage: mist_run_all [-h] [--exec-mode {all,analyze,preprocess,train}]
                     [--cosine-first-steps COSINE_FIRST_STEPS]
                     [--optimizer {sgd,adam,adamw}] [--clip-norm [BOOLEAN]]
                     [--clip-norm-max CLIP_NORM_MAX]
-                    [--model {nnunet,unet,fmgnet,wnet,attn_unet,unetr}]
+                    [--model {nnunet,unet,fmgnet,wnet,attn_unet,unetr,pretrained}]
+                    [--pretrained-model-path PRETRAINED_MODEL_PATH]
                     [--use-res-block [BOOLEAN]] [--pocket [BOOLEAN]]
                     [--depth DEPTH] [--deep-supervision [BOOLEAN]]
                     [--deep-supervision-heads DEEP_SUPERVISION_HEADS]
@@ -284,8 +287,13 @@ usage: mist_run_all [-h] [--exec-mode {all,analyze,preprocess,train}]
                     [--oversampling OVERSAMPLING] [--no-preprocess [BOOLEAN]]
                     [--use-n4-bias-correction [BOOLEAN]]
                     [--use-config-class-weights [BOOLEAN]]
+                    [--use-dtms [BOOLEAN]]
                     [--class-weights CLASS_WEIGHTS [CLASS_WEIGHTS ...]]
-                    [--loss {dice_ce,dice,gdl,gdl_ce}]
+                    [--loss {dice_ce,dice,gdl,gdl_ce,bl,hdl,gsl}]
+                    [--boundary-loss-schedule {constant,linear,step,cosine}]
+                    [--loss-schedule-constant LOSS_SCHEDULE_CONSTANT]
+                    [--linear-schedule-pause LINEAR_SCHEDULE_PAUSE]
+                    [--step-schedule-step-length STEP_SCHEDULE_STEP_LENGTH]
                     [--sw-overlap SW_OVERLAP]
                     [--blend-mode {constant,gaussian}]
                     [--no-postprocess [BOOLEAN]] [--nfolds NFOLDS]
@@ -313,11 +321,11 @@ optional arguments:
   --amp [BOOLEAN]       Enable automatic mixed precision (recommended)
                         (default: False)
   --batch-size BATCH_SIZE
-                        Batch size (default: 2)
+                        Batch size (default: None)
   --patch-size PATCH_SIZE [PATCH_SIZE ...]
                         Height, width, and depth of patch size (default: None)
   --max-patch-size MAX_PATCH_SIZE [MAX_PATCH_SIZE ...]
-                        Max patch size (default: [256, 256, 128])
+                        Max patch size (default: [256, 256, 256])
   --learning-rate LEARNING_RATE
                         Learning rate (default: 0.0003)
   --exp_decay EXP_DECAY
@@ -333,7 +341,10 @@ optional arguments:
                         Use gradient clipping (default: False)
   --clip-norm-max CLIP_NORM_MAX
                         Max threshold for global norm clipping (default: 1.0)
-  --model {nnunet,unet,fmgnet,wnet,attn_unet,unetr}
+  --model {nnunet,unet,fmgnet,wnet,attn_unet,unetr,pretrained}
+  --pretrained-model-path PRETRAINED_MODEL_PATH
+                        Full path to pretrained mist models directory
+                        (default: None)
   --use-res-block [BOOLEAN]
                         Use residual blocks for nnUNet or UNet (default:
                         False)
@@ -362,13 +373,25 @@ optional arguments:
                         (default: False)
   --use-config-class-weights [BOOLEAN]
                         Use class weights in config file (default: False)
+  --use-dtms [BOOLEAN]  Compute and use DTMs during training (default: False)
   --class-weights CLASS_WEIGHTS [CLASS_WEIGHTS ...]
                         Specify class weights (default: None)
-  --loss {dice_ce,dice,gdl,gdl_ce}
+  --loss {dice_ce,dice,gdl,gdl_ce,bl,hdl,gsl}
                         Loss function for training (default: dice_ce)
+  --boundary-loss-schedule {constant,linear,step,cosine}
+                        Weighting schedule for boundary losses (default:
+                        constant)
+  --loss-schedule-constant LOSS_SCHEDULE_CONSTANT
+                        Constant for fixed alpha schedule (default: 0.5)
+  --linear-schedule-pause LINEAR_SCHEDULE_PAUSE
+                        Number of epochs before linear alpha scheduler starts
+                        (default: 5)
+  --step-schedule-step-length STEP_SCHEDULE_STEP_LENGTH
+                        Number of epochs before in each section of the step-
+                        wise alpha scheduler (default: 5)
   --sw-overlap SW_OVERLAP
                         Amount of overlap between scans during sliding window
-                        inference (default: 0.25)
+                        inference (default: 0.5)
   --blend-mode {constant,gaussian}
                         How to blend output of overlapping windows (default:
                         gaussian)
