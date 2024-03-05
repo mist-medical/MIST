@@ -9,9 +9,7 @@ ENV DEBIAN_FRONTEND noninteractive
 
 # Install dependencies
 RUN apt-get update -y --fix-missing \
-    && apt-get install -y cmake git \
-    && pip install --upgrade mist-medical
-
+    && apt-get install -y cmake git
 # Use the following if running cuda 12
 # pip install --extra-index-url https://developer.download.nvidia.com/compute/redist --upgrade nvidia-dali-cuda120
 
@@ -36,9 +34,14 @@ RUN mkdir /opt/c3d \
     && tar -xvf c3d-nightly-Linux-x86_64.tar.gz \
     && cp c3d-1.1.0-Linux-x86_64/bin/c?d /usr/local/bin/
 
-# env
+# Create app work dir
 ENV PATH /opt/ants/install/bin:$PATH
 
 RUN mkdir /app
 
 WORKDIR /app
+
+# Install MIST
+RUN git clone https://github.com/aecelaya/MIST.git \
+    && cd MIST \
+    && pip install - e .
