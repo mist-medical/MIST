@@ -7,7 +7,6 @@ from mist.analyze_data.analyze import Analyzer
 from mist.preprocess_data.preprocess import preprocess_dataset
 from mist.runtime.args import get_main_args
 from mist.runtime.run import Trainer
-from mist.postprocess_preds.postprocess import Postprocessor
 from mist.evaluate_preds.evaluate import evaluate
 
 from mist.runtime.utils import (
@@ -39,10 +38,6 @@ def create_folders(args):
     if args.exec_mode != "analyze":
         dirs_to_create.append(os.path.abspath(args.numpy))
 
-    if not args.no_postprocess:
-        dirs_to_create += [os.path.join(results, "predictions", "train", "temp"),
-                           os.path.join(results, "predictions", "train", "postprocessed")]
-
     if has_test:
         dirs_to_create.append(os.path.join(results, "predictions", "test"))
 
@@ -69,10 +64,6 @@ def main(args):
                  os.path.join(args.results, "predictions", "train", "raw"),
                  os.path.join(args.results, "results.csv"),
                  args.use_native_spacing)
-
-        if not args.no_postprocess:
-            postprocess = Postprocessor(args)
-            postprocess.run()
 
     if args.exec_mode == "all" or args.exec_mode == "train":
         if has_test_data(args.data):

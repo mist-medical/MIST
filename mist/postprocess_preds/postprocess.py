@@ -1,5 +1,7 @@
 import os
 import json
+import pdb
+
 import ants
 import subprocess
 import pandas as pd
@@ -13,60 +15,68 @@ from mist.evaluate_preds.evaluate import evaluate
 from mist.runtime.utils import (
     get_progress_bar,
     get_transform,
-    npy_make_onehot,
-    npy_fix_labels
+    group_labels
 )
 
 console = Console()
 
 
-def is_improvement(prev_best, current):
+def get_mean_changes(original_results, new_results):
     """
-    Check if the majority of Dice, Hausdroff, and average surface results across all classes
-    improve. If so, then use current strategy
+    Get average change in each metric as a result of a postprocessing strategy
     """
-    dice_cols = [col for col in list(prev_best.columns) if "dice" in col]
-    haus_cols = [col for col in list(prev_best.columns) if "haus" in col]
-    avg_surf_cols = [col for col in list(prev_best.columns) if "avg_surf" in col]
-
-    # Check if dice increases by 5%
-    prev_best_dice = np.array(list(prev_best.iloc[-5][dice_cols]))
-    current_dice = np.array(list(current.iloc[-5][dice_cols]))
-    improvements_dice = list(current_dice >= prev_best_dice)
-
-    # Check if hausdorff distance decreases by 5%
-    prev_best_haus = np.array(list(prev_best.iloc[-5][haus_cols]))
-    current_haus = np.array(list(current.iloc[-5][haus_cols]))
-    improvements_haus = list(current_haus <= prev_best_haus)
-
-    # Check if average surface distance decreases by 5%
-    prev_best_avg_surf = np.array(list(prev_best.iloc[-5][avg_surf_cols]))
-    current_avg_surf = np.array(list(current.iloc[-5][avg_surf_cols]))
-    improvements_avg_surf = list(current_avg_surf <= prev_best_avg_surf)
-
-    improvements = improvements_dice + improvements_haus + improvements_avg_surf
-
-    return np.sum(improvements) >= (len(improvements) // 2)
+    mean_changes = {"dice": 0., "haus": 0., "avg_surf": 0.}
+    for metric in mean_changes.keys():
+        cols = [col for col in list(original_results.columns) if metric in col]
+        original = np.array(list(original_results.iloc[-5][cols]))
+        new = np.array(list(new_results.iloc[-5][cols]))
+        mean_changes[metric] = 100. * np.mean((new - original) / original)
+    return mean_changes
 
 
-def apply_transform(mask_ants, transform_type, all_labels, apply_to_labels):
-    transform = get_transform(transform_type)
+def compute_improvement_score(original_results, new_results):
+    mean_changes = get_mean_changes(original_results, new_results)
+    score = 0.
+    if mean_changes["dice"] > 0:
+        score += mean_changes["dice"]
+    if mean_changes["haus"] < 0:
+        score += -0.5 * mean_changes["haus"]
+    if mean_changes["avg_surf"] < 0:
+        score += -0.5 * mean_changes["avg_surf"]
+    return score
+
+
+def apply_transform(mask_ants, transform_name, all_labels, apply_to_labels, transform_kwargs):
+    transform = get_transform(transform_name)
 
     old_pred_npy = mask_ants.numpy()
-    if transform_type == "fill_holes":
-        assert isinstance(apply_to_labels, int), "Labels argument must be an integer for fill_holes"
-        new_pred = transform(mask_npy=old_pred_npy, fill_label=apply_to_labels)
+
+    if apply_to_labels == [-1]:
+        apply_to_labels = all_labels
+
+    grouped_labels = group_labels(old_pred_npy, apply_to_labels)
+    grouped_labels = grouped_labels.astype("uint8")
+
+    if transform_name != "fill_holes":
+        # Apply transformation to binarized group of labels
+        new_pred = transform(grouped_labels != 0, **transform_kwargs)
+        new_pred = new_pred.astype("uint8")
+
+        # Multiply by original group of labels to put original labels back onto transformed group
+        new_pred *= grouped_labels
+
+        # Replace labels in old prediction with transformed labels
+        for label in all_labels:
+            if label not in apply_to_labels:
+                new_pred += label * (old_pred_npy == label).astype("uint8")
+    elif transform_name == "fill_holes":
+        # If fill holes, then simply add filled holes back to original prediction
+        holes = transform(grouped_labels, **transform_kwargs)
+        new_pred = old_pred_npy + holes
     else:
-        assert isinstance(apply_to_labels, list), "Labels must be a list for {}".format(transform_type)
-        new_pred = npy_make_onehot(old_pred_npy, all_labels)
+        raise ValueError("Invalid postprocessing transform")
 
-        for i, label in enumerate(all_labels):
-            if label in apply_to_labels:
-                new_pred[..., i] = transform(new_pred[..., i])
-
-        new_pred = np.argmax(new_pred, axis=-1)
-        new_pred = npy_fix_labels(new_pred, all_labels)
-        new_pred = mask_ants.new_image_like(data=new_pred.astype("uint8"))
+    new_pred = mask_ants.new_image_like(data=new_pred.astype("uint8"))
     return new_pred
 
 
@@ -74,103 +84,112 @@ class Postprocessor:
     def __init__(self, args):
 
         self.args = args
-        self.config_file = os.path.join(self.args.results, "config.json")
+        self.config_file = os.path.join(self.args.base_results, "config.json")
         with open(self.config_file, "r") as file:
             self.config = json.load(file)
 
-        self.n_classes = len(self.config["labels"])
+        self.all_labels = self.config["labels"][1:]
+        self.apply_to_labels = self.args.apply_to_labels
 
         # Get baseline results and source directory
-        self.best_results_df = pd.read_csv(os.path.join(self.args.results, "results.csv"))
-        self.source_dir = os.path.join(self.args.results, "predictions", "train", "raw")
-        self.temp_dir = os.path.join(self.args.results, "predictions", "train", "temp")
-        self.dest_dir = os.path.join(self.args.results, "predictions", "train", "postprocessed")
-        self.new_results_csv = os.path.join(self.args.results, "predictions", "new_results.csv")
-        self.train_paths = os.path.join(self.args.results, "train_paths.csv")
+        self.base_results_df = pd.read_csv(os.path.join(self.args.base_results, "results.csv"))
+        self.train_paths = os.path.join(self.args.base_results, "train_paths.csv")
+        self.source_dir = os.path.join(self.args.base_results, "predictions", "train", "raw")
+        self.dest_dir = os.path.join(self.args.output, "postprocessed")
+        self.new_results_csv = os.path.join(self.args.output, "postprocessed_results.csv")
 
-    def check_transform(self, transform_type, message):
-        transform = get_transform(transform_type)
-
-        out_messages = ""
-        apply_to_labels = list()
-        for i in self.config["labels"][1:]:
-            progress = get_progress_bar("{} - label {}".format(message, i))
-
+    def check_transforms(self, transforms, messages, transform_kwargs):
+        for transform_type in transforms:
+            progress = get_progress_bar(messages[transform_type])
             with progress as pb:
-                for j in pb.track(range(len(self.best_results_df.iloc[:-5]))):
+                for j in pb.track(range(len(self.base_results_df.iloc[:-5]))):
                     # Read raw prediction and apply morphological clean up
-                    patient_id = self.best_results_df.iloc[j]["id"]
-                    old_pred = ants.image_read(os.path.join(self.source_dir, "{}.nii.gz".format(patient_id)))
-                    old_pred_npy = old_pred.numpy()
+                    patient_id = self.base_results_df.iloc[j]["id"]
+                    old_pred = ants.image_read(os.path.join(self.dest_dir, "{}.nii.gz".format(patient_id)))
+                    new_pred = apply_transform(old_pred,
+                                               transform_type,
+                                               self.all_labels,
+                                               self.args.apply_to_labels,
+                                               transform_kwargs)
+                    ants.image_write(new_pred, os.path.join(self.dest_dir, "{}.nii.gz".format(patient_id)))
 
-                    if transform_type == "fill_holes":
-                        new_pred = transform(mask_npy=old_pred_npy, fill_label=i)
-                    else:
-                        old_pred_npy = (old_pred_npy == i)
-                        new_pred = transform(mask_npy=old_pred_npy)
+        # Evaluate new predictions
+        evaluate(self.config_file,
+                 self.train_paths,
+                 self.dest_dir,
+                 self.new_results_csv,
+                 self.args.use_native_spacing)
 
-                    new_pred = old_pred.new_image_like(data=new_pred.astype("uint8"))
-                    ants.image_write(new_pred, os.path.join(self.temp_dir, "{}.nii.gz".format(patient_id)))
-
-            # Evaluate new predictions
-            evaluate(self.config_file,
-                     self.train_paths,
-                     self.temp_dir,
-                     self.new_results_csv,
-                     self.args.use_native_spacing)
-
-            # Compute new score
-            new_results_df = pd.read_csv(self.new_results_csv)
-            improvement = is_improvement(self.best_results_df, new_results_df)
-            if improvement:
-                if transform_type == "fill_holes":
-                    apply_to_labels = i
-                else:
-                    apply_to_labels.append(i)
-                self.best_results_df = new_results_df
-                self.source_dir = self.dest_dir
-
-                out_messages += "Improvement with {} - label {}\n".format(message.lower(), i)
-
-                # Transfer new predictions from temp folder to postprocessed
-                mv_temp_cmd = "mv {}/* {}".format(self.temp_dir, self.dest_dir)
-                subprocess.call(mv_temp_cmd, shell=True)
-            else:
-                apply_to_labels = None
-                out_messages += "No improvement with {} - label {}\n".format(message.lower(), i)
-
-                # Clear out temp directory for next iteration
-                rm_temp_cmd = "rm -r {}/*".format(self.temp_dir)
-                subprocess.call(rm_temp_cmd, shell=True)
-
-        # Print output messages
-        text = Text(out_messages)
-        console.print(text)
-
-        return apply_to_labels
+        # Compute improvement score
+        new_results_df = pd.read_csv(self.new_results_csv)
+        score = compute_improvement_score(self.base_results_df, new_results_df)
+        return score
 
     def run(self):
         text = Text("\nPostprocessing predictions\n")
         text.stylize("bold")
         console.print(text)
 
-        # Define transforms and where to save results
-        transforms = ["remove_small_objects", "top_k", "get_largest_cc", "clean_mask", "fill_holes"]
-        messages = ["Removing small objects", "Getting top 2 CC", "Getting largest CC", "Morph. cleaning", "Fill holes"]
-        apply_to_labels = dict(zip(transforms, [None] * len(transforms)))
+        # Get list of transforms
+        transforms = list()
+        if self.args.remove_small_objects:
+            transforms.append("remove_small_objects")
+        if self.args.top_k_cc:
+            transforms.append("top_k_cc")
+        if self.args.fill_holes:
+            transforms.append("fill_holes")
+        if len(transforms) == 0:
+            raise ValueError("No transforms to apply in postprcessing")
 
-        # Check different postprocessing strategies
-        for transform_name, message in zip(transforms, messages):
-            apply_to_labels[transform_name] = self.check_transform(transform_name, message)
-            self.config[transform_name] = apply_to_labels[transform_name]
+        assert isinstance(self.args.apply_to_labels, list), "--apply-to-labels argument must be a list"
+        assert len(self.args.apply_to_labels) > 0, "--apply-to-labels argument is empty"
 
-        # Update config file with best strategy
-        with open(self.config_file, "w") as outfile:
-            json.dump(self.config, outfile, indent=2)
+        transform_kwargs = {"small_object_threshold": self.args.small_object_threshold,
+                            "morph_cleanup": self.args.morph_cleanup,
+                            "morph_cleanup_iterations": self.args.morph_cleanup_iterations,
+                            "top_k": self.args.top_k,
+                            "fill_label": self.args.fill_label}
 
-        # Write new results to csv
-        self.best_results_df.to_csv(os.path.join(self.args.results, "results.csv"), index=False)
+        # Copy raw predictions to postprocessed folder
+        cp_temp_cmd = "cp {}/* {}".format(self.source_dir, self.dest_dir)
+        subprocess.call(cp_temp_cmd, shell=True)
 
-        # Clean up files
-        os.remove(self.new_results_csv)
-        os.rmdir(self.temp_dir)
+        if self.args.apply_to_labels == [-1]:
+            label_list = self.all_labels
+        else:
+            label_list = self.args.apply_to_labels
+        apply_to_message = "Applying transforms to the following group of labels: {}\n".format(label_list)
+        text = Text(apply_to_message)
+        console.print(text)
+
+        transform_messsages = {"remove_small_objects": "Removing small objects",
+                               "top_k_cc": "Getting top {} connected components".format(self.args.top_k),
+                               "fill_holes": "Filling holes with fill label {}".format(self.args.fill_label)}
+
+        score = self.check_transforms(transforms, transform_messsages, transform_kwargs)
+        print_score = np.round(score, 2)
+        if score >= 5:
+            text = Text(f"Metrics improved by {print_score}% on average\n")
+            console.print(text)
+            for transform in transforms:
+                if transform == "remove_small_objects":
+                    self.config[transform].append((self.args.apply_to_labels,
+                                                   self.args.small_object_threshold))
+                if transform == "top_k_cc":
+                    self.config[transform].append((self.args.apply_to_labels,
+                                                   self.args.morph_cleanup,
+                                                   self.args.morph_cleanup_iterations,
+                                                   self.args.top_k))
+                if transform == "fill_holes":
+                    self.config[transform].append((self.args.apply_to_labels, self.args.fill_label))
+        else:
+            text = Text(f"Postprocessing strategy score of {print_score}% did not meet 5% improvement threshold\n")
+            console.print(text)
+
+        if self.args.update_config:
+            text = Text("Updating config with postprocessing strategy\n")
+            console.print(text)
+
+            # Update config file with best strategy
+            with open(self.config_file, "w") as outfile:
+                json.dump(self.config, outfile, indent=2)

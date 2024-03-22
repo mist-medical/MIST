@@ -209,8 +209,9 @@ def preprocess_example(config, image_list, mask, use_dtm=False, fg_bbox=None):
         # Put mask into standard space
         mask = ants.reorient_image2(mask, "RAI")
         mask.set_direction(np.eye(3))
-        if not np.array_equal(mask.spacing, config["target_spacing"]):
-            mask = resample_mask(mask, labels=config["labels"], target_spacing=config["target_spacing"])
+        mask = resample_mask(mask,
+                             labels=config["labels"],
+                             target_spacing=config["target_spacing"])
 
         if use_dtm:
             dtm = compute_dtm(mask, labels=config["labels"])

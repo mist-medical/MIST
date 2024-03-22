@@ -408,9 +408,9 @@ class Analyzer:
             self.analyze_dataset()
 
         # Add default postprocessing arguments
-        transforms = ["remove_small_objects", "top_k", "get_largest_cc", "clean_mask", "fill_holes"]
+        transforms = ["remove_small_objects", "top_k_cc", "fill_holes"]
         for transform in transforms:
-            self.config[transform] = None
+            self.config[transform] = []
 
         # Save inferred parameters as json file
         with open(self.config_file, "w") as outfile:

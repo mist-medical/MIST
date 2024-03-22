@@ -15,4 +15,4 @@ def preprocess_entry():
 
 
 if __name__ == "__main__":
-    preprocessing_entry()
+    preprocess_entry()

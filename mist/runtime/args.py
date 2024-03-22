@@ -73,7 +73,7 @@ def get_main_args():
     p.arg("--patch-size", nargs="+", type=int, help="Height, width, and depth of patch size")
     p.arg("--max-patch-size", default=[256, 256, 256], nargs="+", type=int, help="Max patch size")
     p.arg("--learning-rate", type=float, default=0.0003, help="Learning rate")
-    p.arg("--exp_decay", type=float, default=0.9, help="Exponential decay factor")
+    p.arg("--exp_decay", type=float, default=0.9999, help="Exponential decay factor")
     p.arg("--lr-scheduler",
           type=str,
           default="constant",
@@ -143,7 +143,6 @@ def get_main_args():
           default=5,
           help="Number of epochs before in each section of the step-wise alpha scheduler")
 
-
     # Sliding window inference
     p.arg("--sw-overlap",
           type=float_0_1,
@@ -151,12 +150,9 @@ def get_main_args():
           help="Amount of overlap between scans during sliding window inference")
     p.arg("--blend-mode",
           type=str,
-          choices=["constant", "gaussian"],
+          choices=["gaussian", "constant"],
           default="gaussian",
           help="How to blend output of overlapping windows")
-
-    # Postprocessing
-    p.boolean_flag("--no-postprocess", default=False, help="Run post processing on MIST output")
 
     # Validation
     p.arg("--nfolds", type=positive_int, default=5, help="Number of cross-validation folds")
@@ -164,7 +160,7 @@ def get_main_args():
     p.arg("--epochs", type=positive_int, default=1000, help="Number of epochs")
     p.arg("--steps-per-epoch",
           type=positive_int,
-          help="Steps per epoch. By default ceil(training_dataset_size / batch_size / gpus)")
+          help="Steps per epoch. By default ceil(training_dataset_size / (batch_size * gpus)")
 
     # Evaluation
     p.boolean_flag("--use-native-spacing",

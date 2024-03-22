@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 
-# Rich progres bar
+# Rich progress bar
 from rich.console import Console
 from rich.text import Text
 from mist.runtime.progress_bar import TrainProgressBar, ValidationProgressBar
@@ -216,8 +216,6 @@ class Trainer:
                                                 batch_size=self.args.batch_size // world_size,
                                                 oversampling=self.args.oversampling,
                                                 patch_size=self.patch_size,
-                                                labels=self.config["labels"][1:],
-                                                class_weights=self.config["class_weights"][1:],
                                                 seed=self.args.seed_val,
                                                 num_workers=self.args.num_workers,
                                                 rank=rank,
@@ -232,7 +230,7 @@ class Trainer:
 
             # Get steps per epoch
             if self.args.steps_per_epoch is None:
-                self.args.steps_per_epoch = len(train_images) // self.args.batch_size // world_size
+                self.args.steps_per_epoch = len(train_images) // (self.args.batch_size * world_size)
             else:
                 self.args.steps_per_epoch = self.args.steps_per_epoch
 

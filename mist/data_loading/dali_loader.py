@@ -107,14 +107,10 @@ class TrainPipeline(GenericPipeline):
                  lbls,
                  oversampling,
                  patch_size,
-                 labels,
-                 class_weights,
                  **kwargs):
         super().__init__(input_x_files=imgs, input_y_files=lbls, shuffle_input=True, **kwargs)
         self.oversampling = oversampling
         self.patch_size = patch_size
-        self.labels = labels
-        self.class_weights = class_weights
 
         self.crop_shape = types.Constant(np.array(self.patch_size), dtype=types.INT64)
         self.crop_shape_float = types.Constant(np.array(self.patch_size), dtype=types.FLOAT)
@@ -133,8 +129,6 @@ class TrainPipeline(GenericPipeline):
             lbl,
             format="start_end",
             background=0,
-            classes=self.labels,
-            class_weights=self.class_weights,
             foreground_prob=self.oversampling,
             k_largest=2,
             device="cpu",
@@ -204,14 +198,10 @@ class TrainPipelineDTM(GenericPipeline):
                  dtms,
                  oversampling,
                  patch_size,
-                 labels,
-                 class_weights,
                  **kwargs):
         super().__init__(input_x_files=imgs, input_y_files=lbls, input_dtm_files=dtms, shuffle_input=True, **kwargs)
         self.oversampling = oversampling
         self.patch_size = patch_size
-        self.labels = labels
-        self.class_weights = class_weights
 
         self.crop_shape = types.Constant(np.array(self.patch_size), dtype=types.INT64)
         self.crop_shape_float = types.Constant(np.array(self.patch_size), dtype=types.FLOAT)
@@ -232,8 +222,6 @@ class TrainPipelineDTM(GenericPipeline):
             lbl,
             format="start_end",
             background=0,
-            classes=self.labels,
-            class_weights=self.class_weights,
             foreground_prob=self.oversampling,
             k_largest=2,
             device="cpu",
@@ -324,8 +312,6 @@ def get_training_dataset(imgs,
                          batch_size,
                          oversampling,
                          patch_size,
-                         labels,
-                         class_weights,
                          seed,
                          num_workers,
                          rank,
@@ -342,10 +328,10 @@ def get_training_dataset(imgs,
     }
 
     if dtms is None:
-        pipeline = TrainPipeline(imgs, lbls, oversampling, patch_size, labels, class_weights, **pipe_kwargs)
+        pipeline = TrainPipeline(imgs, lbls, oversampling, patch_size, **pipe_kwargs)
         dali_iter = DALIGenericIterator(pipeline, ["image", "label"])
     else:
-        pipeline = TrainPipelineDTM(imgs, lbls, dtms, oversampling, patch_size, labels, class_weights, **pipe_kwargs)
+        pipeline = TrainPipelineDTM(imgs, lbls, dtms, oversampling, patch_size, **pipe_kwargs)
         dali_iter = DALIGenericIterator(pipeline, ["image", "label", "dtm"])
     return dali_iter
 

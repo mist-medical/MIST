@@ -144,6 +144,16 @@ class UNet(nn.Module):
                              out_channels=self.n_classes,
                              kernel_size=1)
 
+        # Initialize weights
+        self.apply(self.initialize_weights)
+
+    @staticmethod
+    def initialize_weights(module):
+        if isinstance(module, (nn.Conv3d, nn.Conv2d, nn.ConvTranspose3d, nn.ConvTranspose2d)):
+            module.weight = nn.init.kaiming_normal_(module.weight, a=0.01)
+            if module.bias is not None:
+                module.bias = nn.init.constant_(module.bias, 0)
+
     def forward(self, x):
         # Initial convolution
         x = self.first_conv(x)

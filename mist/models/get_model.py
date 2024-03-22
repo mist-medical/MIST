@@ -138,71 +138,84 @@ def configure_pretrained_model(pretrained_model_path, n_channels, n_classes):
 
     # Modify model to match new input and output channels
     if model_name == "unet":
-        model.first_conv = ConvLayer(n_channels, model.init_filters, **model.conv_kwargs)
-        model.out = nn.Conv3d(in_channels=model.init_filters,
-                              out_channels=n_classes,
-                              kernel_size=1)
+        if model.first_conv.in_channels != n_channels:
+            model.first_conv = ConvLayer(n_channels, model.init_filters, **model.conv_kwargs)
 
-        if model.vae_reg:
-            model.vae_out = nn.Conv3d(in_channels=model.channels[-1][0],
-                                      out_channels=n_channels,
-                                      kernel_size=1)
+            if model.vae_reg:
+                model.vae_out = nn.Conv3d(in_channels=model.channels[-1][0],
+                                          out_channels=n_channels,
+                                          kernel_size=1)
 
-        if model.deep_supervision:
-            model.heads = nn.ModuleList()
-            for channel_pair in model.channels[-(model.deep_supervision_heads + 1):-1]:
-                head = nn.Conv3d(in_channels=channel_pair[0],
-                                 out_channels=n_classes,
-                                 kernel_size=1)
-                model.heads.append(head)
+        if model.out.out_channels != n_classes:
+            model.out = nn.Conv3d(in_channels=model.init_filters,
+                                  out_channels=n_classes,
+                                  kernel_size=1)
+
+            if model.deep_supervision:
+                model.heads = nn.ModuleList()
+                for channel_pair in model.channels[-(model.deep_supervision_heads + 1):-1]:
+                    head = nn.Conv3d(in_channels=channel_pair[0],
+                                     out_channels=n_classes,
+                                     kernel_size=1)
+                    model.heads.append(head)
     elif model_name == "fmgnet" or model_name == "wnet":
-        model.first_conv = ConvLayer(n_channels, model.out_channels, **model.conv_kwargs)
-        model.out = nn.Conv3d(in_channels=model.out_channels,
-                              out_channels=n_classes,
-                              kernel_size=1)
+        if model.first_conv.in_channels != n_channels:
+            model.first_conv = ConvLayer(n_channels, model.out_channels, **model.conv_kwargs)
 
-        if model.vae_reg:
-            model.vae_out = nn.Conv3d(in_channels=model.out_channels,
-                                      out_channels=n_channels,
-                                      kernel_size=1)
+            if model.vae_reg:
+                model.vae_out = nn.Conv3d(in_channels=model.out_channels,
+                                          out_channels=n_channels,
+                                          kernel_size=1)
+        if model.out.out_channels != n_channels:
+            model.out = nn.Conv3d(in_channels=model.out_channels,
+                                  out_channels=n_classes,
+                                  kernel_size=1)
 
-        if model.deep_supervision:
-            model.heads = nn.ModuleList()
-            for _ in range(model.deep_supervision_heads):
-                head = nn.Conv3d(in_channels=model.out_channels,
-                                 out_channels=n_classes,
-                                 kernel_size=1)
-                model.heads.append(head)
+            if model.deep_supervision:
+                model.heads = nn.ModuleList()
+                for _ in range(model.deep_supervision_heads):
+                    head = nn.Conv3d(in_channels=model.out_channels,
+                                     out_channels=n_classes,
+                                     kernel_size=1)
+                    model.heads.append(head)
     elif model_name == "nnunet":
-        model.unet.input_block.conv1.conv = nn.Conv3d(in_channels=n_channels,
-                                                      out_channels=model.unet.input_block.conv1.conv.out_channels,
-                                                      kernel_size=model.unet.input_block.conv1.conv.kernel_size,
-                                                      stride=model.unet.input_block.conv1.conv.stride,
-                                                      padding=model.unet.input_block.conv1.conv.padding,
-                                                      bias=False)
+        if model.unet.input_block.conv1.conv.in_channels != n_channels:
+            model.unet.input_block.conv1.conv = nn.Conv3d(in_channels=n_channels,
+                                                          out_channels=model.unet.input_block.conv1.conv.out_channels,
+                                                          kernel_size=model.unet.input_block.conv1.conv.kernel_size,
+                                                          stride=model.unet.input_block.conv1.conv.stride,
+                                                          padding=model.unet.input_block.conv1.conv.padding,
+                                                          bias=False)
 
-        model.unet.output_block.conv.conv = nn.Conv3d(in_channels=model.unet.output_block.conv.conv.in_channels,
-                                                      out_channels=n_classes,
-                                                      kernel_size=model.unet.output_block.conv.conv.kernel_size,
-                                                      stride=model.unet.output_block.conv.conv.stride)
+            if model.vae_reg:
+                model.unet.vae_out = nn.Conv3d(in_channels=model.unet.vae_out.in_channels,
+                                               out_channels=n_channels,
+                                               kernel_size=model.unet.vae_out.kernel_size,
+                                               stride=model.unet.vae_out.stride)
 
-        if model.vae_reg:
-            model.unet.vae_out = nn.Conv3d(in_channels=model.unet.vae_out.in_channels,
-                                           out_channels=n_channels,
-                                           kernel_size=model.unet.vae_out.kernel_size,
-                                           stride=model.unet.vae_out.stride)
+        if model.unet.output_block.conv.conv.out_channels != n_classes:
+            model.unet.output_block.conv.conv = nn.Conv3d(in_channels=model.unet.output_block.conv.conv.in_channels,
+                                                          out_channels=n_classes,
+                                                          kernel_size=model.unet.output_block.conv.conv.kernel_size,
+                                                          stride=model.unet.output_block.conv.conv.stride)
 
-        if model.deep_supervision:
-            model.unet.deep_supervision_heads = nn.ModuleList([UnetOutBlock(model.unet.spatial_dims,
-                                                                            model.unet.filters[i + 1], 2,
-                                                                            dropout=model.unet.dropout) for i in
-                                                               range(model.unet.deep_supr_num)])
+            if model.deep_supervision:
+                model.unet.deep_supervision_heads = nn.ModuleList([UnetOutBlock(model.unet.spatial_dims,
+                                                                                model.unet.filters[i + 1], 2,
+                                                                                dropout=model.unet.dropout) for i in
+                                                                   range(model.unet.deep_supr_num)])
     elif model_name == "unetr":
-        model.model.swinViT.patch_embed.proj = nn.Conv3d(n_channels, 24, kernel_size=(2, 2, 2), stride=(2, 2, 2))
-        model.model.out.conv.conv = nn.Conv3d(24, n_classes, kernel_size=(1, 1, 1), stride=(1, 1, 1))
+        if model.model.swinViT.patch_embed.proj.in_channels != n_channels:
+            model.model.swinViT.patch_embed.proj = nn.Conv3d(n_channels, 24, kernel_size=(2, 2, 2), stride=(2, 2, 2))
+
+        if model.model.out.conv.conv.out_channels != n_classes:
+            model.model.out.conv.conv = nn.Conv3d(24, n_classes, kernel_size=(1, 1, 1), stride=(1, 1, 1))
     elif model_name == "attn_unet":
-        model.model.model[0].conv[0].conv = nn.Conv3d(n_channels, 32, kernel_size=3)
-        model.model.model[-1].conv = nn.Conv3d(32, n_classes, kernel_size=1)
+        if model.model.model[0].conv[0].conv.in_channels != n_channels:
+            model.model.model[0].conv[0].conv = nn.Conv3d(n_channels, 32, kernel_size=3)
+
+        if model.model.model[-1].conv.out_channels != n_classes:
+            model.model.model[-1].conv = nn.Conv3d(32, n_classes, kernel_size=1)
     else:
         raise ValueError("Invalid model name for pretrained model. Check your model config file.")
 

@@ -372,43 +372,52 @@ def get_largest_cc(mask_npy):
     return mask_npy
 
 
-def remove_small_objects(mask_npy):
+def remove_small_objects(mask_npy, **kwargs):
     # Get connected components
     labels = label(mask_npy)
 
     # Assume at least one component
     if labels.max() > 0:
         # Remove small objects of size lower than our threshold
-        mask_npy = skimage.morphology.remove_small_objects(mask_npy.astype("bool"), min_size=64)
+        mask_npy = skimage.morphology.remove_small_objects(mask_npy.astype("bool"),
+                                                           min_size=kwargs["small_object_threshold"])
     return mask_npy
 
 
-def get_top_k_components(mask_npy, k=2):
+def get_top_k_components(mask_npy, **kwargs):
+    # Morphological cleaning
+    if kwargs["morph_cleanup"]:
+        mask_npy = ndimage.binary_erosion(mask_npy, iterations=kwargs["morph_cleanup_iterations"])
+
     # Get connected components
     labels = label(mask_npy)
     label_bin_cnts = list(np.bincount(labels.flat)[1:])
     label_bin_cnts_sort = sorted(label_bin_cnts, reverse=True)
 
     # Assume at least one component
-    temp = np.zeros(mask_npy.shape)
-    if labels.max() > 0 and len(label_bin_cnts) >= k:
-        for i in range(k):
+    if labels.max() > 0 and len(label_bin_cnts) >= kwargs["top_k"]:
+        temp = np.zeros(mask_npy.shape)
+        for i in range(kwargs["top_k"]):
             temp += labels == np.where(label_bin_cnts == label_bin_cnts_sort[i])[0][0] + 1
+        mask_npy = temp
 
-    return temp
+    if kwargs["morph_cleanup"]:
+        mask_npy = ndimage.binary_dilation(mask_npy, iterations=kwargs["morph_cleanup_iterations"])
+    return mask_npy
 
 
-def fill_holes(mask_npy, fill_label):
+def get_holes(mask_npy, **kwargs):
     labels = label(mask_npy)
 
     if labels.max() > 0:
         # Fill holes with specified label
         mask_npy_binary = (mask_npy != 0).astype("uint8")
         holes = ndimage.binary_fill_holes(mask_npy_binary) - mask_npy_binary
-        holes *= fill_label
-        mask_npy += holes
+        holes *= kwargs["fill_label"]
+    else:
+        holes = np.zeros(mask_npy.shape)
 
-    return mask_npy
+    return holes
 
 
 def clean_mask(mask_npy, iterations=2):
@@ -418,16 +427,19 @@ def clean_mask(mask_npy, iterations=2):
     return mask_npy
 
 
+def group_labels(mask_npy, labels):
+    grouped_labels = np.zeros(mask_npy.shape)
+    for label in labels:
+        grouped_labels += label*(mask_npy == label)
+    return grouped_labels
+
+
 def get_transform(transform):
-    if transform == "clean_mask":
-        return clean_mask
-    elif transform == "fill_holes":
-        return fill_holes
+    if transform == "fill_holes":
+        return get_holes
     elif transform == "remove_small_objects":
         return remove_small_objects
-    elif transform == "get_largest_cc":
-        return get_largest_cc
-    elif transform == "top_k":
+    elif transform == "top_k_cc":
         return get_top_k_components
     else:
         raise ValueError("Invalid morphological transform")

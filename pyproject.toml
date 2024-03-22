@@ -1,6 +1,6 @@
 [project]
 name = "mist-medical"
-version = "0.3.1-alpha"
+version = "0.4.0-alpha"
 requires-python = ">= 3.8"
 description = "MIST is a simple, fully automated framework for 3D medical imaging segmentation."
 readme = "README.md"
@@ -63,6 +63,7 @@ mist_preprocess = "mist.scripts.preprocess_entrypoint:preprocess_entry"
 mist_train = "mist.scripts.train_entrypoint:train_entry"
 mist_predict = "mist.predict:mist_predict_entry"
 mist_evaluate = "mist.eval_preds:mist_eval_entry"
+mist_postprocess = "mist.post_preds:mist_postprocess_entry"
 mist_convert_dataset = "mist.convert_to_mist:convert_to_mist_entry"
 
 [tool.codespell]

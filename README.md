@@ -28,6 +28,7 @@ Please cite the following papers if you use this code for your work:
 
 
 ## What's New
+* March 2024 - Simplify and decouple postprocessing from main MIST pipeline.
 * March 2024 - Support for using transfer learning with pretrained MIST models is now available.
 * March 2024 - Boundary-based loss functions are now available.
 * Feb. 2024 - MIST is now available as PyPI package and as a Docker image on DockerHub.
@@ -126,17 +127,15 @@ Here is an example for the BraTS 2023 dataset.
 }
 ```
 
-Examples for several datasets are provided in the [examples/dataset-json](MIST/examples/dataset-json) directory.
-
 ## Getting Started
 The MIST pipeline consists of three stages:
 1. Analyze - Gathering parameters about the dataset like target spacing, normalization parameters, etc. This produces a ```config.json``` file, which will be used for the rest of the pipeline.
 
 2. Preprocess - Use the learned parameters from the analysis phase of the MIST pipeline to preprocess the data (i.e., reorient, resample, etc.) and convert it to numpy files.
 
-3. Train/Postprocess - Train on preprocessed data using a five-fold cross validation to produce a final set of models for inference. After training, a postprocessing analysis pipeline is activated to determine optimal postprocessing procedures.
+3. Train - Train on preprocessed data using a five-fold cross validation to produce a final set of models for inference.
 
-Additionally, MIST provides auxiliary commands that handle test-time prediction, evaluating a given set of predictions, and converting other datasets to the MIST format.
+Additionally, MIST provides auxiliary commands that handle postprocessing, test-time prediction, evaluating a given set of predictions, and converting other datasets to the MIST format.
 
 When you install the MIST package, the following commands are included:
 
@@ -201,7 +200,20 @@ When you install the MIST package, the following commands are included:
 	- ```--dest```: The full path to the new MIST formatted dataset
 	
 	Note that the CSV file should mirror the CSV format shown in the ```mist_predict``` command. Additionally, this command will reformat the CSV dataset to a MIST-compatible one but will require the user to fill in details in its corresponding dataset JSON file.
-    
+
+* ```mist_postprocess```: This command runs the postprocessing pipeline on the original predictions produced by the main MIST pipeline. The following arguments are required for this command:
+	- ```--base-results```: The full path to the results of the MIST pipeline
+	- ```--output```: The full path to the output of the postprocessing pipeline
+	- ```--apply-to-labels```: Labels to apply postprocessing transformations, default is ```[-1]``` or all labels combined
+	- At least one postprocessing transformation:
+		- ```--remove-small-objects```: Removes small objects of size less than or equal to ```--small-object-threshold```, which is 64 by default
+		- ```--top-k-cc```: Only keep the ```--top-k``` (by default 2) connected components
+		- ```--fill-holes```: Fill holes with ```--fill-label``` (you need to specify this)
+	- ```--update-config```: Optional but important to note; set this if you want the config file to be updated if postprocessing, on average, improves results by at least 5%
+	- ```--morph-cleanup```: Optional but recommended for ```--top-k-cc```; applies a morphological erosion prior to selecting the top k connected components and then uses a dilation after the connected components are selected
+	
+  WARNING: ```mist_postprocess``` can be very slow if your images are extremely large and/or you have a lot of labels (which will slow down evaluation).
+
 ### Docker
 The MIST package is also available as a Docker image. Start by pulling the ```mistmedical/mist``` image from DockerHub:
 ```
@@ -213,21 +225,8 @@ Use the following command to run an interactive Docker container with the MIST p
 docker run --rm -it -u $(id -u):$(id -g) --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 -v /your/working/directory/:/workspace mist
 ```
 
-From there, you can run any of the commands described above inside the Docker container. Additionally, you can create and build a separate 
-Docker image for a given command as its entry point. For example, to create a Docker image to run the ```mist_predict``` command, 
-you can create the following Dockerfile,
-```
-ARG FROM_IMAGE_NAME=mistmedical/mist:latest
-FROM ${FROM_IMAGE_NAME}
-
-ENTRYPOINT ["mist_predict"]
-```
-
-build the image, and run it with the following command:
-```a
-docker run --rm -it -u $(id -u):$(id -g) --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 -v /your/working/directory/:/workspace <your image> --<your args>
-```
-
+From there, you can run any of the commands described above inside the Docker container. Additionally, you can use the Docker 
+entrypoint command to run any of the MIST scripts.
 
 ## Output
 The output of the MIST pipeline has the following structure:
@@ -256,7 +255,6 @@ Here is a breakdown of what each file/directory contains.
 | ```train_paths.csv``` | CSV file starting with columns ```id``` and ```fold``` specifying the patient ID and which fold they belong to, and paths to the mask and images.              |
 | ```test_paths.csv```  | Same as ```train_paths.csv```, but for the test set if it's given.                                                                                             |
 | ```fg_bboxes.csv```   | CSV file containing information about the bounding box around the foreground for each image.                                                                   |
-
 
 ## Advanced Usage
 All MIST commands come with ```--help``` or ```-h``` option, which allows you to see all the available settings/arguments for that command.
@@ -295,8 +293,7 @@ usage: mist_run_all [-h] [--exec-mode {all,analyze,preprocess,train}]
                     [--linear-schedule-pause LINEAR_SCHEDULE_PAUSE]
                     [--step-schedule-step-length STEP_SCHEDULE_STEP_LENGTH]
                     [--sw-overlap SW_OVERLAP]
-                    [--blend-mode {constant,gaussian}]
-                    [--no-postprocess [BOOLEAN]] [--nfolds NFOLDS]
+                    [--blend-mode {gaussian,constant}] [--nfolds NFOLDS]
                     [--folds FOLDS [FOLDS ...]] [--epochs EPOCHS]
                     [--steps-per-epoch STEPS_PER_EPOCH]
                     [--use-native-spacing [BOOLEAN]] [--output-std [BOOLEAN]]
@@ -329,7 +326,7 @@ optional arguments:
   --learning-rate LEARNING_RATE
                         Learning rate (default: 0.0003)
   --exp_decay EXP_DECAY
-                        Exponential decay factor (default: 0.9)
+                        Exponential decay factor (default: 0.9999)
   --lr-scheduler {constant,cosine_warm_restarts,exponential}
                         Learning rate scheduler (default: constant)
   --cosine-first-steps COSINE_FIRST_STEPS
@@ -392,23 +389,67 @@ optional arguments:
   --sw-overlap SW_OVERLAP
                         Amount of overlap between scans during sliding window
                         inference (default: 0.5)
-  --blend-mode {constant,gaussian}
+  --blend-mode {gaussian,constant}
                         How to blend output of overlapping windows (default:
                         gaussian)
-  --no-postprocess [BOOLEAN]
-                        Run post processing on MIST output (default: False)
   --nfolds NFOLDS       Number of cross-validation folds (default: 5)
   --folds FOLDS [FOLDS ...]
                         Which folds to run (default: [0, 1, 2, 3, 4])
   --epochs EPOCHS       Number of epochs (default: 1000)
   --steps-per-epoch STEPS_PER_EPOCH
                         Steps per epoch. By default ceil(training_dataset_size
-                        / batch_size / gpus) (default: None)
+                        / (batch_size * gpus) (default: None)
   --use-native-spacing [BOOLEAN]
                         Use native image spacing to compute Hausdorff
                         distances (default: False)
   --output-std [BOOLEAN]
                         Output standard deviation for ensemble predictions
+                        (default: False)
+```
+
+Here are the available arguments for ```mist_postprocess```:
+```
+usage: mist_postprocess [-h] [--base-results BASE_RESULTS] [--output OUTPUT]
+                        [--apply-to-labels APPLY_TO_LABELS [APPLY_TO_LABELS ...]]
+                        [--remove-small-objects [BOOLEAN]]
+                        [--top-k-cc [BOOLEAN]] [--morph-cleanup [BOOLEAN]]
+                        [--fill-holes [BOOLEAN]] [--update-config [BOOLEAN]]
+                        [--small-object-threshold SMALL_OBJECT_THRESHOLD]
+                        [--top-k TOP_K]
+                        [--morph-cleanup-iterations MORPH_CLEANUP_ITERATIONS]
+                        [--fill-label FILL_LABEL]
+                        [--use-native-spacing [BOOLEAN]]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --base-results BASE_RESULTS
+                        Path to original MIST results directory (default: None)
+  --output OUTPUT       Path to save postprocessed results (default: None)
+  --apply-to-labels APPLY_TO_LABELS [APPLY_TO_LABELS ...]
+                        List of labels to apply postprocessing (default: [-1])
+  --remove-small-objects [BOOLEAN]
+                        Remove small objects (default: False)
+  --top-k-cc [BOOLEAN]  Keep k largest connected components (CCs) (default:
+                        False)
+  --morph-cleanup [BOOLEAN]
+                        Turn on morphological cleaning for k largest CCs
+                        (default: False)
+  --fill-holes [BOOLEAN]
+                        Fill holes (default: False)
+  --update-config [BOOLEAN]
+                        Update config file if results improve with
+                        postprocessing strategy (default: False)
+  --small-object-threshold SMALL_OBJECT_THRESHOLD
+                        Threshold size for small objects (default: 64)
+  --top-k TOP_K         How many of top connected components to keep (default:
+                        2)
+  --morph-cleanup-iterations MORPH_CLEANUP_ITERATIONS
+                        How many iterations for morphological cleaning (default:
+                        2)
+  --fill-label FILL_LABEL
+                        Fill label for fill holes transformation (default: None)
+  --use-native-spacing [BOOLEAN]
+                        Use native image spacing to compute Hausdorff distances
                         (default: False)
 ```
 

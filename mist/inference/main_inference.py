@@ -1,6 +1,7 @@
 import os
 import gc
 import json
+import pdb
 
 import ants
 import pandas as pd
@@ -77,6 +78,9 @@ def back_to_original_space(pred, og_ants_img, config, fg_bbox):
                     fg_bbox["z_end"] - fg_bbox["z_start"] + 1]
     else:
         new_size = og_ants_img.shape
+
+    # Bug fix for sitk resample
+    new_size = np.array(new_size, dtype='int').tolist()
 
     pred = resample_mask(pred,
                          labels=list(range(len(config["labels"]))),
@@ -255,11 +259,24 @@ def test_time_inference(df,
                                                             fg_bbox)
 
             # Apply postprocessing if required
-            transforms = ["remove_small_objects", "top_k", "get_largest_cc", "clean_mask", "fill_holes"]
+            transforms = ["remove_small_objects", "top_k_cc", "fill_holes"]
             for transform in transforms:
-                if config[transform] is not None:
-                    if not (transform == "fill_holes") and len(config[transform]) > 0:
-                        apply_transform(prediction, transform, config["labels"], config["transform"])
+                if len(config[transform]) > 0:
+                    for i in range(len(config[transform])):
+                        if transform == "remove_small_objects":
+                            transform_kwargs = {"small_object_threshold": config[transform][i][1]}
+                        if transform == "top_k_cc":
+                            transform_kwargs = {"morph_cleanup": config[transform][i][1],
+                                                "morph_cleanup_iterations": config[transform][i][2],
+                                                "top_k": config[transform][i][3]}
+                        if transform == "fill_holes":
+                            transform_kwargs = {"fill_label": config[transform][i][1]}
+
+                        prediction = apply_transform(prediction,
+                                                     transform,
+                                                     config["labels"],
+                                                     config[transform][i][0],
+                                                     transform_kwargs)
 
             # Write prediction mask to nifti file and save to disk
             prediction_filename = '{}.nii.gz'.format(str(patient['id']))
