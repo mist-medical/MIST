@@ -261,38 +261,37 @@ All MIST commands come with ```--help``` or ```-h``` option, which allows you to
 
 For the ```mist_run_all```, ```mist_analyze```, ```mist_preprocess```, and ```mist_train``` commands, here is a complete list of the available arguments:
 ```
-usage: mist_run_all [-h] [--exec-mode {all,analyze,preprocess,train}]
-                    [--data DATA] [--gpus GPUS [GPUS ...]]
-                    [--num-workers NUM_WORKERS] [--master-port MASTER_PORT]
-                    [--seed_val SEED_VAL] [--tta [BOOLEAN]]
-                    [--results RESULTS] [--numpy NUMPY] [--amp [BOOLEAN]]
-                    [--batch-size BATCH_SIZE]
+usage: mist_run_all [-h] [--exec-mode {all,analyze,preprocess,train}] [--data DATA]
+                    [--gpus GPUS [GPUS ...]] [--num-workers NUM_WORKERS]
+                    [--master-port MASTER_PORT] [--seed_val SEED_VAL]
+                    [--tta [BOOLEAN]] [--results RESULTS] [--numpy NUMPY]
+                    [--amp [BOOLEAN]] [--batch-size BATCH_SIZE]
                     [--patch-size PATCH_SIZE [PATCH_SIZE ...]]
                     [--max-patch-size MAX_PATCH_SIZE [MAX_PATCH_SIZE ...]]
-                    [--learning-rate LEARNING_RATE] [--exp_decay EXP_DECAY]
+                    [--val-percent VAL_PERCENT] [--learning-rate LEARNING_RATE]
+                    [--exp_decay EXP_DECAY]
                     [--lr-scheduler {constant,cosine_warm_restarts,exponential}]
                     [--cosine-first-steps COSINE_FIRST_STEPS]
                     [--optimizer {sgd,adam,adamw}] [--clip-norm [BOOLEAN]]
                     [--clip-norm-max CLIP_NORM_MAX]
                     [--model {nnunet,unet,fmgnet,wnet,attn_unet,unetr,pretrained}]
                     [--pretrained-model-path PRETRAINED_MODEL_PATH]
-                    [--use-res-block [BOOLEAN]] [--pocket [BOOLEAN]]
-                    [--depth DEPTH] [--deep-supervision [BOOLEAN]]
+                    [--use-res-block [BOOLEAN]] [--pocket [BOOLEAN]] [--depth DEPTH]
+                    [--deep-supervision [BOOLEAN]]
                     [--deep-supervision-heads DEEP_SUPERVISION_HEADS]
                     [--vae-reg [BOOLEAN]] [--vae-penalty VAE_PENALTY]
                     [--l2-reg [BOOLEAN]] [--l2-penalty L2_PENALTY]
                     [--l1-reg [BOOLEAN]] [--l1-penalty L1_PENALTY]
                     [--oversampling OVERSAMPLING] [--no-preprocess [BOOLEAN]]
                     [--use-n4-bias-correction [BOOLEAN]]
-                    [--use-config-class-weights [BOOLEAN]]
-                    [--use-dtms [BOOLEAN]]
+                    [--use-config-class-weights [BOOLEAN]] [--use-dtms [BOOLEAN]]
                     [--class-weights CLASS_WEIGHTS [CLASS_WEIGHTS ...]]
                     [--loss {dice_ce,dice,gdl,gdl_ce,bl,hdl,gsl}]
                     [--boundary-loss-schedule {constant,linear,step,cosine}]
                     [--loss-schedule-constant LOSS_SCHEDULE_CONSTANT]
                     [--linear-schedule-pause LINEAR_SCHEDULE_PAUSE]
                     [--step-schedule-step-length STEP_SCHEDULE_STEP_LENGTH]
-                    [--sw-overlap SW_OVERLAP]
+                    [--sw-overlap SW_OVERLAP] [--val-sw-overlap VAL_SW_OVERLAP]
                     [--blend-mode {gaussian,constant}] [--nfolds NFOLDS]
                     [--folds FOLDS [FOLDS ...]] [--epochs EPOCHS]
                     [--steps-per-epoch STEPS_PER_EPOCH]
@@ -301,8 +300,8 @@ usage: mist_run_all [-h] [--exec-mode {all,analyze,preprocess,train}]
 optional arguments:
   -h, --help            show this help message and exit
   --exec-mode {all,analyze,preprocess,train}
-                        Run all of the MIST pipeline or an individual
-                        component (default: all)
+                        Run all of the MIST pipeline or an individual component
+                        (default: all)
   --data DATA           Path to dataset json file (default: None)
   --gpus GPUS [GPUS ...]
                         Which gpu(s) to use, defaults to all available GPUs
@@ -315,14 +314,17 @@ optional arguments:
   --tta [BOOLEAN]       Enable test time augmentation (default: False)
   --results RESULTS     Path to output of MIST pipeline (default: None)
   --numpy NUMPY         Path to save preprocessed numpy data (default: None)
-  --amp [BOOLEAN]       Enable automatic mixed precision (recommended)
-                        (default: False)
+  --amp [BOOLEAN]       Enable automatic mixed precision (recommended) (default:
+                        False)
   --batch-size BATCH_SIZE
                         Batch size (default: None)
   --patch-size PATCH_SIZE [PATCH_SIZE ...]
                         Height, width, and depth of patch size (default: None)
   --max-patch-size MAX_PATCH_SIZE [MAX_PATCH_SIZE ...]
                         Max patch size (default: [256, 256, 256])
+  --val-percent VAL_PERCENT
+                        Percentage of training data used for validation (default:
+                        0.1)
   --learning-rate LEARNING_RATE
                         Learning rate (default: 0.0003)
   --exp_decay EXP_DECAY
@@ -340,11 +342,10 @@ optional arguments:
                         Max threshold for global norm clipping (default: 1.0)
   --model {nnunet,unet,fmgnet,wnet,attn_unet,unetr,pretrained}
   --pretrained-model-path PRETRAINED_MODEL_PATH
-                        Full path to pretrained mist models directory
-                        (default: None)
+                        Full path to pretrained mist models directory (default:
+                        None)
   --use-res-block [BOOLEAN]
-                        Use residual blocks for nnUNet or UNet (default:
-                        False)
+                        Use residual blocks for nnUNet or UNet (default: False)
   --pocket [BOOLEAN]    Use pocket version of network (default: False)
   --depth DEPTH         Depth of U-Net or similar architecture (default: None)
   --deep-supervision [BOOLEAN]
@@ -361,13 +362,13 @@ optional arguments:
   --l1-penalty L1_PENALTY
                         L1 penalty (default: 1e-05)
   --oversampling OVERSAMPLING
-                        Probability of crop centered on foreground voxel
-                        (default: 0.4)
+                        Probability of crop centered on foreground voxel (default:
+                        0.4)
   --no-preprocess [BOOLEAN]
                         Turn off preprocessing (default: False)
   --use-n4-bias-correction [BOOLEAN]
-                        Use N4 bias field correction (only for MR images)
-                        (default: False)
+                        Use N4 bias field correction (only for MR images) (default:
+                        False)
   --use-config-class-weights [BOOLEAN]
                         Use class weights in config file (default: False)
   --use-dtms [BOOLEAN]  Compute and use DTMs during training (default: False)
@@ -376,19 +377,21 @@ optional arguments:
   --loss {dice_ce,dice,gdl,gdl_ce,bl,hdl,gsl}
                         Loss function for training (default: dice_ce)
   --boundary-loss-schedule {constant,linear,step,cosine}
-                        Weighting schedule for boundary losses (default:
-                        constant)
+                        Weighting schedule for boundary losses (default: constant)
   --loss-schedule-constant LOSS_SCHEDULE_CONSTANT
                         Constant for fixed alpha schedule (default: 0.5)
   --linear-schedule-pause LINEAR_SCHEDULE_PAUSE
                         Number of epochs before linear alpha scheduler starts
                         (default: 5)
   --step-schedule-step-length STEP_SCHEDULE_STEP_LENGTH
-                        Number of epochs before in each section of the step-
-                        wise alpha scheduler (default: 5)
+                        Number of epochs before in each section of the step-wise
+                        alpha scheduler (default: 5)
   --sw-overlap SW_OVERLAP
-                        Amount of overlap between scans during sliding window
-                        inference (default: 0.5)
+                        Amount of overlap between patches during sliding window
+                        inference at test time (default: 0.5)
+  --val-sw-overlap VAL_SW_OVERLAP
+                        Amount of overlap between patches during sliding window
+                        inference during validation (default: 0.5)
   --blend-mode {gaussian,constant}
                         How to blend output of overlapping windows (default:
                         gaussian)
@@ -397,14 +400,14 @@ optional arguments:
                         Which folds to run (default: [0, 1, 2, 3, 4])
   --epochs EPOCHS       Number of epochs (default: 1000)
   --steps-per-epoch STEPS_PER_EPOCH
-                        Steps per epoch. By default ceil(training_dataset_size
-                        / (batch_size * gpus) (default: None)
+                        Steps per epoch. By default ceil(training_dataset_size /
+                        (batch_size * gpus) (default: None)
   --use-native-spacing [BOOLEAN]
-                        Use native image spacing to compute Hausdorff
-                        distances (default: False)
-  --output-std [BOOLEAN]
-                        Output standard deviation for ensemble predictions
+                        Use native image spacing to compute Hausdorff distances
                         (default: False)
+  --output-std [BOOLEAN]
+                        Output standard deviation for ensemble predictions (default:
+                        False)
 ```
 
 Here are the available arguments for ```mist_postprocess```:

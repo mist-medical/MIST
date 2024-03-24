@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 import SimpleITK as sitk
 
-# Rich progres bar
+# Rich progress bar
 from rich.console import Console
 from rich.text import Text
 
@@ -312,6 +312,8 @@ def preprocess_dataset(args):
             else:
                 if config["crop_to_fg"]:
                     fg_bbox = fg_bboxes.loc[fg_bboxes["id"] == patient["id"]].iloc[0].to_dict()
+                else:
+                    fg_bbox = None
 
                 image_npy, mask_npy, _, dtm_npy = preprocess_example(config,
                                                                      image_list,

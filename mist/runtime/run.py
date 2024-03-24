@@ -135,6 +135,8 @@ class Trainer:
                 # Get foreground mask if necessary
                 if self.config["crop_to_fg"]:
                     fg_bbox = self.fg_bboxes.loc[self.fg_bboxes["id"] == patient["id"]].iloc[0].to_dict()
+                else:
+                    fg_bbox = None
 
                 # Predict with model and put back into original image space
                 pred, _ = predict_single_example(preproc_npy_img,
@@ -190,7 +192,7 @@ class Trainer:
                 # Get validation set from training split with DTMs
                 train_images, val_images, train_labels_dtms, val_labels_dtms = train_test_split(train_images,
                                                                                                 zip_labels_dtms,
-                                                                                                test_size=0.1,
+                                                                                                test_size=self.args.val_percent,
                                                                                                 random_state=self.args.seed_val)
 
                 train_labels = [vol[0] for vol in train_labels_dtms]
@@ -200,7 +202,7 @@ class Trainer:
                 # Get validation set from training split
                 train_images, val_images, train_labels, val_labels = train_test_split(train_images,
                                                                                       train_labels,
-                                                                                      test_size=0.1,
+                                                                                      test_size=self.args.val_percent,
                                                                                       random_state=self.args.seed_val)
 
                 train_dtms = None
@@ -352,7 +354,7 @@ class Trainer:
             def val_step(image, label):
                 pred = sliding_window_inference(image,
                                                 roi_size=self.patch_size,
-                                                overlap=self.args.sw_overlap,
+                                                overlap=self.args.val_sw_overlap,
                                                 sw_batch_size=1,
                                                 predictor=model,
                                                 device=torch.device("cuda"))

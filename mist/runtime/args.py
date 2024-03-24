@@ -72,6 +72,7 @@ def get_main_args():
     p.arg("--batch-size", type=positive_int, help="Batch size")
     p.arg("--patch-size", nargs="+", type=int, help="Height, width, and depth of patch size")
     p.arg("--max-patch-size", default=[256, 256, 256], nargs="+", type=int, help="Max patch size")
+    p.arg("--val-percent", type=float_0_1, default=0.1, help="Percentage of training data used for validation")
     p.arg("--learning-rate", type=float, default=0.0003, help="Learning rate")
     p.arg("--exp_decay", type=float, default=0.9999, help="Exponential decay factor")
     p.arg("--lr-scheduler",
@@ -147,7 +148,11 @@ def get_main_args():
     p.arg("--sw-overlap",
           type=float_0_1,
           default=0.5,
-          help="Amount of overlap between scans during sliding window inference")
+          help="Amount of overlap between patches during sliding window inference at test time")
+    p.arg("--val-sw-overlap",
+          type=float_0_1,
+          default=0.5,
+          help="Amount of overlap between patches during sliding window inference during validation")
     p.arg("--blend-mode",
           type=str,
           choices=["gaussian", "constant"],
