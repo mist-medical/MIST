@@ -1,6 +1,6 @@
 [project]
 name = "mist-medical"
-version = "0.4.1-alpha"
+version = "0.4.2-alpha"
 requires-python = ">= 3.8"
 description = "MIST is a simple, fully automated framework for 3D medical imaging segmentation."
 readme = "README.md"
@@ -18,7 +18,7 @@ authors = [
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
+    "License :: Other/Proprietary",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Scientific/Engineering :: Medical Science Apps."
 ]

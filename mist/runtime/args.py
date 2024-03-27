@@ -98,7 +98,6 @@ def get_main_args():
     p.arg("--pretrained-model-path", type=str, help="Full path to pretrained mist models directory")
     p.boolean_flag("--use-res-block", default=False, help="Use residual blocks for nnUNet or UNet")
     p.boolean_flag("--pocket", default=False, help="Use pocket version of network")
-    p.arg("--depth", type=non_negative_int, help="Depth of U-Net or similar architecture")
     p.boolean_flag("--deep-supervision", default=False, help="Use deep supervision")
     p.arg("--deep-supervision-heads", type=positive_int, default=2, help="Number of deep supervision heads")
     p.boolean_flag("--vae-reg", default=False, help="Use VAE regularization")
