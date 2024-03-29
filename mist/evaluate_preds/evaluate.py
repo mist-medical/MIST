@@ -3,9 +3,11 @@ import json
 import ants
 import pandas as pd
 import numpy as np
+import SimpleITK as sitk
 
 from mist.metrics.metrics import (
     dice,
+    surface_dice,
     avg_surface_distance,
     hausdorff_distance
 )
@@ -18,7 +20,21 @@ from mist.runtime.utils import (
 )
 
 
-def evaluate_single_example(pred, truth, patient_id, config, use_native_spacing):
+def get_dtms_for_eval(mask_npy, spacing):
+    mask = sitk.Cast(sitk.GetImageFromArray(mask_npy.T), sitk.sitkUInt8)
+    mask.SetSpacing(spacing)
+
+    dtm = sitk.Abs(sitk.SignedMaurerDistanceMap(mask, squaredDistance=False, useImageSpacing=True))
+    return dtm
+
+
+def get_surface_contour_for_eval(mask_npy):
+    mask = sitk.Cast(sitk.GetImageFromArray(mask_npy.T), sitk.sitkUInt8)
+    mask_surface = sitk.LabelContour(mask)
+    return mask_surface
+
+
+def evaluate_single_example(pred, truth, patient_id, config, metrics, normalize_hd, use_native_spacing):
     # Get dice and hausdorff distances for final prediction
     row_dict = dict()
     row_dict['id'] = patient_id
@@ -49,13 +65,54 @@ def evaluate_single_example(pred, truth, patient_id, config, use_native_spacing)
             pred_temp += pred_label
             truth_temp += mask_label
 
-        row_dict['{}_dice'.format(key)] = dice(truth_temp, pred_temp)
-        row_dict['{}_haus95'.format(key)] = hausdorff_distance(truth_temp, pred_temp, spacing)
-        row_dict['{}_avg_surf'.format(key)] = avg_surface_distance(truth_temp, pred_temp, spacing)
+        # Get DTMs once - we don't recompute them for multiple metrics
+        if "haus95" in metrics or "avg_surf" in metrics or "surf_dice" in metrics:
+            truth_dtm = get_dtms_for_eval(truth_temp, spacing)
+            pred_dtm = get_dtms_for_eval(pred_temp, spacing)
+        else:
+            truth_dtm = None
+            pred_dtm = None
+
+        if "avg_surf" in metrics or "surf_dice" in metrics:
+            truth_surface = get_surface_contour_for_eval(truth_temp)
+            pred_surface = get_surface_contour_for_eval(pred_temp)
+        else:
+            truth_surface = None
+            pred_surface = None
+
+        if "dice" in metrics:
+            row_dict['{}_dice'.format(key)] = dice(truth_temp,
+                                                   pred_temp)
+        if "surf_dice" in metrics:
+            row_dict["{}_surf_dice".format(key)] = surface_dice(truth,
+                                                                pred,
+                                                                spacing,
+                                                                tolerance=1.0,
+                                                                truth_dtm=truth_dtm,
+                                                                pred_dtm=pred_dtm,
+                                                                truth_surface=truth_surface,
+                                                                pred_surface=pred_surface)
+        if "haus95" in metrics:
+            row_dict['{}_haus95'.format(key)] = hausdorff_distance(truth_temp,
+                                                                   pred_temp,
+                                                                   spacing,
+                                                                   normalize=normalize_hd,
+                                                                   percentile=95,
+                                                                   truth_dtm=truth_dtm,
+                                                                   pred_dtm=pred_dtm)
+        if "avg_surf" in metrics:
+            row_dict['{}_avg_surf'.format(key)] = avg_surface_distance(truth_temp,
+                                                                       pred_temp,
+                                                                       spacing,
+                                                                       normalize=normalize_hd,
+                                                                       truth_dtm=truth_dtm,
+                                                                       pred_dtm=pred_dtm,
+                                                                       truth_surface=truth_surface,
+                                                                       pred_surface=pred_surface)
     return row_dict
 
 
-def evaluate(config_json, paths, source_dir, output_csv, use_native_spacing):
+def evaluate(config_json, paths, source_dir, output_csv, metrics, normalize_hd, use_native_spacing):
     with open(config_json, 'r') as file:
         config = json.load(file)
 
@@ -73,7 +130,7 @@ def evaluate(config_json, paths, source_dir, output_csv, use_native_spacing):
             raise ValueError("Invalid format for paths!")
 
     # Initialize results
-    results_df = init_results_df(config)
+    results_df = init_results_df(config, metrics)
 
     # Get predictions from source directory
     predictions = os.listdir(source_dir)
@@ -92,6 +149,8 @@ def evaluate(config_json, paths, source_dir, output_csv, use_native_spacing):
                                                    truth,
                                                    patient_id,
                                                    config,
+                                                   metrics,
+                                                   normalize_hd,
                                                    use_native_spacing)
             results_df = pd.concat([results_df, pd.DataFrame(eval_results, index=[0])], ignore_index=True)
 

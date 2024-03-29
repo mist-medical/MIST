@@ -24,13 +24,13 @@ import torch
 import torch.nn as nn
 
 def set_warning_levels():
-    warnings.simplefilter(action='ignore',
+    warnings.simplefilter(action="ignore",
                           category=np.VisibleDeprecationWarning)
-    warnings.simplefilter(action='ignore',
+    warnings.simplefilter(action="ignore",
                           category=FutureWarning)
-    warnings.simplefilter(action='ignore',
+    warnings.simplefilter(action="ignore",
                           category=RuntimeWarning)
-    warnings.simplefilter(action='ignore',
+    warnings.simplefilter(action="ignore",
                           category=UserWarning)
 
 
@@ -59,34 +59,48 @@ def get_files_list(path):
 
 def has_test_data(data):
     # Convert load json file if given as input
-    with open(data, 'r') as file:
+    with open(data, "r") as file:
         data = json.load(file)
 
     return "test-data" in data.keys()
 
 
+def make_test_df_from_list(images, output):
+    assert(istinstance(images, list)), "Images argument must be a list"
+    assert len(images) > 0, "No images found"
+
+    output_name = output.split("/")[-1].split(".")[0]
+    data = {"id": [f"{output_name}"]}
+
+    for i in range(len(images)):
+        data[f"image_{i}"] = [images[i]]
+
+    df = pd.DataFrame.from_dict(data=data)
+
+    return df
+
 def get_files_df(params, mode):
     # Get JSON file with dataset parameters
     if "json" in params:
-        with open(params, 'r') as file:
+        with open(params, "r") as file:
             params = json.load(file)
 
-    base_dir = os.path.abspath(params['{}-data'.format(mode)])
+    base_dir = os.path.abspath(params["{}-data".format(mode)])
     names_dict = dict()
-    if mode == 'train':
-        names_dict['mask'] = params['mask']
+    if mode == "train":
+        names_dict["mask"] = params["mask"]
 
-    for key in params['images'].keys():
-        names_dict[key] = params['images'][key]
+    for key in params["images"].keys():
+        names_dict[key] = params["images"][key]
 
-    cols = ['id'] + list(names_dict.keys())
+    cols = ["id"] + list(names_dict.keys())
     df = pd.DataFrame(columns=cols)
     row_dict = dict.fromkeys(cols)
 
     ids = os.listdir(base_dir)
 
     for i in ids:
-        row_dict['id'] = i
+        row_dict["id"] = i
         path = os.path.join(base_dir, i)
         files = get_files_list(path)
 
@@ -125,7 +139,7 @@ def add_folds_to_df(df, n_splits=5):
 
 
 def convert_dict_to_df(patients):
-    columns = ['id']
+    columns = ["id"]
 
     ids = list(patients.keys())
     image_keys = list(patients[ids[0]].keys())
@@ -134,7 +148,7 @@ def convert_dict_to_df(patients):
     df = pd.DataFrame(columns=columns)
 
     for i in range(len(patients)):
-        row_dict = {'id': ids[i]}
+        row_dict = {"id": ids[i]}
         for image in image_keys:
             row_dict[image] = patients[ids[i]][image]
         df = pd.concat([df, pd.DataFrame(row_dict, index=[0])], ignore_index=True)
@@ -188,18 +202,18 @@ def set_visible_devices(args):
     # Select GPU(s) for training
     if len(args.gpus) > 1:
         n_gpus = len(args.gpus)
-        visible_devices = ','.join([str(args.gpus[j]) for j in range(len(args.gpus))])
+        visible_devices = ",".join([str(args.gpus[j]) for j in range(len(args.gpus))])
     elif len(args.gpus) == 1 and args.gpus[0] != -1:
         n_gpus = len(args.gpus)
         visible_devices = str(args.gpus[0])
     elif len(args.gpus) == 1 and args.gpus[0] == -1:
         n_gpus = torch.cuda.device_count()
-        visible_devices = ','.join([str(j) for j in range(n_gpus)])
+        visible_devices = ",".join([str(j) for j in range(n_gpus)])
     else:
         n_gpus = torch.cuda.device_count()
-        visible_devices = ','.join([str(j) for j in range(n_gpus)])
+        visible_devices = ",".join([str(j) for j in range(n_gpus)])
 
-    os.environ['CUDA_VISIBLE_DEVICES'] = visible_devices
+    os.environ["CUDA_VISIBLE_DEVICES"] = visible_devices
     return n_gpus
 
 
@@ -224,7 +238,7 @@ def create_model_config_file(args, config, data, output):
     model_config["vae_reg"] = args.vae_reg
     model_config["use_res_block"] = args.use_res_block
 
-    with open(output, 'w') as outfile:
+    with open(output, "w") as outfile:
         json.dump(model_config, outfile, indent=2)
 
     return model_config
@@ -240,7 +254,7 @@ def create_pretrained_config_file(pretrained_model_path, data, output):
     model_config["n_channels"] = int(len(data["images"]))
     model_config["n_classes"] = int(len(data["labels"]))
 
-    with open(output, 'w') as outfile:
+    with open(output, "w") as outfile:
         json.dump(model_config, outfile, indent=2)
 
     return model_config
@@ -250,13 +264,12 @@ def get_flip_axes():
     return [[2], [3], [4], [2, 3], [2, 4], [3, 4], [2, 3, 4]]
 
 
-def init_results_df(config):
+def init_results_df(config, metrics):
     # Initialize new results dataframe
-    metrics = ['dice', 'haus95', 'avg_surf']
-    results_cols = ['id']
+    results_cols = ["id"]
     for metric in metrics:
-        for key in config['final_classes'].keys():
-            results_cols.append('{}_{}'.format(key, metric))
+        for key in config["final_classes"].keys():
+            results_cols.append("{}_{}".format(key, metric))
 
     results_df = pd.DataFrame(columns=results_cols)
     return results_df
@@ -264,11 +277,11 @@ def init_results_df(config):
 
 def compute_results_stats(results_df):
     # Get final statistics
-    mean_row = {'id': 'Mean'}
-    std_row = {'id': 'Std'}
-    percentile50_row = {'id': 'Median'}
-    percentile25_row = {'id': '25th Percentile'}
-    percentile75_row = {'id': '75th Percentile'}
+    mean_row = {"id": "Mean"}
+    std_row = {"id": "Std"}
+    percentile50_row = {"id": "Median"}
+    percentile25_row = {"id": "25th Percentile"}
+    percentile75_row = {"id": "75th Percentile"}
     for col in results_df.columns[1:]:
         mean_row[col] = np.mean(results_df[col])
         std_row[col] = np.std(results_df[col])
@@ -297,7 +310,7 @@ def resize_image_with_crop_or_pad(image, img_size, **kwargs):
 
     assert isinstance(image, (np.ndarray, np.generic))
     assert (image.ndim - 1 == len(img_size) or image.ndim == len(img_size)), \
-        'Example size doesnt fit image size'
+        "Example size doesnt fit image size"
 
     # Get the image dimensionality
     rank = len(img_size)
@@ -662,6 +675,6 @@ class AlphaSchedule:
         elif self.schedule == "step":
             return self.step(epoch)
         elif self.schedule == "cosine":
-            return self.cosine(epoch).astype('float32')
+            return self.cosine(epoch).astype("float32")
         else:
             raise ValueError("Enter valid schedule type")

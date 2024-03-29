@@ -63,6 +63,8 @@ def main(args):
                  os.path.join(args.results, "train_paths.csv"),
                  os.path.join(args.results, "predictions", "train", "raw"),
                  os.path.join(args.results, "results.csv"),
+                 args.metrics,
+                 args.normalize_hd,
                  args.use_native_spacing)
 
     if args.exec_mode == "all" or args.exec_mode == "train":

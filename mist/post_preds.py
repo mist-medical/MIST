@@ -33,6 +33,12 @@ def get_postprocess_args():
           type=non_negative_int,
           help="How many iterations for morphological cleaning")
     p.arg("--fill-label", type=non_negative_int, help="Fill label for fill holes transformation")
+    p.boolean_flag("--normalize-hd", default=False, help="Normalize Hausdorff distances")
+    p.arg("--metrics",
+          nargs="+",
+          default=["dice", "haus95"],
+          choices=["dice", "surf_dice", "haus95", "avg_surf"],
+          help="List of metrics to use for evaluation")
     p.boolean_flag("--use-native-spacing",
                    default=False,
                    help="Use native image spacing to compute Hausdorff distances")

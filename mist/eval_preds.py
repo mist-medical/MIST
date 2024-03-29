@@ -12,6 +12,12 @@ def get_eval_args():
     p.arg("--paths", type=str, help="Path to CSV or JSON file with original mask/data")
     p.arg("--preds-dir", type=str, help="Path to directory containing predictions")
     p.arg("--output-csv", type=str, help="Path to CSV containing evaluation results")
+    p.arg("--metrics",
+          nargs="+",
+          default=["dice", "haus95"],
+          choices=["dice", "surf_dice", "haus95", "avg_surf"],
+          help="List of metrics to use for evaluation")
+    p.boolean_flag("--normalize-hd", default=False, help="Normalize Hausdorff distances")
     p.boolean_flag("--use-native-spacing",
                    default=False,
                    help="Use native image spacing to compute Hausdorff distances")
@@ -29,6 +35,8 @@ def main(args):
              args.paths,
              args.preds_dir,
              args.output_csv,
+             args.metrics,
+             args.normalize_hd,
              args.use_native_spacing)
 
 

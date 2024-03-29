@@ -41,7 +41,74 @@ def dice(truth, pred):
     return dice_score
 
 
-def avg_surface_distance(truth, pred, spacing):
+def surface_dice(truth,
+                 pred,
+                 spacing,
+                 tolerance=1.0,
+                 truth_dtm=None,
+                 pred_dtm=None,
+                 truth_surface=None,
+                 pred_surface=None):
+    # Convert inputs to SITK images and set spacing
+    truth = sitk.Cast(sitk.GetImageFromArray(truth.T), sitk.sitkUInt8)
+    truth.SetSpacing(spacing)
+
+    pred = sitk.Cast(sitk.GetImageFromArray(pred.T), sitk.sitkUInt8)
+    pred.SetSpacing(spacing)
+
+    if is_empty(pred) and is_empty(truth):
+        surf_dice = 1.
+    elif is_empty(pred) and not (is_empty(truth)):
+        surf_dice = 0.
+    elif not (is_empty(pred)) and is_empty(truth):
+        surf_dice = 0.
+    else:
+        # Get distance transform maps for true and predicted masks
+        if truth_dtm is None:
+            truth_dtm = sitk.Abs(sitk.SignedMaurerDistanceMap(truth, squaredDistance=False, useImageSpacing=True))
+        if pred_dtm is None:
+            pred_dtm = sitk.Abs(sitk.SignedMaurerDistanceMap(pred, squaredDistance=False, useImageSpacing=True))
+
+        # Get contours for true and predicted masks
+        if truth_surface is None:
+            truth_surface = sitk.LabelContour(truth)
+        if pred_surface is None:
+            pred_surface = sitk.LabelContour(pred)
+
+        # Get number of voxels in true and predicted surfaces
+        num_truth_surf_voxels = sitk_get_sum(truth_surface)
+        num_pred_surf_voxels = sitk_get_sum(pred_surface)
+
+        # Distance from prediction surface to ground truth segmentation
+        pred_to_truth_dtm = truth_dtm * sitk.Cast(pred_surface, sitk.sitkFloat32)
+
+        # Distance from ground truth surface to predicted segmentation
+        truth_to_pred_dtm = pred_dtm * sitk.Cast(truth_surface, sitk.sitkFloat32)
+
+        # Compute surface overlap at tolerance
+        truth_to_pred_dtm_map_array = sitk.GetArrayViewFromImage(truth_to_pred_dtm)
+        truth_surface_array = sitk.GetArrayViewFromImage(truth_surface)
+        surf_overlap_with_truth = np.sum(list(truth_surface_array[truth_to_pred_dtm_map_array <= tolerance]))
+
+        pred_to_truth_dtm_map_array = sitk.GetArrayViewFromImage(pred_to_truth_dtm)
+        pred_surface_array = sitk.GetArrayViewFromImage(pred_surface)
+        surf_overlap_with_pred = np.sum(list(pred_surface_array[pred_to_truth_dtm_map_array <= tolerance]))
+
+        num = surf_overlap_with_truth + surf_overlap_with_pred
+        den = num_truth_surf_voxels + num_pred_surf_voxels
+        surf_dice = num / den
+
+    return surf_dice
+
+
+def avg_surface_distance(truth,
+                         pred,
+                         spacing,
+                         normalize=False,
+                         truth_dtm=None,
+                         pred_dtm=None,
+                         truth_surface=None,
+                         pred_surface=None):
     # Convert inputs to SITK images and set spacing
     truth = sitk.Cast(sitk.GetImageFromArray(truth.T), sitk.sitkUInt8)
     truth.SetSpacing(spacing)
@@ -55,17 +122,27 @@ def avg_surface_distance(truth, pred, spacing):
     if is_empty(pred) and is_empty(truth):
         avg_surf_dist = 0.
     elif is_empty(pred) and not (is_empty(truth)):
-        avg_surf_dist = worst_case
+        if normalize:
+            avg_surf_dist = 1.0
+        else:
+            avg_surf_dist = worst_case
     elif not (is_empty(pred)) and is_empty(truth):
-        avg_surf_dist = worst_case
+        if normalize:
+            avg_surf_dist = 1.0
+        else:
+            avg_surf_dist = worst_case
     else:
         # Get distance transform maps for true and predicted masks
-        truth_dtm = sitk.Abs(sitk.SignedMaurerDistanceMap(truth, squaredDistance=False, useImageSpacing=True))
-        pred_dtm = sitk.Abs(sitk.SignedMaurerDistanceMap(pred, squaredDistance=False, useImageSpacing=True))
+        if truth_dtm is None:
+            truth_dtm = sitk.Abs(sitk.SignedMaurerDistanceMap(truth, squaredDistance=False, useImageSpacing=True))
+        if pred_dtm is None:
+            pred_dtm = sitk.Abs(sitk.SignedMaurerDistanceMap(pred, squaredDistance=False, useImageSpacing=True))
 
         # Get contours for true and predicted masks
-        truth_surface = sitk.LabelContour(truth)
-        pred_surface = sitk.LabelContour(pred)
+        if truth_surface is None:
+            truth_surface = sitk.LabelContour(truth)
+        if pred_surface is None:
+            pred_surface = sitk.LabelContour(pred)
 
         # Get number of voxels in true and predicted surfaces
         num_truth_surf_voxels = sitk_get_sum(truth_surface)
@@ -92,16 +169,31 @@ def avg_surface_distance(truth, pred, spacing):
         den = len(pred_to_truth_distances) + len(truth_to_pred_distances)
         avg_surf_dist = num / den
 
+        if normalize:
+            avg_surf_dist /= worst_case
+
         if not (np.isfinite(avg_surf_dist)):
-            avg_surf_dist = worst_case
+            if normalize:
+                avg_surf_dist = 1.0
+            else:
+                avg_surf_dist = worst_case
 
         if np.isnan(avg_surf_dist):
-            avg_surf_dist = worst_case
+            if normalize:
+                avg_surf_dist = 1.0
+            else:
+                avg_surf_dist = worst_case
 
     return avg_surf_dist
 
 
-def hausdorff_distance(truth, pred, spacing, percentile=95):
+def hausdorff_distance(truth,
+                       pred,
+                       spacing,
+                       normalize=False,
+                       percentile=95,
+                       truth_dtm=None,
+                       pred_dtm=None):
     # Convert inputs to SITK images and set spacing
     truth = sitk.Cast(sitk.GetImageFromArray(truth.T), sitk.sitkUInt8)
     truth.SetSpacing(spacing)
@@ -115,13 +207,21 @@ def hausdorff_distance(truth, pred, spacing, percentile=95):
     if is_empty(pred) and is_empty(truth):
         haus = 0.
     elif is_empty(pred) and not (is_empty(truth)):
-        haus = worst_case
+        if normalize:
+            haus = 1.0
+        else:
+            haus = worst_case
     elif not (is_empty(pred)) and is_empty(truth):
-        haus = worst_case
+        if normalize:
+            haus = 1.0
+        else:
+            haus = worst_case
     else:
         # Get distance transform maps for true and predicted masks
-        truth_dtm = sitk.Abs(sitk.SignedMaurerDistanceMap(truth, squaredDistance=False, useImageSpacing=True))
-        pred_dtm = sitk.Abs(sitk.SignedMaurerDistanceMap(pred, squaredDistance=False, useImageSpacing=True))
+        if truth_dtm is None:
+            truth_dtm = sitk.Abs(sitk.SignedMaurerDistanceMap(truth, squaredDistance=False, useImageSpacing=True))
+        if pred_dtm is None:
+            pred_dtm = sitk.Abs(sitk.SignedMaurerDistanceMap(pred, squaredDistance=False, useImageSpacing=True))
 
         # Get number of voxels in true and predicted masks
         num_truth_voxels = sitk_get_sum(truth)
@@ -147,10 +247,19 @@ def hausdorff_distance(truth, pred, spacing, percentile=95):
         haus = np.max([np.percentile(pred_to_truth_distances, percentile),
                        np.percentile(truth_to_pred_distances, percentile)])
 
+        if normalize:
+            haus /= worst_case
+
         if not (np.isfinite(haus)):
-            haus = worst_case
+            if normalize:
+                haus = 1.0
+            else:
+                haus = worst_case
 
         if np.isnan(haus):
-            haus = worst_case
+            if normalize:
+                haus = 1.0
+            else:
+                haus = worst_case
 
     return haus

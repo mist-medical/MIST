@@ -150,7 +150,7 @@ def get_main_args():
           help="Amount of overlap between patches during sliding window inference at test time")
     p.arg("--val-sw-overlap",
           type=float_0_1,
-          default=0.5,
+          default=0.25,
           help="Amount of overlap between patches during sliding window inference during validation")
     p.arg("--blend-mode",
           type=str,
@@ -167,6 +167,12 @@ def get_main_args():
           help="Steps per epoch. By default ceil(training_dataset_size / (batch_size * gpus)")
 
     # Evaluation
+    p.arg("--metrics",
+          nargs="+",
+          default=["dice", "haus95"],
+          choices=["dice", "surf_dice", "haus95", "avg_surf"],
+          help="List of metrics to use for evaluation")
+    p.boolean_flag("--normalize-hd", default=False, help="Normalize Hausdorff distances")
     p.boolean_flag("--use-native-spacing",
                    default=False,
                    help="Use native image spacing to compute Hausdorff distances")

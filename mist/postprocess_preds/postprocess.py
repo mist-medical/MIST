@@ -7,7 +7,7 @@ import subprocess
 import pandas as pd
 import numpy as np
 
-# Rich progres bar
+# Rich progress bar
 from rich.console import Console
 from rich.text import Text
 
@@ -21,12 +21,12 @@ from mist.runtime.utils import (
 console = Console()
 
 
-def get_mean_changes(original_results, new_results):
+def get_mean_changes(original_results, new_results, metrics):
     """
     Get average change in each metric as a result of a postprocessing strategy
     """
-    mean_changes = {"dice": 0., "haus": 0., "avg_surf": 0.}
-    for metric in mean_changes.keys():
+    mean_changes = dict()
+    for metric in metrics:
         cols = [col for col in list(original_results.columns) if metric in col]
         original = np.array(list(original_results.iloc[-5][cols]))
         new = np.array(list(new_results.iloc[-5][cols]))
@@ -34,15 +34,16 @@ def get_mean_changes(original_results, new_results):
     return mean_changes
 
 
-def compute_improvement_score(original_results, new_results):
-    mean_changes = get_mean_changes(original_results, new_results)
+def compute_improvement_score(original_results, new_results, metrics):
+    mean_changes = get_mean_changes(original_results, new_results, metrics)
     score = 0.
-    if mean_changes["dice"] > 0:
-        score += mean_changes["dice"]
-    if mean_changes["haus"] < 0:
-        score += -0.5 * mean_changes["haus"]
-    if mean_changes["avg_surf"] < 0:
-        score += -0.5 * mean_changes["avg_surf"]
+    for metric in metrics:
+        if metric == "dice" or metric == "surf_dice":
+            if mean_changes[metric] > 0:
+                score += mean_changes[metric]
+        else:
+            if mean_changes[metric] < 0:
+                score += -0.5 * mean_changes[metric]
     return score
 
 
@@ -90,6 +91,7 @@ class Postprocessor:
 
         self.all_labels = self.config["labels"][1:]
         self.apply_to_labels = self.args.apply_to_labels
+        self.metrics = self.args.metrics
 
         # Get baseline results and source directory
         self.base_results_df = pd.read_csv(os.path.join(self.args.base_results, "results.csv"))
@@ -118,11 +120,13 @@ class Postprocessor:
                  self.train_paths,
                  self.dest_dir,
                  self.new_results_csv,
+                 self.metrics,
+                 self.args.normalize_hd,
                  self.args.use_native_spacing)
 
         # Compute improvement score
         new_results_df = pd.read_csv(self.new_results_csv)
-        score = compute_improvement_score(self.base_results_df, new_results_df)
+        score = compute_improvement_score(self.base_results_df, new_results_df, self.metrics)
         return score
 
     def run(self):

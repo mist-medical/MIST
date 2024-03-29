@@ -18,23 +18,23 @@ def get_predict_args():
 
     p.arg("--models", type=str, help="Directory containing saved models")
     p.arg("--config", type=str, help="Path and name of config.json file from results of MIST pipeline")
-    p.arg("--data", type=str, help="CSV or JSON file containing paths to data")
-    p.arg("--output", type=str, help="Directory to save predictions")
+    p.arg("--data", type=str, help="CSV or JSON file containing paths to images to run prediction on multiple cases")
+    p.arg("--output", type=str, help="Directory or path to nifti file to save predictions")
     p.boolean_flag("--fast", default=False, help="Use only one model for prediction to speed up inference time")
     p.arg("--gpu", type=non_negative_int, default=0, help="GPU id to run inference on")
 
     p.arg("--sw-overlap",
           type=float_0_1,
-          default=0.25,
+          default=0.5,
           help="Amount of overlap between scans during sliding window inference")
     p.arg("--blend-mode",
           type=str,
-          choices=["constant", "gaussian"],
-          default="constant",
+          choices=["gaussian", "constant"],
+          default="gaussian",
           help="How to blend output of overlapping windows")
     p.boolean_flag("--tta", default=False, help="Use test time augmentation")
     p.boolean_flag("--no-preprocess", default=False, help="Turn off preprocessing")
-    p.boolean_flag("--output_std", default=False, help="Outputs standard deviation image")
+    p.boolean_flag("--output-std", default=False, help="Outputs standard deviation image")
 
     args = p.parse_args()
     return args
@@ -48,7 +48,7 @@ def main(args):
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
 
     # Handle inputs
-    df = check_test_time_input(args.data)
+    df = check_test_time_input(args.batch_data)
 
     # Load models
     models = load_test_time_models(os.path.join(args.models), args.fast)

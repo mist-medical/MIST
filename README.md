@@ -1,28 +1,21 @@
 # Medical Imaging Segmentation Toolkit
 
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/aecelaya/MIST/python-publish.yml)
+![PyPI - Downloads](https://img.shields.io/pypi/dm/mist-medical?style=flat&logo=PyPI&label=pypi%20downloads)
+![Static Badge](https://img.shields.io/badge/paper-PocketNet-blue?logo=ieee&link=https%3A%2F%2Fieeexplore.ieee.org%2Fdocument%2F9964128)
+![Static Badge](https://img.shields.io/badge/paper-FMG_%26_WNet-blue?logo=adobeacrobatreader&link=https%3A%2F%2Fresearch.latinxinai.org%2Fpapers%2Fneurips%2F2023%2Fpdf%2FAdrian_Celaya.pdf)
+![GitHub Repo stars](https://img.shields.io/github/stars/aecelaya/MIST?style=flat)
+
 ## Overview
 The Medical Imaging Segmentation Toolkit (MIST) is a simple, fully automated 3D medical imaging segmentation 
-framework. MIST allows researchers to quickly set up, train, and test a variety of deep learning models for 3D 
-medical imaging segmentation. The following architectures are implemented on MIST:
-
-* nnUNet
-* U-Net
-* FMG-Net
-* W-Net
-* Attention U-Net
-* UNETR
-
-The following features are supported by MIST: 
-
-* [NVIDIA Data Loading Library (DALI)](https://docs.nvidia.com/deeplearning/dali/user-guide/docs/)
-* [Automatic mixed precision (AMP)](https://www.tensorflow.org/guide/mixed_precision)
-* [Multi-GPU training with DistributedDataParallel](https://pytorch.org/tutorials/intermediate/ddp_tutorial.html)
+framework. MIST allows researchers to quickly set up, train, and test state-of-the-art deep learning models for 3D 
+medical imaging segmentation.
 
 Please cite the following papers if you use this code for your work:
 
 > [A. Celaya et al., "PocketNet: A Smaller Neural Network For Medical Image Analysis," in IEEE Transactions on 
 > Medical Imaging, doi: 10.1109/TMI.2022.3224873.](https://ieeexplore.ieee.org/document/9964128)
-
+>
 > [A. Celaya et al., "FMG-Net and W-Net: Multigrid Inspired Deep Learning Architectures For Medical Imaging Segmentation", in
 > Proceedings of LatinX in AI (LXAI) Research Workshop @ NeurIPS 2023, doi: 10.52591/lxai202312104](https://research.latinxinai.org/papers/neurips/2023/pdf/Adrian_Celaya.pdf)
 
@@ -145,6 +138,7 @@ When you install the MIST package, the following commands are included:
 	- ```--results```: The full path to the directory to save the output of the MIST pipeline
     - ```--amp```: Optional, but highly recommended, if your system supports AMP
     - ```--pocket```: Optional, but highly recommended, for using smaller, but just as accurate networks
+    - ```--use-res-block```: Optional, but highly recommended, use this to turn on residual blocks in architectures
 	
 * ```mist_analyze```: This command runs only the analysis portion of the pipeline and requires the following arguments:
 	- ```--data```: The full path to your dataset JSON file
@@ -161,6 +155,7 @@ When you install the MIST package, the following commands are included:
 	- ```--results```: The full path to the directory to save the output of the MIST pipeline
     - ```--amp```: Optional, but highly recommended, if your system supports AMP
     - ```--pocket```: Optional, but highly recommended, for using smaller, but just as accurate networks
+    - ```--use-res-block```: Optional, but highly recommended, use this to turn on residual blocks in architectures
 
 * ```mist_predict```: This command runs test time inference on a given set of test data given as either a JSON or CSV file. This command is a stand alone command that can be used anytime outside of the MIST pipeline. To run this command, we need the following arguments:
 	- ```--models```: The full path to the ```models``` folder in the output of the MIST pipeline
@@ -276,7 +271,7 @@ usage: mist_run_all [-h] [--exec-mode {all,analyze,preprocess,train}] [--data DA
                     [--clip-norm-max CLIP_NORM_MAX]
                     [--model {nnunet,unet,fmgnet,wnet,attn_unet,unetr,pretrained}]
                     [--pretrained-model-path PRETRAINED_MODEL_PATH]
-                    [--use-res-block [BOOLEAN]] [--pocket [BOOLEAN]] [--depth DEPTH]
+                    [--use-res-block [BOOLEAN]] [--pocket [BOOLEAN]]
                     [--deep-supervision [BOOLEAN]]
                     [--deep-supervision-heads DEEP_SUPERVISION_HEADS]
                     [--vae-reg [BOOLEAN]] [--vae-penalty VAE_PENALTY]
@@ -295,7 +290,9 @@ usage: mist_run_all [-h] [--exec-mode {all,analyze,preprocess,train}] [--data DA
                     [--blend-mode {gaussian,constant}] [--nfolds NFOLDS]
                     [--folds FOLDS [FOLDS ...]] [--epochs EPOCHS]
                     [--steps-per-epoch STEPS_PER_EPOCH]
-                    [--use-native-spacing [BOOLEAN]] [--output-std [BOOLEAN]]
+                    [--metrics {dice,surf_dice,haus95,avg_surf} [{dice,surf_dice,haus95,avg_surf} ...]]
+                    [--normalize-hd [BOOLEAN]] [--use-native-spacing [BOOLEAN]]
+                    [--output-std [BOOLEAN]]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -304,8 +301,8 @@ optional arguments:
                         (default: all)
   --data DATA           Path to dataset json file (default: None)
   --gpus GPUS [GPUS ...]
-                        Which gpu(s) to use, defaults to all available GPUs
-                        (default: [-1])
+                        Which gpu(s) to use, defaults to all available GPUs (default:
+                        [-1])
   --num-workers NUM_WORKERS
                         Number of workers to use for data loading (default: 8)
   --master-port MASTER_PORT
@@ -323,8 +320,7 @@ optional arguments:
   --max-patch-size MAX_PATCH_SIZE [MAX_PATCH_SIZE ...]
                         Max patch size (default: [256, 256, 256])
   --val-percent VAL_PERCENT
-                        Percentage of training data used for validation (default:
-                        0.1)
+                        Percentage of training data used for validation (default: 0.1)
   --learning-rate LEARNING_RATE
                         Learning rate (default: 0.0003)
   --exp_decay EXP_DECAY
@@ -342,12 +338,10 @@ optional arguments:
                         Max threshold for global norm clipping (default: 1.0)
   --model {nnunet,unet,fmgnet,wnet,attn_unet,unetr,pretrained}
   --pretrained-model-path PRETRAINED_MODEL_PATH
-                        Full path to pretrained mist models directory (default:
-                        None)
+                        Full path to pretrained mist models directory (default: None)
   --use-res-block [BOOLEAN]
                         Use residual blocks for nnUNet or UNet (default: False)
   --pocket [BOOLEAN]    Use pocket version of network (default: False)
-  --depth DEPTH         Depth of U-Net or similar architecture (default: None)
   --deep-supervision [BOOLEAN]
                         Use deep supervision (default: False)
   --deep-supervision-heads DEEP_SUPERVISION_HEADS
@@ -384,17 +378,16 @@ optional arguments:
                         Number of epochs before linear alpha scheduler starts
                         (default: 5)
   --step-schedule-step-length STEP_SCHEDULE_STEP_LENGTH
-                        Number of epochs before in each section of the step-wise
-                        alpha scheduler (default: 5)
+                        Number of epochs before in each section of the step-wise alpha
+                        scheduler (default: 5)
   --sw-overlap SW_OVERLAP
                         Amount of overlap between patches during sliding window
                         inference at test time (default: 0.5)
   --val-sw-overlap VAL_SW_OVERLAP
                         Amount of overlap between patches during sliding window
-                        inference during validation (default: 0.5)
+                        inference during validation (default: 0.25)
   --blend-mode {gaussian,constant}
-                        How to blend output of overlapping windows (default:
-                        gaussian)
+                        How to blend output of overlapping windows (default: gaussian)
   --nfolds NFOLDS       Number of cross-validation folds (default: 5)
   --folds FOLDS [FOLDS ...]
                         Which folds to run (default: [0, 1, 2, 3, 4])
@@ -402,6 +395,11 @@ optional arguments:
   --steps-per-epoch STEPS_PER_EPOCH
                         Steps per epoch. By default ceil(training_dataset_size /
                         (batch_size * gpus) (default: None)
+  --metrics {dice,surf_dice,haus95,avg_surf} [{dice,surf_dice,haus95,avg_surf} ...]
+                        List of metrics to use for evaluation (default: ['dice',
+                        'haus95'])
+  --normalize-hd [BOOLEAN]
+                        Normalize Hausdorff distances (default: False)
   --use-native-spacing [BOOLEAN]
                         Use native image spacing to compute Hausdorff distances
                         (default: False)
@@ -414,13 +412,14 @@ Here are the available arguments for ```mist_postprocess```:
 ```
 usage: mist_postprocess [-h] [--base-results BASE_RESULTS] [--output OUTPUT]
                         [--apply-to-labels APPLY_TO_LABELS [APPLY_TO_LABELS ...]]
-                        [--remove-small-objects [BOOLEAN]]
-                        [--top-k-cc [BOOLEAN]] [--morph-cleanup [BOOLEAN]]
-                        [--fill-holes [BOOLEAN]] [--update-config [BOOLEAN]]
+                        [--remove-small-objects [BOOLEAN]] [--top-k-cc [BOOLEAN]]
+                        [--morph-cleanup [BOOLEAN]] [--fill-holes [BOOLEAN]]
+                        [--update-config [BOOLEAN]]
                         [--small-object-threshold SMALL_OBJECT_THRESHOLD]
                         [--top-k TOP_K]
                         [--morph-cleanup-iterations MORPH_CLEANUP_ITERATIONS]
-                        [--fill-label FILL_LABEL]
+                        [--fill-label FILL_LABEL] [--normalize-hd [BOOLEAN]]
+                        [--metrics {dice,surf_dice,haus95,avg_surf} [{dice,surf_dice,haus95,avg_surf} ...]]
                         [--use-native-spacing [BOOLEAN]]
 
 optional arguments:
@@ -432,25 +431,27 @@ optional arguments:
                         List of labels to apply postprocessing (default: [-1])
   --remove-small-objects [BOOLEAN]
                         Remove small objects (default: False)
-  --top-k-cc [BOOLEAN]  Keep k largest connected components (CCs) (default:
-                        False)
+  --top-k-cc [BOOLEAN]  Keep k largest connected components (CCs) (default: False)
   --morph-cleanup [BOOLEAN]
-                        Turn on morphological cleaning for k largest CCs
-                        (default: False)
+                        Turn on morphological cleaning for k largest CCs (default:
+                        False)
   --fill-holes [BOOLEAN]
                         Fill holes (default: False)
   --update-config [BOOLEAN]
-                        Update config file if results improve with
-                        postprocessing strategy (default: False)
+                        Update config file if results improve with postprocessing
+                        strategy (default: False)
   --small-object-threshold SMALL_OBJECT_THRESHOLD
                         Threshold size for small objects (default: 64)
-  --top-k TOP_K         How many of top connected components to keep (default:
-                        2)
+  --top-k TOP_K         How many of top connected components to keep (default: 2)
   --morph-cleanup-iterations MORPH_CLEANUP_ITERATIONS
-                        How many iterations for morphological cleaning (default:
-                        2)
+                        How many iterations for morphological cleaning (default: 2)
   --fill-label FILL_LABEL
                         Fill label for fill holes transformation (default: None)
+  --normalize-hd [BOOLEAN]
+                        Normalize Hausdorff distances (default: False)
+  --metrics {dice,surf_dice,haus95,avg_surf} [{dice,surf_dice,haus95,avg_surf} ...]
+                        List of metrics to use for evaluation (default: ['dice',
+                        'haus95'])
   --use-native-spacing [BOOLEAN]
                         Use native image spacing to compute Hausdorff distances
                         (default: False)
@@ -460,55 +461,58 @@ Here are the available arguments for ```mist_predict```:
 ```
 usage: mist_predict [-h] [--models MODELS] [--config CONFIG] [--data DATA]
                     [--output OUTPUT] [--fast [BOOLEAN]] [--gpu GPU]
-                    [--sw-overlap SW_OVERLAP]
-                    [--blend-mode {constant,gaussian}] [--tta [BOOLEAN]]
-                    [--no-preprocess [BOOLEAN]] [--output_std [BOOLEAN]]
+                    [--sw-overlap SW_OVERLAP] [--blend-mode {gaussian,constant}]
+                    [--tta [BOOLEAN]] [--no-preprocess [BOOLEAN]]
+                    [--output-std [BOOLEAN]]
 
 optional arguments:
   -h, --help            show this help message and exit
   --models MODELS       Directory containing saved models (default: None)
   --config CONFIG       Path and name of config.json file from results of MIST
                         pipeline (default: None)
-  --data DATA           CSV or JSON file containing paths to data (default:
+  --data DATA           CSV or JSON file containing paths to images to run prediction
+                        on multiple cases (default: None)
+  --output OUTPUT       Directory or path to nifti file to save predictions (default:
                         None)
-  --output OUTPUT       Directory to save predictions (default: None)
-  --fast [BOOLEAN]      Use only one model for prediction to speed up
-                        inference time (default: False)
+  --fast [BOOLEAN]      Use only one model for prediction to speed up inference time
+                        (default: False)
   --gpu GPU             GPU id to run inference on (default: 0)
   --sw-overlap SW_OVERLAP
                         Amount of overlap between scans during sliding window
-                        inference (default: 0.25)
-  --blend-mode {constant,gaussian}
-                        How to blend output of overlapping windows (default:
-                        constant)
+                        inference (default: 0.5)
+  --blend-mode {gaussian,constant}
+                        How to blend output of overlapping windows (default: gaussian)
   --tta [BOOLEAN]       Use test time augmentation (default: False)
   --no-preprocess [BOOLEAN]
                         Turn off preprocessing (default: False)
-  --output_std [BOOLEAN]
+  --output-std [BOOLEAN]
                         Outputs standard deviation image (default: False)
 ```
 
 Here are the available arguments for ```mist_evaluate```:
 ```
-usage: mist_evaluate [-h] [--config CONFIG] [--paths PATHS]
-                     [--preds-dir PREDS_DIR] [--output-csv OUTPUT_CSV]
-                     [--use-native-spacing [BOOLEAN]]
+usage: mist_evaluate [-h] [--config CONFIG] [--paths PATHS] [--preds-dir PREDS_DIR]
+                     [--output-csv OUTPUT_CSV]
+                     [--metrics {dice,surf_dice,haus95,avg_surf} [{dice,surf_dice,haus95,avg_surf} ...]]
+                     [--normalize-hd [BOOLEAN]] [--use-native-spacing [BOOLEAN]]
 
 optional arguments:
   -h, --help            show this help message and exit
-  --config CONFIG       Path to config.json file from MIST output (default:
+  --config CONFIG       Path to config.json file from MIST output (default: None)
+  --paths PATHS         Path to CSV or JSON file with original mask/data (default:
                         None)
-  --paths PATHS         Path to CSV or JSON file with original mask/data
-                        (default: None)
   --preds-dir PREDS_DIR
-                        Path to directory containing predictions (default:
-                        None)
+                        Path to directory containing predictions (default: None)
   --output-csv OUTPUT_CSV
-                        Path to CSV containing evaluation results (default:
-                        None)
+                        Path to CSV containing evaluation results (default: None)
+  --metrics {dice,surf_dice,haus95,avg_surf} [{dice,surf_dice,haus95,avg_surf} ...]
+                        List of metrics to use for evaluation (default: ['dice',
+                        'haus95'])
+  --normalize-hd [BOOLEAN]
+                        Normalize Hausdorff distances (default: False)
   --use-native-spacing [BOOLEAN]
-                        Use native image spacing to compute Hausdorff
-                        distances (default: False)
+                        Use native image spacing to compute Hausdorff distances
+                        (default: False)
 ```
 
 Here are the available arguments for ```mist_convert_dataset```:
