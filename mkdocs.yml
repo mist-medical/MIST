@@ -1,4 +1,4 @@
-site_name: mist
+site_name: Medical Imaging Segmentation Toolkit
 theme:
   name: readthedocs
   highlightjs: true
