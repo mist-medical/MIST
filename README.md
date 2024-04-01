@@ -13,8 +13,6 @@ The Medical Imaging Segmentation Toolkit (MIST) is a simple, scalable, and end-t
 framework. MIST allows researchers to seamlessly train, evaluate, and deploy state-of-the-art deep learning models for 3D 
 medical imaging segmentation.
 
-The Read the Docs page is [**here**](https://mist-medical.readthedocs.io/).
-
 MIST is licensed under [CC BY-NC-SA 4.0](http://creativecommons.org/licenses/by-nc-sa/4.0/). Please see the [LICENSE](LICENSE) file for more details. 
 
 Please cite the following papers if you use this code for your work:
@@ -32,3 +30,6 @@ Please cite the following papers if you use this code for your work:
 * Feb. 2024 - Major improvements to the analysis, preprocessing, and postprocessing pipelines, 
 and new network architectures like UNETR added.
 * Feb. 2024 - We have moved the TensorFlow version of MIST to [mist-tf](https://github.com/aecelaya/mist-tf).
+
+## Documentation
+We've moved our documentation over to Read the Docs. The Read the Docs page is [**here**](https://mist-medical.readthedocs.io/).
