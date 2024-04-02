@@ -44,4 +44,4 @@ WORKDIR /app
 # Install MIST
 RUN git clone https://github.com/aecelaya/MIST.git \
     && cd MIST \
-    && pip install - e .
+    && pip install -e .
