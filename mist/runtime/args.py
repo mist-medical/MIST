@@ -78,7 +78,7 @@ def get_main_args():
     p.arg("--lr-scheduler",
           type=str,
           default="constant",
-          choices=["constant", "cosine_warm_restarts", "exponential"],
+          choices=["constant", "polynomial", "cosine", "cosine_warm_restarts", "exponential"],
           help="Learning rate scheduler")
     p.arg("--cosine-first-steps",
           type=positive_int,
@@ -86,7 +86,8 @@ def get_main_args():
           help="Length of a cosine decay cycle in steps, only with cosine_annealing scheduler")
 
     # Optimizer
-    p.arg("--optimizer", type=str, default="adam", choices=["sgd", "adam", "adamw"], help="Optimizer")
+    p.arg("--optimizer", type=str, default="adam", choices=["adam", "sgd", "adamw"], help="Optimizer")
+    p.arg("--sgd-momentum", type=float_0_1, default=0, help="Momentum for SGD")
     p.boolean_flag("--clip-norm", default=False, help="Use gradient clipping")
     p.arg("--clip-norm-max", type=float, default=1.0, help="Max threshold for global norm clipping")
 
@@ -172,7 +173,6 @@ def get_main_args():
           default=["dice", "haus95"],
           choices=["dice", "surf_dice", "haus95", "avg_surf"],
           help="List of metrics to use for evaluation")
-    p.boolean_flag("--normalize-hd", default=False, help="Normalize Hausdorff distances")
     p.boolean_flag("--use-native-spacing",
                    default=False,
                    help="Use native image spacing to compute Hausdorff distances")

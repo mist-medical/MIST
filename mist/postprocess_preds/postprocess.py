@@ -121,7 +121,6 @@ class Postprocessor:
                  self.dest_dir,
                  self.new_results_csv,
                  self.metrics,
-                 self.args.normalize_hd,
                  self.args.use_native_spacing)
 
         # Compute improvement score

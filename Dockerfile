@@ -9,9 +9,7 @@ ENV DEBIAN_FRONTEND noninteractive
 
 # Install dependencies
 RUN apt-get update -y --fix-missing \
-    && apt-get install -y cmake git
-# Use the following if running cuda 12
-# pip install --extra-index-url https://developer.download.nvidia.com/compute/redist --upgrade nvidia-dali-cuda120
+    && apt-get install -y cmake git \
 
 # Install ANTs
 RUN mkdir /opt/ants \

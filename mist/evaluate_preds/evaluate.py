@@ -6,10 +6,11 @@ import numpy as np
 import SimpleITK as sitk
 
 from mist.metrics.metrics import (
-    dice,
-    surface_dice,
-    avg_surface_distance,
-    hausdorff_distance
+    compute_surface_distances,
+    compute_dice_coefficient,
+    compute_robust_hausdorff,
+    compute_surface_dice_at_tolerance,
+    compute_average_surface_distance
 )
 
 from mist.runtime.utils import (
@@ -20,21 +21,14 @@ from mist.runtime.utils import (
 )
 
 
-def get_dtms_for_eval(mask_npy, spacing):
-    mask = sitk.Cast(sitk.GetImageFromArray(mask_npy.T), sitk.sitkUInt8)
-    mask.SetSpacing(spacing)
-
-    dtm = sitk.Abs(sitk.SignedMaurerDistanceMap(mask, squaredDistance=False, useImageSpacing=True))
-    return dtm
-
-
-def get_surface_contour_for_eval(mask_npy):
-    mask = sitk.Cast(sitk.GetImageFromArray(mask_npy.T), sitk.sitkUInt8)
-    mask_surface = sitk.LabelContour(mask)
-    return mask_surface
+def get_worst_case_haus(mask_npy, spacing):
+    width = mask_npy.shape[0] * spacing[0]
+    height = mask_npy.shape[1] * spacing[1]
+    depth = mask_npy.shape[2] * spacing[2]
+    return np.sqrt(width ** 2 + height ** 2 + depth ** 2)
 
 
-def evaluate_single_example(pred, truth, patient_id, config, metrics, normalize_hd, use_native_spacing):
+def evaluate_single_example(pred, truth, patient_id, config, metrics, use_native_spacing):
     # Get dice and hausdorff distances for final prediction
     row_dict = dict()
     row_dict['id'] = patient_id
@@ -65,54 +59,49 @@ def evaluate_single_example(pred, truth, patient_id, config, metrics, normalize_
             pred_temp += pred_label
             truth_temp += mask_label
 
-        # Get DTMs once - we don't recompute them for multiple metrics
-        if "haus95" in metrics or "avg_surf" in metrics or "surf_dice" in metrics:
-            truth_dtm = get_dtms_for_eval(truth_temp, spacing)
-            pred_dtm = get_dtms_for_eval(pred_temp, spacing)
-        else:
-            truth_dtm = None
-            pred_dtm = None
+        # Test surface_distances package
+        truth_temp = truth_temp.astype("bool")
+        pred_temp = pred_temp.astype("bool")
+        distances = compute_surface_distances(truth_temp, pred_temp, spacing)
 
-        if "avg_surf" in metrics or "surf_dice" in metrics:
-            truth_surface = get_surface_contour_for_eval(truth_temp)
-            pred_surface = get_surface_contour_for_eval(pred_temp)
-        else:
-            truth_surface = None
-            pred_surface = None
-
+        temp_truth_sum = truth_temp.sum()
+        temp_pred_sum = pred_temp.sum()
         if "dice" in metrics:
-            row_dict['{}_dice'.format(key)] = dice(truth_temp,
-                                                   pred_temp)
-        if "surf_dice" in metrics:
-            row_dict["{}_surf_dice".format(key)] = surface_dice(truth,
-                                                                pred,
-                                                                spacing,
-                                                                tolerance=1.0,
-                                                                truth_dtm=truth_dtm,
-                                                                pred_dtm=pred_dtm,
-                                                                truth_surface=truth_surface,
-                                                                pred_surface=pred_surface)
+            if temp_truth_sum == 0 and temp_pred_sum == 0:
+                dice_coef = 1.0
+            elif bool(temp_truth_sum == 0) ^ bool(temp_pred_sum == 0):
+                dice_coef = 0.0
+            else:
+                dice_coef = compute_dice_coefficient(truth_temp, pred_temp)
+            row_dict["{}_dice".format(key)] = dice_coef
         if "haus95" in metrics:
-            row_dict['{}_haus95'.format(key)] = hausdorff_distance(truth_temp,
-                                                                   pred_temp,
-                                                                   spacing,
-                                                                   normalize=normalize_hd,
-                                                                   percentile=95,
-                                                                   truth_dtm=truth_dtm,
-                                                                   pred_dtm=pred_dtm)
+            if temp_truth_sum == 0 and temp_pred_sum == 0:
+                haus95_dist = 0.0
+            elif bool(temp_truth_sum == 0) ^ bool(temp_pred_sum == 0):
+                haus95_dist = get_worst_case_haus(truth_temp, spacing)
+            else:
+                haus95_dist = compute_robust_hausdorff(distances, percent=95)
+            row_dict["{}_haus95".format(key)] = haus95_dist
+        if "surf_dice" in metrics:
+            if temp_truth_sum == 0 and temp_pred_sum == 0:
+                surf_dice_coef = 1.0
+            elif bool(temp_truth_sum == 0) ^ bool(temp_pred_sum == 0):
+                surf_dice_coef = 0.0
+            else:
+                surf_dice_coef = compute_surface_dice_at_tolerance(distances, tolerance_mm=1.0)
+            row_dict["{}_surf_dice".format(key)] = surf_dice_coef
         if "avg_surf" in metrics:
-            row_dict['{}_avg_surf'.format(key)] = avg_surface_distance(truth_temp,
-                                                                       pred_temp,
-                                                                       spacing,
-                                                                       normalize=normalize_hd,
-                                                                       truth_dtm=truth_dtm,
-                                                                       pred_dtm=pred_dtm,
-                                                                       truth_surface=truth_surface,
-                                                                       pred_surface=pred_surface)
+            if temp_truth_sum == 0 and temp_pred_sum == 0:
+                avg_surf_dist = 0.0
+            elif bool(temp_truth_sum == 0) ^ bool(temp_pred_sum == 0):
+                avg_surf_dist = get_worst_case_haus(truth_temp, spacing)
+            else:
+                avg_surf_dist = compute_average_surface_distance(distances)
+            row_dict["{}_avg_surf".format(key)] = avg_surf_dist
     return row_dict
 
 
-def evaluate(config_json, paths, source_dir, output_csv, metrics, normalize_hd, use_native_spacing):
+def evaluate(config_json, paths, source_dir, output_csv, metrics, use_native_spacing):
     with open(config_json, 'r') as file:
         config = json.load(file)
 
@@ -150,7 +139,6 @@ def evaluate(config_json, paths, source_dir, output_csv, metrics, normalize_hd, 
                                                    patient_id,
                                                    config,
                                                    metrics,
-                                                   normalize_hd,
                                                    use_native_spacing)
             results_df = pd.concat([results_df, pd.DataFrame(eval_results, index=[0])], ignore_index=True)
 

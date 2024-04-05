@@ -33,7 +33,6 @@ def get_postprocess_args():
           type=non_negative_int,
           help="How many iterations for morphological cleaning")
     p.arg("--fill-label", type=non_negative_int, help="Fill label for fill holes transformation")
-    p.boolean_flag("--normalize-hd", default=False, help="Normalize Hausdorff distances")
     p.arg("--metrics",
           nargs="+",
           default=["dice", "haus95"],

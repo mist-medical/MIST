@@ -79,13 +79,14 @@ will change the optimizer, learning rate, learning rate schedule, or apply gradi
 
 * ```--optimizer```: (default: ```adam```) Sets optimizer for training. Other options are ```sgd``` and ```adamw```
 * ```--learning-rate```: (default: 0.0003) Initial learning rate for training
-* ```--lr-scheduler```: (default: ```constant```) Sets the learning rate scheduler for training. Other options are 
-```cosine_warm_restarts``` and ```exponential```, which are updated every training step (not epoch). Optional parameters
-for each of these schedulers are:
-    - ```--cosine-first-steps```: (default: 500) Length (in training steps) of a cosine decay cycle, only with ```cosine_warm_restarts``` scheduler
-    - ```--exp_decay```: (default: 0.9999) Exponential decay factor
+  * ```--lr-scheduler```: (default: ```constant```) Sets the learning rate scheduler for training. Other options are 
+  ```cosine_warm_restarts```, ```cosine```, ```polynomial```, and ```exponential```, which are updated every training step (not epoch). Optional parameters
+  for each of these schedulers are:
+      - ```--cosine-first-steps```: (default: 500) Length (in training steps) of a cosine decay cycle, only with ```cosine_warm_restarts``` scheduler
+      - ```--exp_decay```: (default: 0.9999) Exponential decay factor
 * ```--clip-norm```: (default: False) Use gradient clipping (global)
     - ```--clip-norm-max``` (default: 1)  Max threshold for global norm clipping
+* ```--sgd-momentum```: (default: 0) Momentum for SGD optimizer
 
 ## Loss Functions
 MIST provides several loss functions and supports boundary-based loss functions. By default, MIST uses the Dice with

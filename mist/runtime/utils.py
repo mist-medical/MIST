@@ -158,10 +158,17 @@ def convert_dict_to_df(patients):
 def get_lr_schedule(args, optimizer):
     if args.lr_scheduler == "constant":
         return torch.optim.lr_scheduler.ConstantLR(optimizer, factor=1)
+    elif args.lr_scheduler == "polynomial":
+        return torch.optim.lr_scheduler.PolynomialLR(optimizer,
+                                                     total_iters=args.steps_per_epoch*args.epochs,
+                                                     power=0.9)
     elif args.lr_scheduler == "cosine_warm_restarts":
         return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
                                                                     T_0=args.cosine_first_steps,
                                                                     T_mult=2)
+    elif args.lr_scheduler == "cosine":
+        return torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
+                                                          T_max=args.steps_per_epoch*args.epochs)
     elif args.lr_scheduler == "exponential":
         return torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.exp_decay)
     else:
@@ -170,7 +177,7 @@ def get_lr_schedule(args, optimizer):
 
 def get_optimizer(args, model):
     if args.optimizer == "sgd":
-        return torch.optim.SGD(params=model.parameters(), lr=args.learning_rate)
+        return torch.optim.SGD(params=model.parameters(), lr=args.learning_rate, momentum=args.sgd_momentum)
     elif args.optimizer == "adam":
         return torch.optim.Adam(params=model.parameters(), lr=args.learning_rate)
     elif args.optimizer == "adamw":
@@ -283,11 +290,11 @@ def compute_results_stats(results_df):
     percentile25_row = {"id": "25th Percentile"}
     percentile75_row = {"id": "75th Percentile"}
     for col in results_df.columns[1:]:
-        mean_row[col] = np.mean(results_df[col])
-        std_row[col] = np.std(results_df[col])
-        percentile25_row[col] = np.percentile(results_df[col], 25)
-        percentile50_row[col] = np.percentile(results_df[col], 50)
-        percentile75_row[col] = np.percentile(results_df[col], 75)
+        mean_row[col] = np.nanmean(results_df[col])
+        std_row[col] = np.nanstd(results_df[col])
+        percentile25_row[col] = np.nanpercentile(results_df[col], 25)
+        percentile50_row[col] = np.nanpercentile(results_df[col], 50)
+        percentile75_row[col] = np.nanpercentile(results_df[col], 75)
 
     results_df = pd.concat([results_df, pd.DataFrame(mean_row, index=[0])], ignore_index=True)
     results_df = pd.concat([results_df, pd.DataFrame(std_row, index=[0])], ignore_index=True)
