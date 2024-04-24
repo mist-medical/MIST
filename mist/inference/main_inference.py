@@ -215,81 +215,91 @@ def test_time_inference(df,
     # Set up rich progress bar
     testing_progress = get_progress_bar("Testing")
 
+    messages = list()
+
     # Run prediction on all samples and compute metrics
     with testing_progress as pb:
         for ii in pb.track(range(len(df))):
             patient = df.iloc[ii].to_dict()
+            try:
+                # Create individual folders for each prediction if output_std is enabled
+                if output_std:
+                    output_std_dest = os.path.join(dest, str(patient['id']))
+                    create_empty_dir(output_std_dest)
+                else:
+                    output_std_dest = dest
 
-            # Create individual folders for each prediction if output_std is enabled
-            if output_std:
-                output_std_dest = os.path.join(dest, str(patient['id']))
-                create_empty_dir(output_std_dest)
-            else:
-                output_std_dest = dest
+                if "mask" in df.columns and "fold" in df.columns:
+                    image_list = list(patient.values())[3:]
+                elif "mask" in df.columns or "fold" in df.columns:
+                    image_list = list(patient.values())[2:]
+                else:
+                    image_list = list(patient.values())[1:]
 
-            if "mask" in df.columns and "fold" in df.columns:
-                image_list = list(patient.values())[3:]
-            elif "mask" in df.columns or "fold" in df.columns:
-                image_list = list(patient.values())[2:]
-            else:
-                image_list = list(patient.values())[1:]
+                og_ants_img = ants.image_read(image_list[0])
 
-            og_ants_img = ants.image_read(image_list[0])
+                if no_preprocess:
+                    torch_img, _, fg_bbox, _ = convert_nifti_to_numpy(image_list, None)
+                else:
+                    torch_img, _, fg_bbox, _ = preprocess_example(config, image_list, None, False, None)
 
-            if no_preprocess:
-                torch_img, _, fg_bbox, _ = convert_nifti_to_numpy(image_list, None)
-            else:
-                torch_img, _, fg_bbox, _ = preprocess_example(config, image_list, None, False, None)
+                # Make image channels first and add batch dimension
+                torch_img = np.transpose(torch_img, axes=(3, 0, 1, 2))
+                torch_img = np.expand_dims(torch_img, axis=0)
 
-            # Make image channels first and add batch dimension
-            torch_img = np.transpose(torch_img, axes=(3, 0, 1, 2))
-            torch_img = np.expand_dims(torch_img, axis=0)
+                torch_img = torch.Tensor(torch_img.copy()).to(torch.float32)
+                torch_img = torch_img.to("cuda")
 
-            torch_img = torch.Tensor(torch_img.copy()).to(torch.float32)
-            torch_img = torch_img.to("cuda")
+                prediction, std_images = predict_single_example(torch_img,
+                                                                og_ants_img,
+                                                                config,
+                                                                models,
+                                                                overlap,
+                                                                blend_mode,
+                                                                tta,
+                                                                output_std,
+                                                                fg_bbox)
 
-            prediction, std_images = predict_single_example(torch_img,
-                                                            og_ants_img,
-                                                            config,
-                                                            models,
-                                                            overlap,
-                                                            blend_mode,
-                                                            tta,
-                                                            output_std,
-                                                            fg_bbox)
+                # Apply postprocessing if required
+                transforms = ["remove_small_objects", "top_k_cc", "fill_holes"]
+                for transform in transforms:
+                    if len(config[transform]) > 0:
+                        for i in range(len(config[transform])):
+                            if transform == "remove_small_objects":
+                                transform_kwargs = {"small_object_threshold": config[transform][i][1]}
+                            if transform == "top_k_cc":
+                                transform_kwargs = {"morph_cleanup": config[transform][i][1],
+                                                    "morph_cleanup_iterations": config[transform][i][2],
+                                                    "top_k": config[transform][i][3]}
+                            if transform == "fill_holes":
+                                transform_kwargs = {"fill_label": config[transform][i][1]}
 
-            # Apply postprocessing if required
-            transforms = ["remove_small_objects", "top_k_cc", "fill_holes"]
-            for transform in transforms:
-                if len(config[transform]) > 0:
-                    for i in range(len(config[transform])):
-                        if transform == "remove_small_objects":
-                            transform_kwargs = {"small_object_threshold": config[transform][i][1]}
-                        if transform == "top_k_cc":
-                            transform_kwargs = {"morph_cleanup": config[transform][i][1],
-                                                "morph_cleanup_iterations": config[transform][i][2],
-                                                "top_k": config[transform][i][3]}
-                        if transform == "fill_holes":
-                            transform_kwargs = {"fill_label": config[transform][i][1]}
+                            prediction = apply_transform(prediction,
+                                                         transform,
+                                                         config["labels"],
+                                                         config[transform][i][0],
+                                                         transform_kwargs)
 
-                        prediction = apply_transform(prediction,
-                                                     transform,
-                                                     config["labels"],
-                                                     config[transform][i][0],
-                                                     transform_kwargs)
+                # Write prediction mask to nifti file and save to disk
+                prediction_filename = '{}.nii.gz'.format(str(patient['id']))
+                output = os.path.join(output_std_dest, prediction_filename)
+                ants.image_write(prediction, output)
 
-            # Write prediction mask to nifti file and save to disk
-            prediction_filename = '{}.nii.gz'.format(str(patient['id']))
-            output = os.path.join(output_std_dest, prediction_filename)
-            ants.image_write(prediction, output)
+                # Write standard deviation image(s) to nifti file and save to disk (only for foreground labels)
+                if output_std:
+                    for i in range(len(std_images)):
+                        if config["labels"][i] > 0:
+                            std_image_filename = '{}_std_{}.nii.gz'.format(patient['id'], config['labels'][i])
+                            output = os.path.join(output_std_dest, std_image_filename)
+                            ants.image_write(std_images[i], output)
 
-            # Write standard deviation image(s) to nifti file and save to disk (only for foreground labels)
-            if output_std:
-                for i in range(len(std_images)):
-                    if config["labels"][i] > 0:
-                        std_image_filename = '{}_std_{}.nii.gz'.format(patient['id'], config['labels'][i])
-                        output = os.path.join(output_std_dest, std_image_filename)
-                        ants.image_write(std_images[i], output)
+            except:
+                id = patient["id"]
+                messages += f"Prediction failed for {id}\n"
 
-        # Clean up
-        gc.collect()
+            if len(messages) > 0:
+                text = Text(messages)
+                console.print(text)
+
+            # Clean up
+            gc.collect()
