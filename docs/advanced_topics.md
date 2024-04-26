@@ -165,10 +165,10 @@ For MD Anderson users, you can run MIST on the Kubernetes/HPC cluster. Here is a
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{your job name goes here}}
+  name: <your job name goes here>
   namespace: yn-gpu-workload
   labels:
-      k8s-user: {{get this from your k8s-templates folder}}
+      k8s-user: <get this from your k8s-templates folder>
 spec:
   backoffLimit: 0
   ttlSecondsAfterFinished: 600
@@ -179,9 +179,9 @@ spec:
         "gpu-type": "A100"
         # "gpu-type": "H100"
       securityContext:
-        runAsUser: {{get this from your k8s-templates folder}}
-        runAsGroup: {{get this from your k8s-templates folder}}
-        fsGroup: {{get this from your k8s-templates folder}}
+        runAsUser: <get this from your k8s-templates folder>
+        runAsGroup: <get this from your k8s-templates folder>
+        fsGroup: <get this from your k8s-templates folder>
       containers:
         - name: main
           image: mistmedical/mist:0.4.6a0
@@ -190,15 +190,15 @@ spec:
           --data $HOME/path/to/your/dataset.json 
           --numpy $HOME/path/to/your/numpy 
           --results $HOME/path/to/your/results"]
-          workingDir: {{get this from your k8s-templates folder}}
+          workingDir: <get this from your k8s-templates folder>
           env:
           - name: HOME
-            value: {{get this from your k8s-templates folder}}
+            value: <get this from your k8s-templates folder>
           volumeMounts:
             - name: shm
               mountPath: "/dev/shm"
             - name: home
-              mountPath: {{get this from your k8s-templates folder}}
+              mountPath: <get this from your k8s-templates folder>
           resources:
             limits:
               nvidia.com/gpu: "1" # change this to increase number of GPUs, max of 8
@@ -210,11 +210,11 @@ spec:
             sizeLimit: '21474836480'
         - name: home
           persistentVolumeClaim:
-            claimName: {{get this from your k8s-templates folder}}
+            claimName: <get this from your k8s-templates folder>
       restartPolicy: Never
 ```
 
-Once you save your job submission script, you can run it with
+Once you save your job submission file, you can run it with
 
 ```console
 kubectl apply -f <your submission file here>
