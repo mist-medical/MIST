@@ -213,3 +213,9 @@ spec:
             claimName: {{get this from your k8s-templates folder}}
       restartPolicy: Never
 ```
+
+Once you save your job submission script, you can run it with
+
+```console
+kubectl apply -f <your submission file here>
+```
