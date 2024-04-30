@@ -12,9 +12,9 @@ from monai.inferers import sliding_window_inference
 import torch
 from torch.nn.functional import softmax
 
-from mist.models.get_model import load_model_from_config
+from mistrg.models.get_model import load_model_from_config
 
-from mist.runtime.utils import (
+from mistrg.runtime.utils import (
     convert_dict_to_df, 
     get_flip_axes, 
     create_empty_dir, 
@@ -24,13 +24,13 @@ from mist.runtime.utils import (
     npy_fix_labels
 )
 
-from mist.preprocess_data.preprocess import (
+from mistrg.preprocess_data.preprocess import (
     convert_nifti_to_numpy,
     preprocess_example,
     resample_mask
 )
 
-from mist.postprocess_preds.postprocess import apply_transform
+from mistrg.postprocess_preds.postprocess import apply_transform
 
 
 def get_sw_prediction(image, model, patch_size, overlap, blend_mode, tta):

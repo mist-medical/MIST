@@ -4,11 +4,12 @@ import ants
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
+from pathlib import Path
 
 # Rich progress bar
 from rich.console import Console
 from rich.text import Text
-from mist.runtime.progress_bar import TrainProgressBar, ValidationProgressBar
+from mistrg.runtime.progress_bar import TrainProgressBar, ValidationProgressBar
 
 # PyTorch
 import torch
@@ -24,17 +25,17 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from monai.inferers import sliding_window_inference
 
 # Custom code
-from mist.data_loading.dali_loader import (
+from mistrg.data_loading.dali_loader import (
     get_training_dataset,
     get_validation_dataset,
     get_test_dataset
 )
 
-from mist.models.get_model import get_model, load_model_from_config, configure_pretrained_model
-from mist.runtime.loss import get_loss, DiceLoss, VAELoss
-from mist.inference.main_inference import predict_single_example
+from mistrg.models.get_model import get_model, load_model_from_config, configure_pretrained_model
+from mistrg.runtime.loss import get_loss, DiceLoss, VAELoss
+from mistrg.inference.main_inference import predict_single_example
 
-from mist.runtime.utils import (
+from mistrg.runtime.utils import (
     get_optimizer,
     get_lr_schedule,
     Mean,
@@ -121,11 +122,16 @@ class Trainer:
 
         # Run prediction on all samples and compute metrics
         with torch.no_grad(), testing_progress as pb:
+            nifti = df['nifti'].to_list()
             for i in pb.track(range(len(df))):
                 # Get original patient data
                 patient = df.iloc[i].to_dict()
-                image_list = list(patient.values())[3:len(patient)]
-                og_ants_img = ants.image_read(image_list[0])
+                #image_list = list(patient.values())[3:len(patient)]
+                
+                org_image = [i for i in nifti if patient['id'] in i]
+
+                #og_ants_img = ants.image_read(image_list[0])
+                og_ants_img = ants.image_read(org_image[0]) #patient['images'])
                 file = "{}.nii.gz".format(patient["id"])
 
                 # Get preprocessed image from DALI loader
@@ -180,37 +186,91 @@ class Trainer:
 
         for fold in self.args.folds:
             # Get training ids from dataframe
-            train_ids = list(self.df.loc[self.df["fold"] != fold]["id"])
-            train_images = [os.path.join(self.args.numpy, "images", "{}.npy".format(pat)) for pat in train_ids]
-            train_labels = [os.path.join(self.args.numpy, "labels", "{}.npy".format(pat)) for pat in train_ids]
+            #train_ids = list(self.df.loc[self.df["fold"] != fold]["id"])
+            #train_images = [os.path.join(self.args.numpy, "images", "{}.npy".format(pat)) for pat in train_ids]
+            #train_labels = [os.path.join(self.args.numpy, "labels", "{}.npy".format(pat)) for pat in train_ids]
 
-            if self.args.use_dtms:
-                train_dtms = [os.path.join(self.args.numpy, "dtms", "{}.npy".format(pat)) for pat in train_ids]
+            #if self.args.use_dtms:
+            #    train_dtms = [os.path.join(self.args.numpy, "dtms", "{}.npy".format(pat)) for pat in train_ids]
 
-                zip_labels_dtms = [vol for vol in zip(train_labels, train_dtms)]
+            #    zip_labels_dtms = [vol for vol in zip(train_labels, train_dtms)]
 
-                # Get validation set from training split with DTMs
-                train_images, val_images, train_labels_dtms, val_labels_dtms = train_test_split(train_images,
-                                                                                                zip_labels_dtms,
-                                                                                                test_size=self.args.val_percent,
-                                                                                                random_state=self.args.seed_val)
+            #    # Get validation set from training split with DTMs
+            #    train_images, val_images, train_labels_dtms, val_labels_dtms = train_test_split(train_images,
+            #                                                                                    zip_labels_dtms,
+            #                                                                                    test_size=self.args.val_percent,
+            #                                                                                    random_state=self.args.seed_val)
 
-                train_labels = [vol[0] for vol in train_labels_dtms]
-                train_dtms = [vol[1] for vol in train_labels_dtms]
-                val_labels = [vol[0] for vol in val_labels_dtms]
-            else:
-                # Get validation set from training split
-                train_images, val_images, train_labels, val_labels = train_test_split(train_images,
-                                                                                      train_labels,
-                                                                                      test_size=self.args.val_percent,
-                                                                                      random_state=self.args.seed_val)
+            #    train_labels = [vol[0] for vol in train_labels_dtms]
+            #    train_dtms = [vol[1] for vol in train_labels_dtms]
+            #    val_labels = [vol[0] for vol in val_labels_dtms]
+            #else:
+            #    # Get validation set from training split
+            #    train_images, val_images, train_labels, val_labels = train_test_split(train_images,
+            #                                                                          train_labels,
+            #                                                                          test_size=self.args.val_percent,
+            #                                                                          random_state=self.args.seed_val)
 
-                train_dtms = None
+            #    train_dtms = None
+
+
+            train_images_rel = os.listdir(os.path.join(self.args.numpy, 'train', 'fold' + str(fold), "images" ))
+            train_labels_rel = os.listdir(os.path.join(self.args.numpy, 'train', 'fold' + str(fold), "labels" ))
+            train_images = []
+            train_labels = []
+            train_ids = []
+            print("training data images {} and labels {}".format( len(train_images_rel), len(train_labels_rel)))
+            for file in train_images_rel:
+                train_images.append(os.path.join(self.args.numpy, 'train', 'fold' + str(fold), "images" , file))
+                pat_id = Path(file).stem
+                train_ids.append(pat_id)
+                
+            for file in train_labels_rel:
+                train_labels.append(os.path.join(self.args.numpy, 'train', 'fold' + str(fold), "labels" , file))
+            
+            val_images_rel = os.listdir(os.path.join(self.args.numpy, 'val', 'fold' + str(fold), "images" ))
+            val_labels_rel = os.listdir(os.path.join(self.args.numpy, 'val', 'fold' + str(fold), "labels" ))
+            
+            val_images = []
+            val_labels = []
+            for file in val_images_rel:
+                val_images.append(os.path.join(self.args.numpy, 'val', 'fold' + str(fold), "images" , file))
+                
+            for file in val_labels_rel:
+                val_labels.append(os.path.join(self.args.numpy, 'val', 'fold' + str(fold), "labels" , file))
+            
+            print("validation data images ", len(val_images_rel), len(val_labels_rel))
+            test_images_rel = os.listdir(os.path.join(self.args.numpy, 'test', 'fold' + str(fold), "images" ))
+            test_labels_rel = os.listdir(os.path.join(self.args.numpy, 'test', 'fold' + str(fold), "labels" ))
+            
+            test_images = []
+            test_labels = []
+            test_ids = []
+            
+            
+            head, tail = os.path.split(self.args.numpy)
+            head, tail = os.path.split(head)
+            #print("check csv path", )
+            nifti_csv = os.path.join(head, "csv", "fold_" + str(fold) + '_testing.csv')
+            nifti_df = pd.read_csv(nifti_csv)
+            
+            for file in test_images_rel:
+                test_images.append(os.path.join(self.args.numpy, 'test', 'fold' + str(fold), "images" , file))
+                pat_id = Path(file).stem
+                test_ids.append(pat_id)
+              
+            for file in test_labels_rel:
+                test_labels.append(os.path.join(self.args.numpy, 'test', 'fold' + str(fold), "labels" , file))
+            print("testing data", len(test_images_rel), len(test_labels_rel))
+            train_dtms = None
 
             # Get number of validation steps per epoch
             # Divide by world size since this dataset is sharded across all GPUs
             val_steps = len(val_images) // world_size
+            if not isinstance( self.args.num_workers, int):
+                self.args.num_workers = list(self.args.num_workers)[0]
 
+            #print("check self.args.num_workers", self.args.num_workers)
             # Get DALI loaders
             train_loader = get_training_dataset(train_images,
                                                 train_labels,
@@ -467,9 +527,14 @@ class Trainer:
                 writer.close()
 
                 # Prepare test set on rank 0 device only
-                test_df = self.df.loc[self.df["fold"] == fold]
-                test_ids = list(test_df["id"])
-                test_images = [os.path.join(self.args.numpy, "images", "{}.npy".format(pat)) for pat in test_ids]
+                #test_df = self.df.loc[self.df["fold"] == fold]
+                #test_ids = list(test_df["id"])
+                #test_images = [os.path.join(self.args.numpy, "images", "{}.npy".format(pat)) for pat in test_ids]
+                test_df = pd.DataFrame( {'id': test_ids,
+                			'labels': test_labels,
+                			'nifti': nifti_df['image'],
+                			'images': test_images})
+                
 
                 test_loader = get_test_dataset(test_images,
                                                seed=self.args.seed_val,

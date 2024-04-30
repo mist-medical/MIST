@@ -1,8 +1,8 @@
 import argparse
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
-from mist.conversion_tools.msd import convert_msd
-from mist.conversion_tools.csv import convert_csv
+from mistrg.conversion_tools.msd import convert_msd
+from mistrg.conversion_tools.csv import convert_csv
 
 
 class ArgParser(ArgumentParser):

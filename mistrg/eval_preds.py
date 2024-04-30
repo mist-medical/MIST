@@ -1,8 +1,8 @@
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
-from mist.runtime.args import ArgParser
-from mist.runtime.utils import set_warning_levels
-from mist.evaluate_preds.evaluate import evaluate
+from mistrg.runtime.args import ArgParser
+from mistrg.runtime.utils import set_warning_levels
+from mistrg.evaluate_preds.evaluate import evaluate
 
 
 def get_eval_args():

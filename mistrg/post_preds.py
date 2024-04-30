@@ -1,9 +1,9 @@
 import os
 from argparse import ArgumentDefaultsHelpFormatter
 
-from mist.postprocess_preds.postprocess import Postprocessor
-from mist.runtime.args import non_negative_int, ArgParser
-from mist.runtime.utils import set_warning_levels, create_empty_dir
+from mistrg.postprocess_preds.postprocess import Postprocessor
+from mistrg.runtime.args import non_negative_int, ArgParser
+from mistrg.runtime.utils import set_warning_levels, create_empty_dir
 
 
 def get_postprocess_args():

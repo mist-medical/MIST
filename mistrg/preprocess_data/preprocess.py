@@ -7,11 +7,11 @@ import pandas as pd
 import numpy as np
 import SimpleITK as sitk
 
-# Rich progress bar
+# Rich progres bar
 from rich.console import Console
 from rich.text import Text
 
-from mist.runtime.utils import (
+from mistrg.runtime.utils import (
     get_fg_mask_bbox,
     crop_to_fg,
     create_empty_dir,
@@ -81,6 +81,7 @@ def resample_mask(mask_ants, labels, target_spacing, new_size=None):
     mask = np.argmax(mask, axis=-1)
 
     mask = ants.from_numpy(data=mask.astype("float32"))
+    print("check target_spacing",target_spacing) 
     mask.set_spacing(target_spacing)
     mask.set_origin(mask_ants.origin)
     mask.set_direction(mask_ants.direction)
@@ -209,9 +210,8 @@ def preprocess_example(config, image_list, mask, use_dtm=False, fg_bbox=None):
         # Put mask into standard space
         mask = ants.reorient_image2(mask, "RAI")
         mask.set_direction(np.eye(3))
-        mask = resample_mask(mask,
-                             labels=config["labels"],
-                             target_spacing=config["target_spacing"])
+        if not np.array_equal(mask.spacing, config["target_spacing"]):
+            mask = resample_mask(mask, labels=config["labels"], target_spacing=config["target_spacing"])
 
         if use_dtm:
             dtm = compute_dtm(mask, labels=config["labels"])
@@ -261,6 +261,7 @@ def convert_nifti_to_numpy(image_list, mask):
 
 
 def preprocess_dataset(args):
+    print("preprocessing_data")
     # Get configuration file
     config_file = os.path.join(args.results, "config.json")
 
@@ -270,15 +271,149 @@ def preprocess_dataset(args):
     if config["modality"] != "mr" and config["use_n4_bias_correction"]:
         warnings.warn("N4 bias correction should not be used for modality {}".format(config["modality"]))
 
-    # Get paths to dataset
-    df = pd.read_csv(os.path.join(args.results, "train_paths.csv"))
+    head, tail = os.path.split(args.numpy)
+    head, tail = os.path.split(head)
+    print("check head", head)
+    testing_folders = os.path.join(head, "csv")
 
-    # Create output directories if they do not exist
-    images_dir = os.path.join(args.numpy, "images")
-    create_empty_dir(images_dir)
 
-    labels_dir = os.path.join(args.numpy, "labels")
-    create_empty_dir(labels_dir)
+    folds = int( len(os.listdir(testing_folders)) / 3)
+    print("The number of folds is ", folds)
+
+    for fold_num in range(folds):
+
+        # Get paths to dataset
+        df_val = pd.read_csv(os.path.join(args.results, "csv", "fold_" + str(fold_num) + "_validation.csv"))
+        df_test = pd.read_csv(os.path.join(args.results,  "csv", "fold_" + str(fold_num) + "_testing.csv"))
+        df_train = pd.read_csv(os.path.join(args.results, "csv",  "fold_" + str(fold_num) + "_training.csv"))
+
+        # Create training direcotries  first
+        base_dir = os.path.join(args.numpy, 'train')
+        create_empty_dir(base_dir)
+
+        base_dir = os.path.join(args.numpy, 'train', 'fold' + str(fold_num))
+        create_empty_dir(base_dir)
+
+        images_dir = os.path.join(base_dir, "images")
+        create_empty_dir(images_dir)
+
+        labels_dir = os.path.join(base_dir, "labels")
+        create_empty_dir(labels_dir)
+
+        process_fold_data(args, df_train, config, images_dir, labels_dir)
+
+        # Create validation directories second
+        base_dir = os.path.join(args.numpy, 'val')
+        create_empty_dir(base_dir)
+
+        base_dir = os.path.join(args.numpy, 'val', 'fold' + str(fold_num))
+        create_empty_dir(base_dir)
+        
+        images_dir = os.path.join(base_dir, "images")
+        create_empty_dir(images_dir)
+
+        labels_dir = os.path.join(base_dir, "labels")
+        create_empty_dir(labels_dir)
+
+        process_fold_data(args, df_val, config, images_dir, labels_dir)
+
+        # Create testing directories third
+        base_dir = os.path.join(args.numpy, 'test')
+        create_empty_dir(base_dir)
+
+        base_dir = os.path.join(args.numpy, 'test', 'fold' + str(fold_num))
+        create_empty_dir(base_dir)
+        
+        images_dir = os.path.join(base_dir, "images")
+        create_empty_dir(images_dir)
+
+        labels_dir = os.path.join(base_dir, "labels")
+        create_empty_dir(labels_dir)
+
+        process_fold_data(args, df_test, config, images_dir, labels_dir)
+
+
+def process_fold_data(args, df, config, images_dir, labels_dir):
+
+    if args.use_dtms:
+        dtm_dir = os.path.join(args.numpy, "dtms")
+        create_empty_dir(dtm_dir)
+
+    text = Text("\nPreprocessing dataset\n")
+    text.stylize("bold")
+    console.print(text)
+
+    if args.no_preprocess:
+        progress = get_progress_bar("Converting nifti to npy")
+    else:
+        progress = get_progress_bar("Preprocessing")
+
+    if config["crop_to_fg"] and not args.no_preprocess:
+        fg_bboxes = pd.read_csv(os.path.join(args.results, "fg_bboxes.csv"))
+
+    with progress as pb:
+        for i in pb.track(range(len(df))):
+            # Get paths to images for single patient
+            patient = df.iloc[i].to_dict()
+
+            # Get list of image paths and segmentation mask
+            image_list = list(patient.values())[3:len(patient)]
+            #print("check image_list", patient)
+            mask = patient["mask"]
+
+            # If already given preprocessed data, then just convert it to numpy data.
+            # Otherwise, run preprocessing
+            if args.no_preprocess:
+                image_npy, mask_npy, _, _ = convert_nifti_to_numpy(image_list, mask)
+            else:
+                if config["crop_to_fg"]:
+                    fg_bbox = fg_bboxes.loc[fg_bboxes["id"] == patient["id"]].iloc[0].to_dict()
+                else:
+                    fg_bbox = None
+                image_npy, mask_npy, _, dtm_npy = preprocess_example(config,
+                                                                     image_list,
+                                                                     mask,
+                                                                     args.use_dtms,
+                                                                     fg_bbox)
+        
+            np.save(os.path.join(images_dir, f"{patient['id']}.npy"), image_npy.astype("float32"))
+            np.save(os.path.join(labels_dir, f"{patient['id']}.npy"), mask_npy.astype("uint8"))
+
+            if args.use_dtms:
+                np.save(os.path.join(args.numpy, dtm_dir, f"{patient['id']}.npy"), dtm_npy.astype("float32"))
+
+
+
+
+
+def preprocess_testing_dataset(args):
+    print("preprocessing_testing_data")
+    # Get configuration file
+    config_file = os.path.join(args.results, "config.json")
+
+    with open(config_file, "r") as file:
+        config = json.load(file)
+
+    if config["modality"] != "mr" and config["use_n4_bias_correction"]:
+        warnings.warn("N4 bias correction should not be used for modality {}".format(config["modality"]))   
+
+    folds = len(os.listdir(args.testingcsv))
+    for n in range(folds):
+        # Get paths to dataset
+        df = pd.read_csv(os.path.join(args.testingcsv, "fold_ " + str(n) + "_testing.csv"))
+
+
+        print("The number of folds is ", folds, n)
+
+    
+        base_dir = os.path.join(args.testingcsv, 'fold' + str(n))
+        create_empty_dir(base_dir)
+        # Create output directories if they do not exist
+        images_dir = os.path.join(base_dir, "images")
+        create_empty_dir(images_dir)
+
+        labels_dir = os.path.join(base_dir, "labels")
+        create_empty_dir(labels_dir)
 
     if args.use_dtms:
         dtm_dir = os.path.join(args.numpy, "dtms")
@@ -314,15 +449,18 @@ def preprocess_dataset(args):
                     fg_bbox = fg_bboxes.loc[fg_bboxes["id"] == patient["id"]].iloc[0].to_dict()
                 else:
                     fg_bbox = None
-
                 image_npy, mask_npy, _, dtm_npy = preprocess_example(config,
                                                                      image_list,
                                                                      mask,
                                                                      args.use_dtms,
                                                                      fg_bbox)
-
-            np.save(os.path.join(args.numpy, images_dir, f"{patient['id']}.npy"), image_npy.astype("float32"))
-            np.save(os.path.join(args.numpy, labels_dir, f"{patient['id']}.npy"), mask_npy.astype("uint8"))
+            fold_num = patient["fold"]
+             
+            base_dir = os.path.join(args.testingcsv, 'fold' + str(fold_num))
+            print("saving file",os.path.join(base_dir, images_dir, f"{patient['id']}.npy") )
+            np.save(os.path.join(base_dir, images_dir, f"{patient['id']}.npy"), image_npy.astype("float32"))
+            np.save(os.path.join(base_dir, labels_dir, f"{patient['id']}.npy"), mask_npy.astype("uint8"))
 
             if args.use_dtms:
                 np.save(os.path.join(args.numpy, dtm_dir, f"{patient['id']}.npy"), dtm_npy.astype("float32"))
+

@@ -9,7 +9,7 @@ import numpy as np
 from rich.console import Console
 from rich.text import Text
 
-from mist.runtime.utils import (
+from mistrg.runtime.utils import (
     get_files_df,
     add_folds_to_df,
     get_fg_mask_bbox,

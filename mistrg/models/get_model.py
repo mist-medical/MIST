@@ -7,11 +7,11 @@ from collections import OrderedDict
 from monai.networks.blocks.dynunet_block import UnetOutBlock
 from mist.models.layers import ConvLayer
 
-from mist.models.unet import UNet
-from mist.models.mgnets import MGNet
-from mist.models.nnunet import NNUnet
-from mist.models.attn_unet import MONAIAttnUNet
-from mist.models.swin_unetr import MONAISwinUNETR
+from mistrg.models.unet import UNet
+from mistrg.models.mgnets import MGNet
+from mistrg.models.nnunet import NNUnet
+from mistrg.models.attn_unet import MONAIAttnUNet
+from mistrg.models.swin_unetr import MONAISwinUNETR
 
 """
 Available models:

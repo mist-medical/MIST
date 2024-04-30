@@ -1,8 +1,8 @@
 import numpy as np
 
-from mist.main import main
-from mist.runtime.utils import set_seed, set_warning_levels, set_visible_devices
-from mist.runtime.args import get_main_args
+from mistrg.main import main
+from mistrg.runtime.utils import set_seed, set_warning_levels, set_visible_devices
+from mistrg.runtime.args import get_main_args
 
 
 def run_all_entry():

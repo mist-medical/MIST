@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from torch.nn.functional import interpolate
 
-from mist.models.layers import (
+from mistrg.models.layers import (
     get_downsample,
     get_upsample,
     VAEDecoderBlock,

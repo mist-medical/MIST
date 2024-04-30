@@ -11,8 +11,8 @@ import numpy as np
 from rich.console import Console
 from rich.text import Text
 
-from mist.evaluate_preds.evaluate import evaluate
-from mist.runtime.utils import (
+from mistrg.evaluate_preds.evaluate import evaluate
+from mistrg.runtime.utils import (
     get_progress_bar,
     get_transform,
     group_labels

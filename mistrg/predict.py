@@ -3,10 +3,10 @@ from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
 import torch
 
-from mist.runtime.args import non_negative_int, float_0_1, ArgParser
-from mist.runtime.utils import set_warning_levels
+from mistrg.runtime.args import non_negative_int, float_0_1, ArgParser
+from mistrg.runtime.utils import set_warning_levels
 
-from mist.inference.main_inference import (
+from mistrg.inference.main_inference import (
     check_test_time_input,
     load_test_time_models,
     test_time_inference

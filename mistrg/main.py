@@ -3,13 +3,13 @@ import numpy as np
 
 import torch
 
-from mist.analyze_data.analyze import Analyzer
-from mist.preprocess_data.preprocess import preprocess_dataset
-from mist.runtime.args import get_main_args
-from mist.runtime.run import Trainer
-from mist.evaluate_preds.evaluate import evaluate
+from mistrg.analyze_data.analyze import Analyzer
+from mistrg.preprocess_data.preprocess import preprocess_dataset
+from mistrg.runtime.args import get_main_args
+from mistrg.runtime.run import Trainer
+from mistrg.evaluate_preds.evaluate import evaluate
 
-from mist.runtime.utils import (
+from mistrg.runtime.utils import (
     create_empty_dir,
     set_seed,
     set_warning_levels,
@@ -18,7 +18,7 @@ from mist.runtime.utils import (
     get_files_df
 )
 
-from mist.inference.main_inference import (
+from mistrg.inference.main_inference import (
     test_time_inference,
     load_test_time_models
 )
@@ -56,9 +56,10 @@ def main(args):
         preprocess_dataset(args)
 
     if args.exec_mode == "all" or args.exec_mode == "train":
+        print("running training")
         mist_trainer = Trainer(args)
         mist_trainer.fit()
-
+        print("after trainer.fit)")
         evaluate(args.data,
                  os.path.join(args.results, "train_paths.csv"),
                  os.path.join(args.results, "predictions", "train", "raw"),
@@ -107,4 +108,5 @@ if __name__ == "__main__":
                 "Batch size {} is not compatible with number of GPUs {}".format(args.batch_size, n_gpus)
 
     set_seed(args.seed_val)
+    
     main(args)

@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 import SimpleITK as sitk
 
-from mist.metrics.metrics import (
+from mistrg.metrics.metrics import (
     compute_surface_distances,
     compute_dice_coefficient,
     compute_robust_hausdorff,
@@ -13,7 +13,7 @@ from mist.metrics.metrics import (
     compute_average_surface_distance
 )
 
-from mist.runtime.utils import (
+from mistrg.runtime.utils import (
     init_results_df,
     compute_results_stats,
     convert_dict_to_df,
