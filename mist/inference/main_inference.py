@@ -97,6 +97,9 @@ def back_to_original_space(pred, og_ants_img, config, fg_bbox):
     if fg_bbox is not None:
         pred = decrop_from_fg(pred, fg_bbox)
 
+    # FIX: Copy header from original image onto the prediction so they match
+    pred = og_ants_img.new_image_like(pred.numpy())
+
     return pred
 
 
