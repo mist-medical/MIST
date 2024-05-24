@@ -176,6 +176,7 @@ def get_main_args():
     p.boolean_flag("--use-native-spacing",
                    default=False,
                    help="Use native image spacing to compute Hausdorff distances")
+    p.arg("--surf-dice-tol", type=float, default=1.0, help="Tolerance for surface dice")
 
     # Uncertainty
     p.boolean_flag("--output-std", default=False, help="Output standard deviation for ensemble predictions")

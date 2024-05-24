@@ -28,7 +28,7 @@ def get_worst_case_haus(mask_npy, spacing):
     return np.sqrt(width ** 2 + height ** 2 + depth ** 2)
 
 
-def evaluate_single_example(pred, truth, patient_id, config, metrics, use_native_spacing):
+def evaluate_single_example(pred, truth, patient_id, config, metrics, use_native_spacing, surf_dice_tol):
     # Get dice and hausdorff distances for final prediction
     row_dict = dict()
     row_dict['id'] = patient_id
@@ -88,7 +88,7 @@ def evaluate_single_example(pred, truth, patient_id, config, metrics, use_native
             elif bool(temp_truth_sum == 0) ^ bool(temp_pred_sum == 0):
                 surf_dice_coef = 0.0
             else:
-                surf_dice_coef = compute_surface_dice_at_tolerance(distances, tolerance_mm=1.0)
+                surf_dice_coef = compute_surface_dice_at_tolerance(distances, tolerance_mm=surf_dice_tol)
             row_dict["{}_surf_dice".format(key)] = surf_dice_coef
         if "avg_surf" in metrics:
             if temp_truth_sum == 0 and temp_pred_sum == 0:
@@ -101,7 +101,7 @@ def evaluate_single_example(pred, truth, patient_id, config, metrics, use_native
     return row_dict
 
 
-def evaluate(config_json, paths, source_dir, output_csv, metrics, use_native_spacing):
+def evaluate(config_json, paths, source_dir, output_csv, metrics, use_native_spacing, surf_dice_tol):
     with open(config_json, 'r') as file:
         config = json.load(file)
 
@@ -139,7 +139,8 @@ def evaluate(config_json, paths, source_dir, output_csv, metrics, use_native_spa
                                                    patient_id,
                                                    config,
                                                    metrics,
-                                                   use_native_spacing)
+                                                   use_native_spacing,
+                                                   surf_dice_tol)
             results_df = pd.concat([results_df, pd.DataFrame(eval_results, index=[0])], ignore_index=True)
 
     results_df = compute_results_stats(results_df)

@@ -21,6 +21,7 @@ def get_eval_args():
     p.boolean_flag("--use-native-spacing",
                    default=False,
                    help="Use native image spacing to compute Hausdorff distances")
+    p.arg("--surf-dice-tol", type=float, default=1.0, help="Tolerance for surface dice")
 
     args = p.parse_args()
     return args
@@ -37,7 +38,8 @@ def main(args):
              args.output_csv,
              args.metrics,
              args.normalize_hd,
-             args.use_native_spacing)
+             args.use_native_spacing,
+             args.surf_dice_tol)
 
 
 def mist_eval_entry():

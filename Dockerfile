@@ -1,4 +1,4 @@
-ARG FROM_IMAGE_NAME=nvcr.io/nvidia/pytorch:23.06-py3
+ARG FROM_IMAGE_NAME=nvcr.io/nvidia/pytorch:24.05-py3
 FROM ${FROM_IMAGE_NAME}
 
 # Set environment variables 
