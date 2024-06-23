@@ -156,3 +156,66 @@ the training set. This validation step can add considerable time to training if 
 To address this, we include the ```--val-percent``` (default: 0.1) and ```--val-sw-overlap``` (default: 0.25) flags to control the size (as a percent of the training set)
 of the validation set and the overlap between patches during validation, respectively. Both of these flags 
 take values that are between zero and one. 
+
+### Kubernetes
+For MD Anderson users, you can run MIST on the Kubernetes/HPC cluster. Here is an example of a job submission file:
+
+```yaml
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: <your job name goes here>
+  namespace: yn-gpu-workload
+  labels:
+      k8s-user: <get this from your k8s-templates folder>
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      nodeSelector:
+        "nvidia.com/gpu.present": "true"
+        "gpu-type": "A100"
+        # "gpu-type": "H100"
+      securityContext:
+        runAsUser: <get this from your k8s-templates folder>
+        runAsGroup: <get this from your k8s-templates folder>
+        fsGroup: <get this from your k8s-templates folder>
+      containers:
+        - name: main
+          image: mistmedical/mist:0.4.6a0
+          command: ["/bin/bash", "-c"]
+          args: ["mist_run_all 
+          --data $HOME/path/to/your/dataset.json 
+          --numpy $HOME/path/to/your/numpy 
+          --results $HOME/path/to/your/results"]
+          workingDir: <get this from your k8s-templates folder>
+          env:
+          - name: HOME
+            value: <get this from your k8s-templates folder>
+          volumeMounts:
+            - name: shm
+              mountPath: "/dev/shm"
+            - name: home
+              mountPath: <get this from your k8s-templates folder>
+          resources:
+            limits:
+              nvidia.com/gpu: "1" # change this to increase number of GPUs, max of 8
+          imagePullPolicy: IfNotPresent
+      volumes:
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: '21474836480'
+        - name: home
+          persistentVolumeClaim:
+            claimName: <get this from your k8s-templates folder>
+      restartPolicy: Never
+```
+
+Once you save your job submission file, you can run it with
+
+```console
+kubectl apply -f <your submission file here>
+```

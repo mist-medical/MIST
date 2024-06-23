@@ -6,9 +6,6 @@ The Medical Imaging Segmentation Toolkit (MIST) is a simple, scalable, and end-t
 framework. MIST allows researchers to seamlessly train, evaluate, and deploy state-of-the-art deep learning models for 3D 
 medical imaging segmentation.
 
-!!! warning ""
-    MIST is licensed under [CC BY-NC-SA 4.0](http://creativecommons.org/licenses/by-nc-sa/4.0/). Please click [here](https://github.com/aecelaya/MIST/blob/main/LICENSE) to see the license file.
-
 !!! note ""
     Please cite the following papers if you use this code for your work:
 

@@ -121,7 +121,8 @@ class Postprocessor:
                  self.dest_dir,
                  self.new_results_csv,
                  self.metrics,
-                 self.args.use_native_spacing)
+                 self.args.use_native_spacing,
+                 self.args.surf_dice_tol)
 
         # Compute improvement score
         new_results_df = pd.read_csv(self.new_results_csv)

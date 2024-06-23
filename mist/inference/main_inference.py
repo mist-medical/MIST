@@ -80,22 +80,25 @@ def back_to_original_space(pred, og_ants_img, config, fg_bbox):
         new_size = og_ants_img.shape
 
     # Bug fix for sitk resample
-    new_size = np.array(new_size, dtype='int').tolist()
-
+    new_size = np.array(new_size, dtype='int').tolist()    
     pred = resample_mask(pred,
                          labels=list(range(len(config["labels"]))),
                          target_spacing=og_ants_img.spacing,
                          new_size=new_size)
-
+    
     # Return prediction to original image space
-    og_orientation = ants.get_orientation(og_ants_img)
-    pred = ants.reorient_image2(pred, og_orientation)
+    # FIX: replace ants.reorient_image2 - there is a bug in there
+    pred = ants.from_numpy(pred.numpy())
+    pred.set_spacing(og_ants_img.spacing)
     pred.set_direction(og_ants_img.direction)
     pred.set_origin(og_ants_img.origin)
-
+    
     # Appropriately pad back to original size
     if fg_bbox is not None:
         pred = decrop_from_fg(pred, fg_bbox)
+
+    # FIX: Copy header from original image onto the prediction so they match
+    pred = og_ants_img.new_image_like(pred.numpy())
 
     return pred
 

@@ -64,7 +64,8 @@ def main(args):
                  os.path.join(args.results, "predictions", "train", "raw"),
                  os.path.join(args.results, "results.csv"),
                  args.metrics,
-                 args.use_native_spacing)
+                 args.use_native_spacing,
+                 args.surf_dice_tol)
 
     if args.exec_mode == "all" or args.exec_mode == "train":
         if has_test_data(args.data):
