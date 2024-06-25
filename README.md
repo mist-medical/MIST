@@ -1,12 +1,12 @@
 Medical Imaging Segmentation Toolkit
 ===
 
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/aecelaya/MIST/python-publish.yml)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/mist-medical/MIST/python-publish.yml)
 ![Read the Docs](https://img.shields.io/readthedocs/mist-medical?style=flat)
 ![PyPI - Downloads](https://img.shields.io/pypi/dm/mist-medical?style=flat&logo=PyPI&label=pypi%20downloads)
 ![Static Badge](https://img.shields.io/badge/paper-PocketNet-blue?logo=ieee&link=https%3A%2F%2Fieeexplore.ieee.org%2Fdocument%2F9964128)
 ![Static Badge](https://img.shields.io/badge/paper-FMG_%26_WNet-blue?logo=adobeacrobatreader&link=https%3A%2F%2Fresearch.latinxinai.org%2Fpapers%2Fneurips%2F2023%2Fpdf%2FAdrian_Celaya.pdf)
-![GitHub Repo stars](https://img.shields.io/github/stars/aecelaya/MIST?style=flat)
+![GitHub Repo stars](https://img.shields.io/github/stars/mist-medical/MIST?style=flat)
 
 ## About
 The Medical Imaging Segmentation Toolkit (MIST) is a simple, scalable, and end-to-end 3D medical imaging segmentation 
@@ -27,7 +27,7 @@ Please cite the following papers if you use this code for your work:
 * Feb. 2024 - MIST is now available as PyPI package and as a Docker image on DockerHub.
 * Feb. 2024 - Major improvements to the analysis, preprocessing, and postprocessing pipelines, 
 and new network architectures like UNETR added.
-* Feb. 2024 - We have moved the TensorFlow version of MIST to [mist-tf](https://github.com/aecelaya/mist-tf).
+* Feb. 2024 - We have moved the TensorFlow version of MIST to [mist-tf](https://github.com/mist-medical/mist-tf).
 
 ## Documentation
 We've moved our documentation over to Read the Docs. The Read the Docs page is [**here**](https://mist-medical.readthedocs.io/).
