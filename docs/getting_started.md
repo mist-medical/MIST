@@ -40,7 +40,7 @@ naming convention for the files within your dataset. However, the MIST pipeline 
 images in each patient directory is consistent or that each type of image is identifiable by a 
 list of identifier strings.
 
-MIST offers support for MSD and CSV formatted datasets. For more details, please see [MSD and CSV Formatted Data](#msd-and-csv-formatted-data).
+MIST offers support for MSD and CSV formatted datasets. For more details, please see [MSD and CSV Formatted Data](usage.md).
 
 Once your dataset is in the correct format, the final step is to prepare a small JSON 
 file containing the details of the dataset. We specifically ask for the following key-value 
