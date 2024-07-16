@@ -4,6 +4,7 @@ import ants
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
 
 # Rich progress bar
 from rich.console import Console
@@ -42,6 +43,7 @@ from mist.runtime.utils import (
     create_pretrained_config_file,
     get_progress_bar,
     AlphaSchedule,
+    create_empty_dir
 )
 
 console = Console()
@@ -361,6 +363,9 @@ class Trainer:
 
                 return self.val_loss(label, pred)
 
+            # Tabulate loss data for convergence plot
+            all_loss_data = []
+
             for epoch in range(self.args.epochs):
                 # Make sure gradient tracking is on, and do a pass over the data
                 model.train(True)
@@ -438,6 +443,10 @@ class Trainer:
                         else:
                             text = Text(f"Validation loss did NOT improve from {best_loss:.4}\n")
                             console.print(text)
+                            
+                        # Collect validation loss data
+                        if(self.args.val_graph):
+                            all_loss_data.append(best_loss)
                     else:
                         for i in range(val_steps):
                             # Get data from validation loader
@@ -461,6 +470,24 @@ class Trainer:
                     # Reset running losses for new epoch
                     running_loss_train.reset_states()
                     running_loss_validation.reset_states()
+            
+            # Writes loss data to file and graph
+            if(self.args.val_graph):
+                
+                val_data_dir = os.path.join(self.args.results, "convergence_data")
+                create_empty_dir(val_data_dir)
+                val_data_loc = os.path.join(val_data_dir, "fold_{}.txt".format(fold))
+                conv_map = open(val_data_loc, "w")
+                conv_map.write(str(all_loss_data))
+                conv_map.close()
+                
+                # Output graph from validation loss data
+                plt.plot(list(range(len(all_loss_data))), all_loss_data, label="fold_{}".format(fold))
+                plt.title("Validation Loss by Fold".format(fold))
+                plt.xlabel("Epoch")
+                plt.ylabel("Loss Validation")
+                plt.legend()
+                plt.savefig(os.path.join(val_data_dir, "loss_val_graph.png".format(fold)))
 
             dist.barrier()
             if rank == 0:

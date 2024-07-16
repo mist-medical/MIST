@@ -166,6 +166,7 @@ def get_main_args():
     p.arg("--steps-per-epoch",
           type=positive_int,
           help="Steps per epoch. By default ceil(training_dataset_size / (batch_size * gpus)")
+    p.arg("--val-graph", type=bool, default=False, help="Output convergence graph for validation loss")
 
     # Evaluation
     p.arg("--metrics",
