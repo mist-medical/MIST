@@ -22,6 +22,7 @@ from mist.runtime.utils import (
     check_anisotropic,
     make_onehot,
     sitk_get_min_max,
+    sitk_get_sum,
     get_progress_bar
 )
 
@@ -141,25 +142,61 @@ Compute distance transform maps
 """
 
 
-def compute_dtm(mask_ants, labels):
+def compute_dtm(
+    mask_ants, 
+    labels, 
+    normalize_dtm
+):
+    """Compute distance transform map (DTM) for a mask.
+    
+    Args:
+        mask_ants: Mask as ANTs image.
+        labels: List of labels in the dataset.
+        normalize_dtm: Normalize the output DTM to be inbetween -1 and 1.
+    Returns:
+        dtm: DTM for each label in mask as a 4D numpy array.
+    """
     dtms_sitk = list()
     masks_sitk = make_onehot(mask_ants, labels)
 
     for i, mask in enumerate(masks_sitk):
-        dtm_i = sitk.SignedMaurerDistanceMap(sitk.Cast(masks_sitk[i], sitk.sitkUInt8),
-                                             squaredDistance=False,
-                                             useImageSpacing=False)
+        if sitk_get_sum(mask) != 0:
+            dtm_i = sitk.SignedMaurerDistanceMap(
+                sitk.Cast(mask, sitk.sitkUInt8),
+                squaredDistance=False,
+                useImageSpacing=False
+            )
 
-        dtm_int = sitk.Cast((dtm_i < 0), sitk.sitkFloat32)
-        dtm_int *= dtm_i
-        int_min, _ = sitk_get_min_max(dtm_int)
+            if normalize_dtm:
+                dtm_int = sitk.Cast((dtm_i < 0), sitk.sitkFloat32)
+                dtm_int *= dtm_i
+                int_min, _ = sitk_get_min_max(dtm_int)
 
-        dtm_ext = sitk.Cast((dtm_i > 0), sitk.sitkFloat32)
-        dtm_ext *= dtm_i
-        _, ext_max = sitk_get_min_max(dtm_ext)
+                dtm_ext = sitk.Cast((dtm_i > 0), sitk.sitkFloat32)
+                dtm_ext *= dtm_i
+                _, ext_max = sitk_get_min_max(dtm_ext)
 
-        dtm_i = (dtm_ext / ext_max) - (dtm_int / int_min)
-
+                dtm_i = (dtm_ext / ext_max) - (dtm_int / int_min)
+        else:
+            mask_depth = mask.GetDepth()
+            mask_width = mask.GetWidth()
+            mask_height = mask.GetHeight()
+            all_ones_mask = np.ones((mask_depth, mask_height, mask_width))
+            if normalize_dtm:
+                dtm_i = sitk.GetImageFromArray(all_ones_mask)
+            else:
+                diagonal_distance = np.sqrt(
+                    mask_depth**2 + mask_width**2 + mask_height**2
+                )
+                dtm_i = sitk.GetImageFromArray(
+                    diagonal_distance*all_ones_mask
+                )
+                
+            dtm_i = sitk.Cast(dtm_i, sitk.sitkFloat32)
+            dtm_i.SetSpacing(mask.GetSpacing())
+            dtm_i.SetOrigin(mask.GetOrigin())
+            dtm_i.SetDirection(mask.GetDirection())
+                    
         dtms_sitk.append(dtm_i)
 
     dtm = sitk_to_ants(sitk.JoinSeries(dtms_sitk))
@@ -167,7 +204,31 @@ def compute_dtm(mask_ants, labels):
     return dtm
 
 
-def preprocess_example(config, image_list, mask, use_dtm=False, fg_bbox=None):
+def preprocess_example(
+    config, 
+    image_list, 
+    mask, 
+    use_dtm=False, 
+    normalize_dtm=False, 
+    fg_bbox=None
+):
+    """Preprocessing function for a single example.
+    
+    Args:
+        config: Dictionary with information from config.json.
+        image_list: List containing paths to images for the example.
+        mask: Path to segmentation mask.
+        use_dtm: Set to true to compute and output DTMs.
+        normalize_dtm: Set to true to normalize DTM to have
+            values between -1 and 1.
+        fg_bbox: Information about the bounding box for the foreground
+    Returns:
+        image: Preprocessed image(s) as a numpy array.
+        mask: Segmentation mask as one-hot encoded numpy array.
+        fg_bbox: Foreground bounding box is None is given as the fg_bbox 
+            input and the config file calls for its use.
+        dtm: DTM(s) as a numpy array.
+    """
     training = True
     if mask is None:
         training = False
@@ -214,7 +275,11 @@ def preprocess_example(config, image_list, mask, use_dtm=False, fg_bbox=None):
                              target_spacing=config["target_spacing"])
 
         if use_dtm:
-            dtm = compute_dtm(mask, labels=config["labels"])
+            dtm = compute_dtm(
+                mask, 
+                labels=config["labels"],
+                normalize_dtm=normalize_dtm
+            )
         else:
             dtm = None
 
@@ -319,6 +384,7 @@ def preprocess_dataset(args):
                                                                      image_list,
                                                                      mask,
                                                                      args.use_dtms,
+                                                                     args.normalize_dtms,
                                                                      fg_bbox)
 
             np.save(os.path.join(args.numpy, images_dir, f"{patient['id']}.npy"), image_npy.astype("float32"))

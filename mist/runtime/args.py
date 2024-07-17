@@ -119,6 +119,7 @@ def get_main_args():
     p.boolean_flag("--use-n4-bias-correction", default=False, help="Use N4 bias field correction (only for MR images)")
     p.boolean_flag("--use-config-class-weights", default=False, help="Use class weights in config file")
     p.boolean_flag("--use-dtms", default=False, help="Compute and use DTMs during training")
+    p.boolean_flag("--normalize-dtms", default=False, help="Normalize DTMs to have values between -1 and 1")
     p.arg("--class-weights", nargs="+", type=float, help="Specify class weights")
 
     # Loss function

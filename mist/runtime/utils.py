@@ -23,6 +23,20 @@ from rich.progress import (
 import torch
 import torch.nn as nn
 
+
+def read_json_file(json_file):
+    """Read json file and output it as a dictionary
+    
+    Args:
+        json_file: Path to json file
+    Returns:
+        json_data: Dictionary with json file data
+    """
+    with open(json_file, "r") as file:
+        json_data = json.load(file)
+    return json_data
+
+
 def set_warning_levels():
     warnings.simplefilter(action="ignore",
                           category=np.VisibleDeprecationWarning)
@@ -583,6 +597,20 @@ def sitk_get_min_max(image):
     stats_filter = sitk.StatisticsImageFilter()
     stats_filter.Execute(image)
     return stats_filter.GetMinimum(), stats_filter.GetMaximum()
+
+
+def sitk_get_sum(image):
+    """Get sum of voxels in SITK image.
+    
+    Args:
+        image: SITK image object.
+    Returns:
+        image_sum: Sum of all voxel values in image.
+    """
+    stats_filter = sitk.StatisticsImageFilter()
+    stats_filter.Execute(image)
+    image_sum = stats_filter.GetSum()
+    return image_sum
 
 
 def decrop_from_fg(img_ants, fg_bbox):

@@ -5,6 +5,10 @@ import pandas as pd
 import numpy as np
 import SimpleITK as sitk
 
+# Rich progres bar
+from rich.console import Console
+from rich.text import Text
+
 from mist.metrics.metrics import (
     compute_surface_distances,
     compute_dice_coefficient,
@@ -124,24 +128,35 @@ def evaluate(config_json, paths, source_dir, output_csv, metrics, use_native_spa
     # Get predictions from source directory
     predictions = os.listdir(source_dir)
 
-    # Set up rich progress bar
+    # Set up rich progress bar and error logging
     eval_progress = get_progress_bar("Evaluating")
-
+    console = Console()
+    error_messages = ""
+    
     with eval_progress as pb:
         for i in pb.track(range(len(predictions))):
-            # Get true mask and original_prediction
-            patient_id = predictions[i].split('.')[0]
-            pred = os.path.join(source_dir, predictions[i])
-            truth = paths.loc[paths['id'].astype(str) == patient_id].iloc[0]['mask']
+            try:
+                # Get true mask and original_prediction
+                patient_id = predictions[i].split('.')[0]
+                pred = os.path.join(source_dir, predictions[i])
+                truth = paths.loc[paths['id'].astype(str) == patient_id].iloc[0]['mask']
 
-            eval_results = evaluate_single_example(pred,
-                                                   truth,
-                                                   patient_id,
-                                                   config,
-                                                   metrics,
-                                                   use_native_spacing,
-                                                   surf_dice_tol)
-            results_df = pd.concat([results_df, pd.DataFrame(eval_results, index=[0])], ignore_index=True)
+                eval_results = evaluate_single_example(pred,
+                                                       truth,
+                                                       patient_id,
+                                                       config,
+                                                       metrics,
+                                                       use_native_spacing,
+                                                       surf_dice_tol)
+            except:
+                error_messages += f"[Evaluation Error] Could not evaluate {predictions[i]}\n"
+            else:
+                results_df = pd.concat([results_df, pd.DataFrame(eval_results, index=[0])], ignore_index=True)
 
+    # Print error messages to console
+    if len(error_messages) > 0:
+        text = Text(error_messages)
+        console.print(text)
+        
     results_df = compute_results_stats(results_df)
     results_df.to_csv(output_csv, index=False)

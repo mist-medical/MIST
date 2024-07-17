@@ -116,7 +116,7 @@ def configure_pretrained_model(pretrained_model_path, n_channels, n_classes):
     model_config_path = os.path.join(pretrained_model_path, "model_config.json")
     models = [load_model_from_config(model, model_config_path) for model in model_list]
     state_dicts = [model.state_dict() for model in models]
-
+    
     # Get model configuration
     with open(model_config_path, "r") as file:
         model_config = json.load(file)
@@ -201,7 +201,8 @@ def configure_pretrained_model(pretrained_model_path, n_channels, n_classes):
 
             if model.deep_supervision:
                 model.unet.deep_supervision_heads = nn.ModuleList([UnetOutBlock(model.unet.spatial_dims,
-                                                                                model.unet.filters[i + 1], 2,
+                                                                                model.unet.filters[i + 1], 
+                                                                                n_classes,
                                                                                 dropout=model.unet.dropout) for i in
                                                                    range(model.unet.deep_supr_num)])
     elif model_name == "unetr":

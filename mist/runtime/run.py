@@ -23,7 +23,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 # MONAI
 from monai.inferers import sliding_window_inference
 
-# Custom code
+# MIST modules
 from mist.data_loading.dali_loader import (
     get_training_dataset,
     get_validation_dataset,
@@ -35,6 +35,7 @@ from mist.runtime.loss import get_loss, DiceLoss, VAELoss
 from mist.inference.main_inference import predict_single_example
 
 from mist.runtime.utils import (
+    read_json_file,
     get_optimizer,
     get_lr_schedule,
     Mean,
@@ -51,14 +52,17 @@ class Trainer:
     def __init__(self, args):
         # Read user defined parameters
         self.args = args
-        with open(self.args.data, "r") as file:
-            self.data = json.load(file)
+        
+        # Read dataset.json file
+        self.data = read_json_file(self.args.data)
+        
+        # Read config.json file
+        self.config_file = os.path.join(
+            self.args.results, 'config.json'
+        )
+        self.config = read_json_file(self.config_file)
 
-        # Get dataset configuration file
-        self.config_file = os.path.join(self.args.results, "config.json")
-        with open(self.config_file, "r") as file:
-            self.config = json.load(file)
-
+        # Get number of channels and classes from dataset.json
         self.n_channels = len(self.data["images"])
         self.n_classes = len(self.data["labels"])
 
@@ -98,62 +102,19 @@ class Trainer:
         else:
             self.class_weights = None
 
-        self.alpha = AlphaSchedule(self.args.epochs,
-                                   self.args.boundary_loss_schedule,
-                                   constant=self.args.loss_schedule_constant,
-                                   init_pause=self.args.linear_schedule_pause,
-                                   step_length=self.args.step_schedule_step_length)
+        self.alpha = AlphaSchedule(
+            self.args.epochs,
+            self.args.boundary_loss_schedule,
+            constant=self.args.loss_schedule_constant,
+            init_pause=self.args.linear_schedule_pause,
+            step_length=self.args.step_schedule_step_length
+        )
 
         # Get standard dice loss for validation
         self.val_loss = DiceLoss()
 
         # Get VAE regularization loss
         self.vae_loss = VAELoss()
-
-    def predict_on_val(self, model_path, loader, df):
-        # Load model
-        model = load_model_from_config(model_path, self.model_config_path)
-        model.eval()
-        model.to("cuda")
-
-        # Set up rich progress bar
-        testing_progress = get_progress_bar("Testing on fold")
-
-        # Run prediction on all samples and compute metrics
-        with torch.no_grad(), testing_progress as pb:
-            for i in pb.track(range(len(df))):
-                # Get original patient data
-                patient = df.iloc[i].to_dict()
-                image_list = list(patient.values())[3:len(patient)]
-                og_ants_img = ants.image_read(image_list[0])
-                file = "{}.nii.gz".format(patient["id"])
-
-                # Get preprocessed image from DALI loader
-                data = loader.next()[0]
-                preproc_npy_img = data["image"]
-
-                # Get foreground mask if necessary
-                if self.config["crop_to_fg"]:
-                    fg_bbox = self.fg_bboxes.loc[self.fg_bboxes["id"] == patient["id"]].iloc[0].to_dict()
-                else:
-                    fg_bbox = None
-
-                # Predict with model and put back into original image space
-                pred, _ = predict_single_example(preproc_npy_img,
-                                                 og_ants_img,
-                                                 self.config,
-                                                 [model],
-                                                 self.args.sw_overlap,
-                                                 self.args.blend_mode,
-                                                 self.args.tta,
-                                                 output_std=False,
-                                                 fg_bbox=fg_bbox)
-
-                # Write prediction as .nii.gz file
-                ants.image_write(pred, os.path.join(self.args.results, "predictions", "train", "raw", file))
-
-        text = Text("\n")
-        console.print(text)
 
     # Set up for distributed training
     def setup(self, rank, world_size):
@@ -292,7 +253,10 @@ class Trainer:
 
                     if self.args.deep_supervision:
                         for k, p in enumerate(output["deep_supervision"]):
-                            loss += 0.5 ** (k + 1) * loss_fn(label, p)
+                            if dtm is None:
+                                loss += 0.5 ** (k + 1) * loss_fn(label, p)
+                            else:
+                                loss += 0.5 ** (k + 1) * loss_fn(label, p, dtm, alpha)
 
                         c_norm = 1 / (2 - 2 ** (-(len(output["deep_supervision"]) + 1)))
                         loss *= c_norm
@@ -315,7 +279,7 @@ class Trainer:
                             l1_reg += torch.norm(param, p=1)
 
                         loss += self.args.l1_penalty * l1_reg
-
+                    
                     return loss
 
                 # Zero your gradients for every batch!
@@ -466,26 +430,14 @@ class Trainer:
             if rank == 0:
                 writer.close()
 
-                # Prepare test set on rank 0 device only
-                test_df = self.df.loc[self.df["fold"] == fold]
-                test_ids = list(test_df["id"])
-                test_images = [os.path.join(self.args.numpy, "images", "{}.npy".format(pat)) for pat in test_ids]
-
-                test_loader = get_test_dataset(test_images,
-                                               seed=self.args.seed_val,
-                                               num_workers=self.args.num_workers,
-                                               rank=0,
-                                               world_size=1)
-
-                # Run inference on test set
-                self.predict_on_val(best_model_name, test_loader, test_df)
-
         self.cleanup()
 
     def fit(self):
         # Train model
         world_size = torch.cuda.device_count()
-        mp.spawn(self.train,
-                 args=(world_size,),
-                 nprocs=world_size,
-                 join=True)
+        mp.spawn(
+            self.train,
+            args=(world_size,),
+            nprocs=world_size,
+            join=True
+        )

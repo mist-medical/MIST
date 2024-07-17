@@ -19,6 +19,7 @@ from mist.runtime.utils import (
 )
 
 from mist.inference.main_inference import (
+    test_on_fold,
     test_time_inference,
     load_test_time_models
 )
@@ -58,7 +59,12 @@ def main(args):
     if args.exec_mode == "all" or args.exec_mode == "train":
         mist_trainer = Trainer(args)
         mist_trainer.fit()
+        
+        # Test for each fold
+        for fold in args.folds:
+            test_on_fold(args, fold)
 
+        # Evaluate predictions
         evaluate(args.data,
                  os.path.join(args.results, "train_paths.csv"),
                  os.path.join(args.results, "predictions", "train", "raw"),

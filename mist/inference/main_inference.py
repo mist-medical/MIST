@@ -7,6 +7,10 @@ import ants
 import pandas as pd
 import numpy as np
 
+# Rich progres bar
+from rich.console import Console
+from rich.text import Text
+
 from monai.inferers import sliding_window_inference
 
 import torch
@@ -14,14 +18,21 @@ from torch.nn.functional import softmax
 
 from mist.models.get_model import load_model_from_config
 
+from mist.data_loading.dali_loader import (
+    get_test_dataset
+)
+
 from mist.runtime.utils import (
+    read_json_file,
     convert_dict_to_df, 
     get_flip_axes, 
     create_empty_dir, 
     get_fg_mask_bbox,
     decrop_from_fg,
     get_progress_bar,
-    npy_fix_labels
+    npy_fix_labels,
+    ants_to_sitk,
+    sitk_to_ants
 )
 
 from mist.preprocess_data.preprocess import (
@@ -68,7 +79,6 @@ def get_sw_prediction(image, model, patch_size, overlap, blend_mode, tta):
 
 def back_to_original_space(pred, og_ants_img, config, fg_bbox):
     pred = ants.from_numpy(data=pred)
-    pred.set_spacing(config["target_spacing"])
 
     # Resample prediction
     # Enforce size for cropped images
@@ -92,7 +102,7 @@ def back_to_original_space(pred, og_ants_img, config, fg_bbox):
     pred = ants.reorient_image2(pred, og_orientation)
     pred.set_direction(og_ants_img.direction)
     pred.set_origin(og_ants_img.origin)
-
+    
     # Appropriately pad back to original size
     if fg_bbox is not None:
         pred = decrop_from_fg(pred, fg_bbox)
@@ -199,6 +209,121 @@ def check_test_time_input(patients):
         return convert_dict_to_df(patients)
     else:
         raise ValueError("Invalid input format for test time")
+        
+
+def test_on_fold(
+    args,
+    fold_number
+):
+    """Run inference on the test set for a fold.
+    
+    Args:
+        args: Arguments from MIST arguments.
+        fold_number: The fold number to run inference on.
+    Returns:
+        Saves predictions to ./results/predictions/train/raw/ directory.
+    """
+    # Read config file
+    config = read_json_file(
+        os.path.join(args.results, 'config.json')
+    )
+    
+    # Get dataframe with paths for test images
+    train_paths_df = pd.read_csv(
+        os.path.join(args.results, 'train_paths.csv')
+    )
+    testing_paths_df = train_paths_df.loc[train_paths_df["fold"] == fold_number]
+    
+    # Get list of numpy files of preprocessed test images
+    test_ids = list(testing_paths_df["id"])
+    test_images = [
+        os.path.join(args.numpy, 'images', f'{patient_id}.npy') for patient_id in test_ids
+    ]
+    
+    # Get bounding box data
+    fg_bboxes = pd.read_csv(
+        os.path.join(args.results, 'fg_bboxes.csv')
+    )
+    
+    # Get DALI loader for streaming preprocessed numpy files
+    test_dali_loader = get_test_dataset(
+        test_images,
+        seed=args.seed_val,
+        num_workers=args.num_workers,
+        rank=0,
+        world_size=1
+    )
+    
+    # Load model
+    model = load_model_from_config(
+        os.path.join(args.results, 'models', f'fold_{fold_number}.pt'),
+        os.path.join(args.results, 'models', 'model_config.json')
+    )
+    model.eval()
+    model.to("cuda")
+    
+    # Progress bar and error messages
+    progress_bar = get_progress_bar(f'Testing on fold {fold_number}')
+    console = Console()
+    error_messages = ''
+
+    # Define output directory
+    output_directory = os.path.join(
+        args.results,
+        'predictions',
+        'train',
+        'raw'
+    )
+
+    # Run prediction on all test images
+    with torch.no_grad(), progress_bar as pb:
+        for image_index in pb.track(range(len(testing_paths_df))):
+            patient = testing_paths_df.iloc[image_index].to_dict()
+            try:
+                # Get original patient data
+                image_list = list(patient.values())[3:len(patient)]
+                original_ants_image = ants.image_read(image_list[0])
+
+                # Get preprocessed image from DALI loader
+                data = test_dali_loader.next()[0]
+                preprocessed_numpy_image = data['image']
+
+                # Get foreground mask if necessary
+                if config["crop_to_fg"]:
+                    fg_bbox = fg_bboxes.loc[fg_bboxes['id'] == patient['id']].iloc[0].to_dict()
+                else:
+                    fg_bbox = None
+
+                # Predict with model and put back into original image space
+                prediction, _ = predict_single_example(
+                    preprocessed_numpy_image,
+                    original_ants_image,
+                    config,
+                    [model],
+                    args.sw_overlap,
+                    args.blend_mode,
+                    args.tta,
+                    output_std=False,
+                    fg_bbox=fg_bbox
+                )
+            except:
+                error_messages += f"[Inference Error] Prediction failed for {patient['id']}\n"
+            else:
+                # Write prediction as .nii.gz file
+                ants.image_write(
+                    prediction,
+                    os.path.join(
+                        output_directory, 
+                        f"{patient['id']}.nii.gz"
+                    )
+                )
+    
+    if len(error_messages) > 0:
+        text = Text(error_messages)
+        console.print(text)
+
+    # Clean up
+    gc.collect()
 
 
 def test_time_inference(df,
@@ -210,15 +335,14 @@ def test_time_inference(df,
                         tta,
                         no_preprocess=False,
                         output_std=False):
-    with open(config_file, 'r') as file:
-        config = json.load(file)
-
+    config = read_json_file(config_file)
+    
     create_empty_dir(dest)
 
     # Set up rich progress bar
     testing_progress = get_progress_bar("Testing")
-
-    messages = list()
+    console = Console()
+    error_messages = ""
 
     # Run prediction on all samples and compute metrics
     with testing_progress as pb:
@@ -244,7 +368,14 @@ def test_time_inference(df,
                 if no_preprocess:
                     torch_img, _, fg_bbox, _ = convert_nifti_to_numpy(image_list, None)
                 else:
-                    torch_img, _, fg_bbox, _ = preprocess_example(config, image_list, None, False, None)
+                    torch_img, _, fg_bbox, _ = preprocess_example(
+                        config, 
+                        image_list, 
+                        None, 
+                        False, 
+                        False, 
+                        None
+                    )
 
                 # Make image channels first and add batch dimension
                 torch_img = np.transpose(torch_img, axes=(3, 0, 1, 2))
@@ -253,15 +384,17 @@ def test_time_inference(df,
                 torch_img = torch.Tensor(torch_img.copy()).to(torch.float32)
                 torch_img = torch_img.to("cuda")
 
-                prediction, std_images = predict_single_example(torch_img,
-                                                                og_ants_img,
-                                                                config,
-                                                                models,
-                                                                overlap,
-                                                                blend_mode,
-                                                                tta,
-                                                                output_std,
-                                                                fg_bbox)
+                prediction, std_images = predict_single_example(
+                    torch_img,
+                    og_ants_img,
+                    config,
+                    models,
+                    overlap,
+                    blend_mode,
+                    tta,
+                    output_std,
+                    fg_bbox
+                )
 
                 # Apply postprocessing if required
                 transforms = ["remove_small_objects", "top_k_cc", "fill_holes"]
@@ -297,11 +430,10 @@ def test_time_inference(df,
                             ants.image_write(std_images[i], output)
 
             except:
-                id = patient["id"]
-                messages += f"Prediction failed for {id}\n"
+                error_messages += f"[Inference Error] Prediction failed for {patient['id']}\n"
 
-            if len(messages) > 0:
-                text = Text(messages)
+            if len(error_messages) > 0:
+                text = Text(error_messages)
                 console.print(text)
 
             # Clean up
