@@ -93,7 +93,7 @@ if __name__ == "__main__":
     args = get_main_args()
     if not args.overwrite:
         assert not os.path.exists(os.path.join(args.results, "results.csv")), \
-                "Results folder already contains a previous run"
+                "Results folder already contains a previous run. Enable --overwrite to overwrite the previous run"
 
     if args.loss in ["bl", "hdl", "gsl"]:
         args.use_dtm = True
