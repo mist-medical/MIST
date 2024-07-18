@@ -60,6 +60,8 @@ def get_main_args():
     p.arg("--master-port", type=str, default="12355", help="Master port for multi-gpu training")
     p.arg("--seed_val", type=non_negative_int, default=42, help="Random seed")
     p.boolean_flag("--tta", default=False, help="Enable test time augmentation")
+    p.boolean_flag("--overwrite", default=False, help="Overwrites previous run at specified results folder")
+
 
     # Output
     p.arg("--results", type=str, help="Path to output of MIST pipeline")
@@ -119,6 +121,8 @@ def get_main_args():
     p.boolean_flag("--use-n4-bias-correction", default=False, help="Use N4 bias field correction (only for MR images)")
     p.boolean_flag("--use-config-class-weights", default=False, help="Use class weights in config file")
     p.boolean_flag("--use-dtms", default=False, help="Compute and use DTMs during training")
+    p.boolean_flag("--normalize-dtms", default=False, help="Normalize DTMs to have values between -1 and 1")
+
     p.arg("--class-weights", nargs="+", type=float, help="Specify class weights")
 
     # Loss function
