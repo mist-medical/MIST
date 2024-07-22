@@ -193,7 +193,7 @@ class Trainer:
 
             # Get steps per epoch
             if self.args.steps_per_epoch is None:
-                self.args.steps_per_epoch = len(train_images) // (self.args.batch_size * world_size)
+                self.args.steps_per_epoch = len(train_images) // (self.args.batch_size / world_size)
             else:
                 self.args.steps_per_epoch = self.args.steps_per_epoch
 
