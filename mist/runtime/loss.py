@@ -63,27 +63,13 @@ class SoftDiceCLDice(nn.Module):
         self.smooth = smooth
         self.alpha = alpha
         self.dice_loss = DiceLoss()
-        self.soft_skeletonize = SoftSkeletonize(num_iter=10)
         self.exclude_background = exclude_background
+        self.cldice_loss = SoftCLDice(self.iterations, self.smooth, self.exclude_background)
 
     def forward(self, y_true, y_pred):
-        # Prepare inputs
-        y_true = get_one_hot(y_true, y_pred.shape[1])
-        y_pred = softmax(y_pred, dim=1)
-
-        if self.exclude_background:
-            y_true = y_true[:, 1:, :, :]
-            y_pred = y_pred[:, 1:, :, :]
-            
-        dice = self.dice_loss(y_true, y_pred)
-        skel_pred = self.soft_skeletonize(y_pred)
-        skel_true = self.soft_skeletonize(y_true)
-        tprec = (torch.sum(torch.multiply(skel_pred, y_true)) + self.smooth) / (torch.sum(skel_pred) + self.smooth)
-        tsens = (torch.sum(torch.multiply(skel_true, y_pred)) + self.smooth) / (torch.sum(skel_true) + self.smooth)
-        cl_dice = 1. - 2.0 * (tprec * tsens) / (tprec + tsens)
-        return (1.0 - self.alpha) * dice + self.alpha * cl_dice
-
-
+           dice = self.dice_loss(y_true, y_pred)
+           cldice = self.cldice_loss(y_true, y_pred)
+           return (1.0 - self.alpha) * dice + self.alpha * cldice
 
 
 class DiceCELoss(nn.Module):
