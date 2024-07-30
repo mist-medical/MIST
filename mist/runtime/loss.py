@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.nn.functional import softmax, one_hot
-
+from mist.runtime.loss_utils import SoftSkeletonize
 
 def get_one_hot(y_true, n_classes):
     y_true = y_true.to(torch.int64)
@@ -30,6 +30,46 @@ class DiceLoss(nn.Module):
         loss = torch.mean(num / den, axis=1)
         loss = torch.mean(loss)
         return loss
+
+class SoftCLDice(nn.Module):
+    def __init__(self, iterations=3, smooth=1., exclude_background=False):
+        super(SoftCLDice, self).__init__()
+        self.iterations = iterations
+        self.smooth = smooth
+        self.soft_skeletonize = SoftSkeletonize(num_iter=10)
+        self.exclude_background = exclude_background
+
+    def forward(self, y_true, y_pred):
+        # Prepare inputs
+        y_true = get_one_hot(y_true, y_pred.shape[1])
+        y_pred = softmax(y_pred, dim=1)
+
+        if self.exclude_background:
+            y_true = y_true[:, 1:, :, :]
+            y_pred = y_pred[:, 1:, :, :]
+            
+        skel_pred = self.soft_skeletonize(y_pred)
+        skel_true = self.soft_skeletonize(y_true)
+        tprec = (torch.sum(torch.multiply(skel_pred, y_true)) + self.smooth) / (torch.sum(skel_pred) + self.smooth)
+        tsens = (torch.sum(torch.multiply(skel_true, y_pred)) + self.smooth) / (torch.sum(skel_true) + self.smooth)
+        cl_dice = 1. - 2.0 * (tprec * tsens) / (tprec + tsens)
+        return cl_dice
+
+
+class SoftDiceCLDice(nn.Module):
+    def __init__(self, iterations=3, alpha=0.5, smooth=1., exclude_background=False):
+        super(SoftDiceCLDice, self).__init__()
+        self.iterations = iterations
+        self.smooth = smooth
+        self.alpha = alpha
+        self.dice_loss = DiceLoss()
+        self.exclude_background = exclude_background
+        self.cldice_loss = SoftCLDice(self.iterations, self.smooth, self.exclude_background)
+
+    def forward(self, y_true, y_pred):
+           dice = self.dice_loss(y_true, y_pred)
+           cldice = self.cldice_loss(y_true, y_pred)
+           return (1.0 - self.alpha) * dice + self.alpha * cldice
 
 
 class DiceCELoss(nn.Module):
@@ -232,5 +272,7 @@ def get_loss(args, **kwargs):
         return HDOneSidedLoss()
     elif args.loss == "gsl":
         return GenSurfLoss(class_weights=kwargs["class_weights"])
+    elif args.loss == "cldice":
+        return soft_cldice()
     else:
         raise ValueError("Invalid loss function")

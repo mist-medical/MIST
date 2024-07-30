@@ -62,6 +62,7 @@ def get_main_args():
     p.boolean_flag("--tta", default=False, help="Enable test time augmentation")
     p.boolean_flag("--overwrite", default=False, help="Overwrites previous run at specified results folder")
 
+
     # Output
     p.arg("--results", type=str, help="Path to output of MIST pipeline")
     p.arg("--numpy", type=str, help="Path to save preprocessed numpy data")
@@ -121,13 +122,14 @@ def get_main_args():
     p.boolean_flag("--use-config-class-weights", default=False, help="Use class weights in config file")
     p.boolean_flag("--use-dtms", default=False, help="Compute and use DTMs during training")
     p.boolean_flag("--normalize-dtms", default=False, help="Normalize DTMs to have values between -1 and 1")
+
     p.arg("--class-weights", nargs="+", type=float, help="Specify class weights")
 
     # Loss function
     p.arg("--loss",
           type=str,
           default="dice_ce",
-          choices=["dice_ce", "dice", "gdl", "gdl_ce", "bl", "hdl", "gsl"],
+          choices=["dice_ce", "dice", "gdl", "gdl_ce", "bl", "hdl", "gsl", "cldice"],
           help="Loss function for training")
     p.arg("--boundary-loss-schedule",
           default="constant",
