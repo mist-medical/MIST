@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch.nn.functional import softmax, one_hot
 from mist.runtime.loss_utils import SoftSkeletonize
 
+
 def get_one_hot(y_true, n_classes):
     y_true = y_true.to(torch.int64)
     y_true = one_hot(y_true, num_classes=n_classes)
@@ -30,6 +31,7 @@ class DiceLoss(nn.Module):
         loss = torch.mean(num / den, axis=1)
         loss = torch.mean(loss)
         return loss
+
 
 class SoftCLDice(nn.Module):
     def __init__(self, iterations=3, smooth=1., exclude_background=False):
@@ -67,9 +69,9 @@ class SoftDiceCLDice(nn.Module):
         self.cldice_loss = SoftCLDice(self.iterations, self.smooth, self.exclude_background)
 
     def forward(self, y_true, y_pred):
-           dice = self.dice_loss(y_true, y_pred)
-           cldice = self.cldice_loss(y_true, y_pred)
-           return (1.0 - self.alpha) * dice + self.alpha * cldice
+        dice = self.dice_loss(y_true, y_pred)
+        cldice = self.cldice_loss(y_true, y_pred)
+        return (1.0 - self.alpha) * dice + self.alpha * cldice
 
 
 class DiceCELoss(nn.Module):
@@ -273,6 +275,6 @@ def get_loss(args, **kwargs):
     elif args.loss == "gsl":
         return GenSurfLoss(class_weights=kwargs["class_weights"])
     elif args.loss == "cldice":
-        return soft_cldice()
+        return SoftDiceCLDice()
     else:
         raise ValueError("Invalid loss function")

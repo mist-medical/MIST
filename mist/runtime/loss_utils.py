@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class SoftSkeletonize(nn.Module):
 
     def __init__(self, num_iter=40):
@@ -48,17 +49,5 @@ class SoftSkeletonize(nn.Module):
         return skel
 
     def forward(self, img):
-        # Prepare inputs
-        y_true = get_one_hot(y_true, y_pred.shape[1])
-        y_pred = F.softmax(y_pred, dim=1)
-        
         # Perform skeletonization
         return self.soft_skel(img)
-
-def get_one_hot(targets, num_classes):
-    # Convert target indices to one-hot encoding
-    return torch.eye(num_classes)[targets]
-
-def softmax(x, dim):
-    # Apply softmax along the specified dimension
-    return F.softmax(x, dim=dim)
