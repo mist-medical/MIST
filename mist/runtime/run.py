@@ -31,7 +31,7 @@ from mist.data_loading.dali_loader import (
 )
 
 from mist.models.get_model import get_model, load_model_from_config, configure_pretrained_model
-from mist.runtime.loss import get_loss, DiceLoss, VAELoss
+from mist.runtime.loss import get_loss, DiceCELoss, VAELoss
 from mist.inference.main_inference import predict_single_example
 
 from mist.runtime.utils import (
@@ -102,6 +102,7 @@ class Trainer:
         else:
             self.class_weights = None
 
+        # Get alpha schedule for weighting boundary losses 
         self.alpha = AlphaSchedule(
             self.args.epochs,
             self.args.boundary_loss_schedule,
@@ -111,7 +112,7 @@ class Trainer:
         )
 
         # Get standard dice loss for validation
-        self.val_loss = DiceLoss()
+        self.val_loss = DiceCELoss()
 
         # Get VAE regularization loss
         self.vae_loss = VAELoss()
@@ -191,7 +192,7 @@ class Trainer:
                                                 rank=rank,
                                                 world_size=world_size)
 
-            # Get steps per epoch
+            # Get steps per epoch if not given by user
             if self.args.steps_per_epoch is None:
                 self.args.steps_per_epoch = len(train_images) // self.args.batch_size
             else:
@@ -223,7 +224,7 @@ class Trainer:
 
             # If using AMP, use gradient scaling
             if self.args.amp:
-                scaler = torch.cuda.amp.GradScaler()
+                scaler = torch.amp.GradScaler("cuda")
 
             # Only log metrics on first process (i.e., rank 0)
             if rank == 0:
@@ -245,18 +246,22 @@ class Trainer:
                 # Loss computation
                 def compute_loss():
                     output = model(image)
-
-                    if dtm is None:
-                        loss = loss_fn(label, output["prediction"])
-                    else:
+                    
+                    if self.args.use_dtms:
                         loss = loss_fn(label, output["prediction"], dtm, alpha)
+                    elif self.args.loss in ["cldice"]:
+                        loss = loss_fn(label, output["prediction"], alpha)
+                    else:
+                        loss = loss_fn(label, output["prediction"])
 
                     if self.args.deep_supervision:
                         for k, p in enumerate(output["deep_supervision"]):
-                            if dtm is None:
-                                loss += 0.5 ** (k + 1) * loss_fn(label, p)
-                            else:
+                            if self.args.use_dtms:
                                 loss += 0.5 ** (k + 1) * loss_fn(label, p, dtm, alpha)
+                            elif self.args.loss in ["cldice"]:
+                                loss += 0.5 ** (k + 1) * loss_fn(label, p, alpha)
+                            else:
+                                loss += 0.5 ** (k + 1) * loss_fn(label, p)
 
                         c_norm = 1 / (2 - 2 ** (-(len(output["deep_supervision"]) + 1)))
                         loss *= c_norm
@@ -332,13 +337,16 @@ class Trainer:
                     with TrainProgressBar(epoch + 1, fold, self.args.epochs, self.args.steps_per_epoch) as pb:
                         for i in range(self.args.steps_per_epoch):
                             data = train_loader.next()[0]
+                            alpha = self.alpha(epoch)
                             if self.args.use_dtms:
-                                alpha = self.alpha(epoch)
                                 image, label, dtm = data["image"], data["label"], data["dtm"]
                                 loss = train_step(image, label, dtm, alpha)
                             else:
                                 image, label = data["image"], data["label"]
-                                loss = train_step(image, label, None, None)
+                                if self.args.loss in ["cldice"]:
+                                    loss = train_step(image, label, None, alpha)
+                                else:
+                                    loss = train_step(image, label, None, None)
 
                             # Update lr schedule
                             scheduler.step()
@@ -353,13 +361,16 @@ class Trainer:
                 else:
                     for i in range(self.args.steps_per_epoch):
                         data = train_loader.next()[0]
+                        alpha = self.alpha(epoch)
                         if self.args.use_dtms:
-                            alpha = self.alpha(epoch)
                             image, label, dtm = data["image"], data["label"], data["dtm"]
                             loss = train_step(image, label, dtm, alpha)
                         else:
                             image, label = data["image"], data["label"]
-                            loss = train_step(image, label, None, None)
+                            if self.args.loss in ["cldice"]:
+                                loss = train_step(image, label, None, alpha)
+                            else:
+                                loss = train_step(image, label, None, None)
 
                         # Update lr schedule
                         scheduler.step()

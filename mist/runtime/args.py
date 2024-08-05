@@ -166,10 +166,10 @@ def get_main_args():
     # Validation
     p.arg("--nfolds", type=positive_int, default=5, help="Number of cross-validation folds")
     p.arg("--folds", nargs="+", default=[0, 1, 2, 3, 4], type=int, help="Which folds to run")
-    p.arg("--epochs", type=positive_int, default=1000, help="Number of epochs")
+    p.arg("--epochs", type=non_negative_int, default=1000, help="Number of epochs per fold")
     p.arg("--steps-per-epoch",
           type=positive_int,
-          help="Steps per epoch. By default ceil(training_dataset_size / (batch_size * gpus)")
+          help="Steps per epoch. By default this is training_dataset_size // batch_size")
 
     # Evaluation
     p.arg("--metrics",

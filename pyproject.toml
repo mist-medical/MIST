@@ -1,6 +1,6 @@
 [project]
 name = "mist-medical"
-version = "0.4.15-alpha"
+version = "0.4.16-alpha"
 requires-python = ">= 3.8"
 description = "MIST is a simple, fully automated framework for 3D medical imaging segmentation."
 readme = "README.md"
@@ -10,6 +10,7 @@ authors = [
     {name = "David Fuentes", email = "dtfuentes@mdanderson.org"},
     {name = "Beatrice Riviere", email = "riviere@rice.edu"},
     {name = "Evan Lim", email = "EMLim@mdanderson.org"},
+    {name = "Brayden Mi", email = "BMi@mdanderson.org"},
     {name = "Rachel Glenn", email = "rglenn1@mdanderson.org"},
     {name = "Alex Balsells", email = "atb8@rice.edu"},
     {name = "Rice University"},

@@ -1,16 +1,7 @@
 import torch
 import torch.nn as nn
-from torch.nn.functional import softmax, one_hot
-from mist.runtime.loss_utils import SoftSkeletonize
-
-
-def get_one_hot(y_true, n_classes):
-    y_true = y_true.to(torch.int64)
-    y_true = one_hot(y_true, num_classes=n_classes)
-    y_true = torch.transpose(y_true, dim0=5, dim1=1)
-    y_true = torch.squeeze(y_true, dim=5)
-    y_true = y_true.to(torch.int8)
-    return y_true
+from torch.nn.functional import softmax
+from mist.runtime.loss_utils import get_one_hot, SoftSkeletonize
 
 
 class DiceLoss(nn.Module):
@@ -31,6 +22,25 @@ class DiceLoss(nn.Module):
         loss = torch.mean(num / den, axis=1)
         loss = torch.mean(loss)
         return loss
+    
+
+class DiceCELoss(nn.Module):
+    def __init__(self):
+        super(DiceCELoss, self).__init__()
+        self.cross_entropy = torch.nn.CrossEntropyLoss()
+        self.dice_loss = DiceLoss()
+
+    def forward(self, y_true, y_pred):
+        # Dice loss
+        loss_dice = self.dice_loss(y_true, y_pred)
+
+        # Prepare inputs
+        y_true = get_one_hot(y_true, y_pred.shape[1]).to(torch.float)
+
+        # Cross entropy loss
+        loss_ce = self.cross_entropy(y_pred, y_true)
+
+        return 0.5*(loss_ce + loss_dice)
 
 
 class SoftCLDice(nn.Module):
@@ -43,7 +53,7 @@ class SoftCLDice(nn.Module):
 
     def forward(self, y_true, y_pred):
         # Prepare inputs
-        y_true = get_one_hot(y_true, y_pred.shape[1])
+        y_true = get_one_hot(y_true, y_pred.shape[1]).to(torch.float)
         y_pred = softmax(y_pred, dim=1)
 
         if self.exclude_background:
@@ -59,38 +69,18 @@ class SoftCLDice(nn.Module):
 
 
 class SoftDiceCLDice(nn.Module):
-    def __init__(self, iterations=3, alpha=0.5, smooth=1., exclude_background=False):
+    def __init__(self, iterations=3, smooth=1., exclude_background=False):
         super(SoftDiceCLDice, self).__init__()
         self.iterations = iterations
         self.smooth = smooth
-        self.alpha = alpha
-        self.dice_loss = DiceLoss()
+        self.region_loss = DiceCELoss()
         self.exclude_background = exclude_background
         self.cldice_loss = SoftCLDice(self.iterations, self.smooth, self.exclude_background)
 
-    def forward(self, y_true, y_pred):
-        dice = self.dice_loss(y_true, y_pred)
+    def forward(self, y_true, y_pred, alpha):
+        region_loss = self.region_loss(y_true, y_pred)
         cldice = self.cldice_loss(y_true, y_pred)
-        return (1.0 - self.alpha) * dice + self.alpha * cldice
-
-
-class DiceCELoss(nn.Module):
-    def __init__(self):
-        super(DiceCELoss, self).__init__()
-        self.cross_entropy = torch.nn.CrossEntropyLoss()
-        self.dice_loss = DiceLoss()
-
-    def forward(self, y_true, y_pred):
-        # Dice loss
-        loss_dice = self.dice_loss(y_true, y_pred)
-
-        # Prepare inputs
-        y_true = get_one_hot(y_true, y_pred.shape[1]).to(torch.float32)
-
-        # Cross entropy loss
-        loss_ce = self.cross_entropy(y_pred, y_true)
-
-        return 0.5*(loss_ce + loss_dice)
+        return alpha * region_loss + (1. - alpha) * cldice
 
 
 class WeightedDiceLoss(nn.Module):
