@@ -27,7 +27,7 @@ To run the entire MIST pipeline (with all default arguments), use the ```mist_ru
 	The ```numpy``` and ```results``` directories will be created if they do not exist already.
 
 Here is an example of how to use the ```mist_run_all``` command:
-```
+```console
 mist_run_all --data /path/to/dataset.json --numpy /path/to/preprocessed/data --results /path/to/results
 ```
 
