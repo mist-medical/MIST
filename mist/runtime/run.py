@@ -3,6 +3,7 @@ import json
 import ants
 import pandas as pd
 import numpy as np
+import logging
 from sklearn.model_selection import train_test_split
 
 # Rich progress bar
@@ -31,7 +32,7 @@ from mist.data_loading.dali_loader import (
 )
 
 from mist.models.get_model import get_model, load_model_from_config, configure_pretrained_model
-from mist.runtime.loss import get_loss, DiceCELoss, VAELoss
+from mist.runtime.loss import get_loss, DiceLoss, VAELoss, MAELoss, MSELoss, WeightedMSELoss, DVHLoss
 from mist.inference.main_inference import predict_single_example
 
 from mist.runtime.utils import (
@@ -63,8 +64,12 @@ class Trainer:
         self.config = read_json_file(self.config_file)
 
         # Get number of channels and classes from dataset.json
-        self.n_channels = len(self.data["images"])
-        self.n_classes = len(self.data["labels"])
+        if self.data["modality"] == "ct":
+            self.n_channels = len(self.data["images"])
+            self.n_classes = len(self.data["labels"])
+        elif self.data["modality"] == "dose":
+            self.n_channels = len(self.data["images"]["ct"]) + len(self.data["mask"]) + len(self.data["images"]["ptvs"]) 
+            self.n_classes = len(self.data["images"]["dose"])  # Should be 1 for dose prediction as it is regression
 
         # Get paths to dataset
         self.df = pd.read_csv(os.path.join(self.args.results, "train_paths.csv"))
@@ -76,12 +81,14 @@ class Trainer:
         else:
             self.patch_size = self.config["patch_size"]
 
-        # Get bounding box data
-        self.fg_bboxes = pd.read_csv(os.path.join(self.args.results, "fg_bboxes.csv"))
+        # Get bounding box data. For now no preprocessing for dose data
+        if self.config["crop_to_fg"] and not self.args.no_preprocess:  # We could add and self.data["modality"] != "dose" in preprocess_dataset() , run.py, test_on_fold???
+        # if self.config['modality'] != 'dose' and self.args.no_preprocess == False:
+            self.fg_bboxes = pd.read_csv(os.path.join(self.args.results, "fg_bboxes.csv"))
 
         # Create model configuration file for inference later
         self.model_config_path = os.path.join(self.args.results, "models", "model_config.json")
-        if self.args.model != "pretrained":
+        if self.args.model != "pretrained":  
             self.model_config = create_model_config_file(self.args,
                                                          self.config,
                                                          self.data,
@@ -111,11 +118,16 @@ class Trainer:
             step_length=self.args.step_schedule_step_length
         )
 
-        # Get standard dice loss for validation
-        self.val_loss = DiceCELoss()
+        # Get standard dice loss for validation. Need to match training one, right!? But does not in default MIST.
+        if self.data["modality"] != "dose":
+            self.val_loss = DiceLoss()  # This is different from default training/input args loss that is dice_ce
+        else:
+            self.val_loss = MSELoss() # default val loss
 
-        # Get VAE regularization loss
+        # Get VAE regularization loss. Variational Autoencoders
         self.vae_loss = VAELoss()
+
+        self.__logger = logging.getLogger(__name__)  # Maybe because of how the distr training is, we cannot log info for training step.
 
     # Set up for distributed training
     def setup(self, rank, world_size):
@@ -143,8 +155,8 @@ class Trainer:
         for fold in self.args.folds:
             # Get training ids from dataframe
             train_ids = list(self.df.loc[self.df["fold"] != fold]["id"])
-            train_images = [os.path.join(self.args.numpy, "images", "{}.npy".format(pat)) for pat in train_ids]
-            train_labels = [os.path.join(self.args.numpy, "labels", "{}.npy".format(pat)) for pat in train_ids]
+            train_images = [os.path.join(self.args.numpy, "images", "{}.npy".format(pat)) for pat in train_ids]     # 3 channels: ct, oars, ptvs. e.g. zyxC (214, 188, 277, 3)
+            train_labels = [os.path.join(self.args.numpy, "labels", "{}.npy".format(pat)) for pat in train_ids]     # 2 channel: 0 gt_dose, 1 weights. zyxC (221, 170, 248, 1)
 
             if self.args.use_dtms:
                 train_dtms = [os.path.join(self.args.numpy, "dtms", "{}.npy".format(pat)) for pat in train_ids]
@@ -177,6 +189,7 @@ class Trainer:
             train_loader = get_training_dataset(train_images,
                                                 train_labels,
                                                 train_dtms,
+                                                modality=self.data['modality'],
                                                 batch_size=self.args.batch_size // world_size,
                                                 oversampling=self.args.oversampling,
                                                 patch_size=self.patch_size,
@@ -184,7 +197,7 @@ class Trainer:
                                                 num_workers=self.args.num_workers,
                                                 rank=rank,
                                                 world_size=world_size)
-
+            # Take care of validation set in batches as training set??? Maybe add below batch_size=self.args.batch_size // world_size,
             val_loader = get_validation_dataset(val_images,
                                                 val_labels,
                                                 seed=self.args.seed_val,
@@ -199,7 +212,15 @@ class Trainer:
                 self.args.steps_per_epoch = self.args.steps_per_epoch
 
             # Get loss function
-            loss_fn = get_loss(self.args, class_weights=self.class_weights)
+            if self.data['modality'] != 'dose':  # Default training and val loss for dose. 
+                loss_fn = get_loss(self.args, class_weights=self.class_weights)
+            else:
+                if self.args.loss == None:
+                    self.args.loss = 'mse'  # Default for dose.  Same loss for train and val!
+                    loss_fn = get_loss(self.args)  # Now we pass parameters and use default val loss mse
+                else:
+                    loss_fn = get_loss(self.args)  # Now we pass parameters
+                    self.val_loss = get_loss(self.args)
 
             # Make sure we are using/have DTMs for boundary-based loss functions
             if self.args.loss in ["bl", "hdl", "gsl"]:
@@ -212,7 +233,7 @@ class Trainer:
             if self.args.model != "pretrained":
                 model = get_model(**self.model_config)
             else:
-                model = configure_pretrained_model(self.args.pretrained_model_path, self.n_channels, self.n_classes)
+                model = configure_pretrained_model(self.args.pretrained_model_path, self.n_channels, self.n_classes)  # Change for dose prediction???
 
             model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
             model.to(rank)
@@ -349,7 +370,7 @@ class Trainer:
                                     loss = train_step(image, label, None, None)
 
                             # Update lr schedule
-                            scheduler.step()
+                            scheduler.step()  # Update scheduler.step(val_loss) due to use of reducelronplateau lrscheduler that requires a metrics
 
                             # Send all training losses to device 0 for average
                             dist.reduce(loss, dst=0)
@@ -403,7 +424,7 @@ class Trainer:
                                 pb.update(loss=running_val_loss)
 
                         # Check if validation loss is lower than the current best loss
-                        # Save best model
+                        # Save best model. Why not doing this if rank1+0???
                         if running_val_loss < best_loss:
                             text = Text(f"Validation loss IMPROVED from {best_loss:.4} to {running_val_loss:.4}\n")
                             text.stylize("bold")

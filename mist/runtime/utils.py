@@ -101,7 +101,8 @@ def get_files_df(params, mode):
 
     base_dir = os.path.abspath(params["{}-data".format(mode)])
     names_dict = dict()
-    if mode == "train":
+    # if mode == "train": # This makes test_paths.csv file not having ground truth masks in a column and hence dice coeff is NaN. 
+    if mode == "train" or  mode == "test":  # Hence need to add this clause instead.
         names_dict["mask"] = params["mask"]
 
     for key in params["images"].keys():
@@ -129,8 +130,8 @@ def get_files_df(params, mode):
 
 
 def add_folds_to_df(df, n_splits=5):
-    # Get folds for k-fold cross validation
-    kfold = KFold(n_splits=5, shuffle=True, random_state=42)
+    # Get folds for k-fold cross validation. Might need to allow for n_splits = k instead of being fixed???
+    kfold = KFold(n_splits=5, shuffle=True, random_state=42)  # Might need to make random_state actually random instead of a fixed value???
 
     splits = kfold.split(list(range(len(df))))
 
@@ -169,6 +170,18 @@ def convert_dict_to_df(patients):
     return df
 
 
+def get_optimizer(args, model):
+    if args.optimizer == "sgd":
+        return torch.optim.SGD(params=model.parameters(), lr=args.learning_rate, momentum=args.sgd_momentum)
+    elif args.optimizer == "adam":
+        return torch.optim.Adam(params=model.parameters(), lr=args.learning_rate)
+    elif args.optimizer == "adamw":
+        return torch.optim.AdamW(params=model.parameters(), lr=args.learning_rate)
+    else:
+        raise ValueError("Invalid optimizer")
+
+
+
 def get_lr_schedule(args, optimizer):
     if args.lr_scheduler == "constant":
         return torch.optim.lr_scheduler.ConstantLR(optimizer, factor=1)
@@ -185,19 +198,16 @@ def get_lr_schedule(args, optimizer):
                                                           T_max=args.steps_per_epoch*args.epochs)
     elif args.lr_scheduler == "exponential":
         return torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.exp_decay)
+    
+    elif args.lr_scheduler == "reduce_lr_on_plateau":
+        return torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 
+                                                          mode=args.mode,
+                                                          factor=args.factor,
+                                                          patience=args.patience,
+                                                          min_lr=args.min_lr)
     else:
         raise ValueError("Invalid learning rate scheduler")
 
-
-def get_optimizer(args, model):
-    if args.optimizer == "sgd":
-        return torch.optim.SGD(params=model.parameters(), lr=args.learning_rate, momentum=args.sgd_momentum)
-    elif args.optimizer == "adam":
-        return torch.optim.Adam(params=model.parameters(), lr=args.learning_rate)
-    elif args.optimizer == "adamw":
-        return torch.optim.AdamW(params=model.parameters(), lr=args.learning_rate)
-    else:
-        raise ValueError("Invalid optimizer")
 
 
 class Mean(nn.Module):
@@ -249,8 +259,14 @@ def create_model_config_file(args, config, data, output):
     model_config = dict()
 
     model_config["model_name"] = args.model
-    model_config["n_channels"] = int(len(data["images"]))
-    model_config["n_classes"] = int(len(data["labels"]))
+    
+    if data["modality"] == "dose":
+        model_config["n_channels"] = int(len(data["images"]["ct"]) + len(data["mask"])) + len(data["images"]["ptvs"]) 
+        model_config["n_classes"] = int(len(data["images"]["dose"]))
+    else:
+        model_config["n_channels"] = int(len(data["images"]))
+        model_config["n_classes"] = int(len(data["labels"]))
+        
     model_config["deep_supervision"] = args.deep_supervision
     model_config["deep_supervision_heads"] = args.deep_supervision_heads
     model_config["pocket"] = args.pocket
@@ -272,8 +288,12 @@ def create_pretrained_config_file(pretrained_model_path, data, output):
     with open(model_config_path, "r") as file:
         model_config = json.load(file)
 
-    model_config["n_channels"] = int(len(data["images"]))
-    model_config["n_classes"] = int(len(data["labels"]))
+    if data["modality"] == "dose":
+        model_config["n_channels"] = int(len(data["images"]["ct"]) + len(data["mask"])) + len(data["images"]["ptvs"]) 
+        model_config["n_classes"] = int(len(data["images"]["dose"]))
+    else:
+        model_config["n_channels"] = int(len(data["images"]))
+        model_config["n_classes"] = int(len(data["labels"]))
 
     with open(output, "w") as outfile:
         json.dump(model_config, outfile, indent=2)
@@ -281,7 +301,7 @@ def create_pretrained_config_file(pretrained_model_path, data, output):
     return model_config
 
 
-def get_flip_axes():
+def get_flip_axes():  # ???
     return [[2], [3], [4], [2, 3], [2, 4], [3, 4], [2, 3, 4]]
 
 
@@ -643,6 +663,8 @@ def get_best_patch_size(med_img_size, max_size):
 
 """
 Alpha schedule functions
+Alpha or Learning Rate: hyperparameter that determines the step size at each iteration of
+the gradient descent algorithm.
 """
 
 

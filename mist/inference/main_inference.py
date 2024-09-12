@@ -6,6 +6,7 @@ import pdb
 import ants
 import pandas as pd
 import numpy as np
+import logging
 
 # Rich progres bar
 from rich.console import Console
@@ -14,7 +15,7 @@ from rich.text import Text
 from monai.inferers import sliding_window_inference
 
 import torch
-from torch.nn.functional import softmax
+from torch.nn.functional import softmax, relu
 
 from mist.models.get_model import load_model_from_config
 
@@ -37,12 +38,15 @@ from mist.runtime.utils import (
 
 from mist.preprocess_data.preprocess import (
     convert_nifti_to_numpy,
+    convert_dose_nifti_to_numpy,
     preprocess_example,
-    resample_mask
+    resample_mask, 
+    resample_image
 )
 
 from mist.postprocess_preds.postprocess import apply_transform
 
+logger = logging.getLogger(__name__)
 
 def get_sw_prediction(image, model, patch_size, overlap, blend_mode, tta):
     # Get model prediction
@@ -77,6 +81,39 @@ def get_sw_prediction(image, model, patch_size, overlap, blend_mode, tta):
     return prediction
 
 
+def get_sw_dose_prediction(image, model, patch_size, overlap, blend_mode, tta):  # Here add last layer activation function for prediction value. 
+    # Get model prediction
+    # Predict on original image. 
+    prediction = sliding_window_inference(inputs=image,
+                                          roi_size=patch_size,
+                                          sw_batch_size=1,
+                                          predictor=model,
+                                          overlap=overlap,
+                                          mode=blend_mode,
+                                          device=torch.device("cuda"))
+    prediction = relu(prediction)
+
+    # Test time augmentation
+    if tta:
+        flip_axes = get_flip_axes()
+        for i in range(len(flip_axes)):
+            axes = flip_axes[i]
+            flipped_img = torch.flip(image, dims=axes)
+            flipped_pred = sliding_window_inference(inputs=flipped_img,
+                                                    roi_size=patch_size,
+                                                    sw_batch_size=1,
+                                                    predictor=model,
+                                                    overlap=overlap,
+                                                    mode=blend_mode,
+                                                    device=torch.device("cuda"))
+            flipped_pred = relu(flipped_pred)
+            prediction += torch.flip(flipped_pred, dims=axes)
+
+        prediction /= (len(flip_axes) + 1.)     # Why this???
+
+    return prediction
+
+
 def back_to_original_space(pred, og_ants_img, config, fg_bbox):
     pred = ants.from_numpy(data=pred)
 
@@ -92,10 +129,17 @@ def back_to_original_space(pred, og_ants_img, config, fg_bbox):
     # Bug fix for sitk resample
     new_size = np.array(new_size, dtype='int').tolist()
 
-    pred = resample_mask(pred,
-                         labels=list(range(len(config["labels"]))),
-                         target_spacing=og_ants_img.spacing,
-                         new_size=new_size)
+    if config['modality'] != 'dose':    # Need to resample the prediction before putting back into original space that is already at the target_spacing.
+        pred = resample_mask(pred,
+                            labels=list(range(len(config["labels"]))),
+                            target_spacing=og_ants_img.spacing,
+                            new_size=new_size)
+    else:
+        pred = resample_image(pred,
+                            target_spacing=og_ants_img.spacing,
+                            new_size=new_size)
+    #  Pred resampled to orig_img spacing but keeping its own pred size (shapes are different for non-dose cases). Below back back to orig_img size
+    # We may not need to resample_image for dose case if target_spacing is the same???
 
     # Return prediction to original image space
     og_orientation = ants.get_orientation(og_ants_img)
@@ -106,9 +150,16 @@ def back_to_original_space(pred, og_ants_img, config, fg_bbox):
     # Appropriately pad back to original size
     if fg_bbox is not None:
         pred = decrop_from_fg(pred, fg_bbox)
-
-    # FIX: Copy header from original image onto the prediction so they match
-    pred = og_ants_img.new_image_like(pred.numpy())
+  
+    # For dose, sitk resampling causes rounding errors and negative values to put to 0.
+    if config['modality'] == 'dose':
+        pred_numpy = pred.numpy()
+        pred_numpy[pred_numpy < 0.0] = 0.0
+        # FIX: Copy header from original image onto the prediction so they match
+        pred = og_ants_img.new_image_like(pred_numpy)
+    else:
+        # FIX: Copy header from original image onto the prediction so they match
+        pred = og_ants_img.new_image_like(pred.numpy())
 
     return pred
 
@@ -183,6 +234,81 @@ def predict_single_example(torch_img,
     return pred, std_images
 
 
+
+def predict_dose_single_example(torch_img,
+                           og_ants_img,
+                           config,
+                           model_config,
+                           models,
+                           overlap,
+                           blend_mode,
+                           tta,
+                           output_std,
+                           fg_bbox):
+    n_classes = model_config["n_classes"]
+
+    pred = torch.zeros(1,
+                       n_classes,
+                       torch_img.shape[2],
+                       torch_img.shape[3],
+                       torch_img.shape[4]).to("cuda")
+    std_images = list()
+
+    for model in models:
+        sw_dose_prediction = get_sw_dose_prediction(torch_img,
+                                        model,
+                                        config['patch_size'],
+                                        overlap,
+                                        blend_mode,
+                                        tta)
+        # UNDO NORMALIZATION AND SHIFT during evaluation for both pred and ground truth. 
+        sw_prediction = sw_dose_prediction
+        pred += sw_prediction
+        if output_std and len(models) > 1:
+            std_images.append(sw_prediction)        
+
+
+    pred /= len(models) # Divide by #ber of folds/models
+    pred = pred.to("cpu")   
+    pred = torch.squeeze(pred, dim=(0,1))  # remove batch_size and nclasses axis.
+
+    pred = pred.to(torch.float32)   
+    pred = pred.numpy()
+
+    # Get foreground mask if necessary
+    if config["crop_to_fg"] and fg_bbox is None:  # Maybe add this???: and config["modality"] != 'dose'
+        fg_bbox = get_fg_mask_bbox(og_ants_img)
+    # Place prediction back into original image space. # Maybe this not nec for dose case???
+    pred = back_to_original_space(pred,
+                                  og_ants_img,
+                                  config,
+                                  fg_bbox)
+
+    # Fix labels if necessary
+    if list(range(n_classes)) != config["labels"] and config["modality"] != 'dose':
+        pred = pred.numpy()
+        pred = npy_fix_labels(pred, config["labels"])
+        pred = og_ants_img.new_image_like(data=pred)
+
+    # Creates standard deviation images for UQ if called for. Change this for dose!!!
+    if output_std:
+        std_images = torch.stack(std_images, dim=0)
+        std_images = torch.std(std_images, dim=0)
+        std_images = std_images.to("cpu")
+        std_images = torch.squeeze(std_images, dim=0)
+        std_images = std_images.to(torch.float32)
+        std_images = std_images.numpy()
+        std_images = [back_to_original_space(std_image,
+                                             og_ants_img,
+                                             config,
+                                             fg_bbox) for std_image in std_images]
+        
+        # print(f"output_std is {output_std}. std_images values are {std_images}")
+
+    return pred, std_images
+
+
+
 def load_test_time_models(models_dir, fast):
     n_files = len(os.listdir(models_dir)) - 1
     model_list = [os.path.join(models_dir, "fold_{}.pt".format(i)) for i in range(n_files)]
@@ -227,25 +353,35 @@ def test_on_fold(
     config = read_json_file(
         os.path.join(args.results, 'config.json')
     )
+
+    logger.info(f"Load config json file \n: {config}")
     
+    # Read model_config file to have n_classes saved
+    model_config_file = read_json_file(
+        os.path.join(args.results, 'models', 'model_config.json')
+    )
+    logger.info(f"Load model_config json file \n: {model_config_file}")
+
     # Get dataframe with paths for test images
     train_paths_df = pd.read_csv(
         os.path.join(args.results, 'train_paths.csv')
     )
-    testing_paths_df = train_paths_df.loc[train_paths_df["fold"] == fold_number]
+    testing_paths_df = train_paths_df.loc[train_paths_df["fold"] == fold_number]  # id, fold, mask, ct, ptvs, dose
     
     # Get list of numpy files of preprocessed test images
     test_ids = list(testing_paths_df["id"])
     test_images = [
         os.path.join(args.numpy, 'images', f'{patient_id}.npy') for patient_id in test_ids
-    ]
+    ]       # cts, oars, ptvs
+    logger.info(f"Fold {fold_number} test set ids: {test_ids}")
     
     # Get bounding box data
-    fg_bboxes = pd.read_csv(
-        os.path.join(args.results, 'fg_bboxes.csv')
-    )
-    
-    # Get DALI loader for streaming preprocessed numpy files
+    if config["crop_to_fg"] and not args.no_preprocess:  # We could add and self.data["modality"] != "dose" in preprocess_dataset() , run.py, test_on_fold???
+        fg_bboxes = pd.read_csv(
+            os.path.join(args.results, 'fg_bboxes.csv')
+        )
+
+    # Get DALI loader for streaming preprocessed numpy files. test_ds only has images, no labels key.
     test_dali_loader = get_test_dataset(
         test_images,
         seed=args.seed_val,
@@ -267,7 +403,7 @@ def test_on_fold(
     console = Console()
     error_messages = ''
 
-    # Define output directory
+    # Define output directory for the inferences for each fold
     output_directory = os.path.join(
         args.results,
         'predictions',
@@ -279,14 +415,28 @@ def test_on_fold(
     with torch.no_grad(), progress_bar as pb:
         for image_index in pb.track(range(len(testing_paths_df))):
             patient = testing_paths_df.iloc[image_index].to_dict()
+            logger.info(f"Testing on patient ID {patient['id']}")
             try:
                 # Get original patient data
-                image_list = list(patient.values())[3:len(patient)]
-                original_ants_image = ants.image_read(image_list[0])
+                if config['modality'] != 'dose':
+                    image_list = list(patient.values())[3:len(patient)]  # ct/mris paths for each patient
+                else:
+                    data_list = list(patient.values())[3:-1]  # These are paths. ct, targets, all floats and should stay as such.
+                    image_list = list((data_list[0], patient["mask"], data_list[1])) # paths of cts, mask/oars, ptvs
+
+                if config['modality'] != 'dose':
+                    original_ants_image = ants.image_read(image_list[0])  # cts 
+                    logger.info(f"Input cts dimensions {original_ants_image.shape}, min {original_ants_image.min()}, max {original_ants_image.max()}")
+                else:
+                    original_ants_image = ants.image_read(patient["dose"])  # gt dose
+                    logger.info(f"Input ground truth dose dimensions {original_ants_image.shape}, min {original_ants_image.min()}, max {original_ants_image.max()}")
 
                 # Get preprocessed image from DALI loader
                 data = test_dali_loader.next()[0]
                 preprocessed_numpy_image = data['image']
+                logger.info(f"Preprocessed input data xyz or zyx {preprocessed_numpy_image.cpu().numpy().shape}")  # test_ds does not have label in pipeline, only train and val ds
+                if config['modality'] == 'dose':
+                    logger.info(f"Unique values OARs: {np.unique(preprocessed_numpy_image.cpu().numpy()[0,1,:,:,:])}, ptvs: {np.unique(preprocessed_numpy_image.cpu().numpy()[0,2,:,:,:])}") # for dose only
 
                 # Get foreground mask if necessary
                 if config["crop_to_fg"]:
@@ -295,17 +445,32 @@ def test_on_fold(
                     fg_bbox = None
 
                 # Predict with model and put back into original image space
-                prediction, _ = predict_single_example(
-                    preprocessed_numpy_image,
-                    original_ants_image,
-                    config,
-                    [model],
-                    args.sw_overlap,
-                    args.blend_mode,
-                    args.tta,
-                    output_std=False,
-                    fg_bbox=fg_bbox
-                )
+                if config['modality'] != 'dose':
+                    prediction, _ = predict_single_example(
+                        preprocessed_numpy_image,
+                        original_ants_image,
+                        config,
+                        [model],
+                        args.sw_overlap,
+                        args.blend_mode,
+                        args.tta,
+                        output_std=False,
+                        fg_bbox=fg_bbox
+                    )
+                else:  # predicts a single example, batch_size is 1, hence affect get_test_dataset()???
+                    prediction, _ = predict_dose_single_example(
+                        preprocessed_numpy_image,
+                        original_ants_image,
+                        config,
+                        model_config_file,
+                        [model],
+                        args.sw_overlap,
+                        args.blend_mode,
+                        args.tta,
+                        output_std=False,
+                        fg_bbox=fg_bbox
+                    )
+                logger.info(f"Predictions/Inferences: {prediction}, min: {np.min(prediction.numpy())}, max: {np.max(prediction.numpy())}")
             except:
                 error_messages += f"[Inference Error] Prediction failed for {patient['id']}\n"
             else:
@@ -329,6 +494,7 @@ def test_on_fold(
 def test_time_inference(df,
                         dest,
                         config_file,
+                        model_config_file,
                         models,
                         overlap,
                         blend_mode,
@@ -336,6 +502,11 @@ def test_time_inference(df,
                         no_preprocess=False,
                         output_std=False):
     config = read_json_file(config_file)
+
+    # Read model_config file to have n_classes saved
+    model_config = read_json_file(model_config_file)
+
+    # print("\n output_std {}".format(output_std))  # added by me
     
     create_empty_dir(dest)
 
@@ -356,18 +527,36 @@ def test_time_inference(df,
                 else:
                     output_std_dest = dest
 
-                if "mask" in df.columns and "fold" in df.columns:
-                    image_list = list(patient.values())[3:]
-                elif "mask" in df.columns or "fold" in df.columns:
-                    image_list = list(patient.values())[2:]
+                if config['modality'] != 'dose':
+                    if "mask" in df.columns and "fold" in df.columns:
+                        image_list = list(patient.values())[3:]
+                    elif "mask" in df.columns or "fold" in df.columns:  
+                        image_list = list(patient.values())[2:]
+                    else:
+                        image_list = list(patient.values())[1:]
                 else:
-                    image_list = list(patient.values())[1:]
+                    if "dose" in df.columns and "fold" in df.columns:  # ['id', 'fold', 'mask', 'ct', 'ptvs', 'dose']
+                        data_list = list(patient.values())[3:-1]  # These are paths. ct, targets, all floats and should stay as such.
+                        image_list = list((data_list[0], patient["mask"], data_list[1])) # paths of cts, mask/oars, ptvs
+                    elif "dose" in df.columns or "fold" in df.columns: # dose always here in this case. ['id', 'mask', 'ct', 'ptvs', 'dose'] from test_paths.csv
+                        data_list = list(patient.values())[2:-1]  
+                        image_list = list((data_list[0], patient["mask"], data_list[1])) 
+                    else:   # neither dose, nor fold present. ['id', 'mask', 'ct', 'ptvs']. This won't be the case in dose prediction as dose will always be there.
+                        data_list = list(patient.values())[2:-1]  # index doesn't change given that dose is at the end.
+                        image_list = list((data_list[0], patient["mask"], data_list[1])) # paths of cts, mask/oars, ptvs
+                              
 
-                og_ants_img = ants.image_read(image_list[0])
-
-                if no_preprocess:
-                    torch_img, _, fg_bbox, _ = convert_nifti_to_numpy(image_list, None)
+                if config['modality'] != 'dose': 
+                    og_ants_img = ants.image_read(image_list[0])    # ct/mri
                 else:
+                    og_ants_img = ants.image_read(patient["dose"])  # gt dose
+
+                if no_preprocess:  # No preprocessing, we simply convert test data to numpy.
+                    if config['modality'] != 'dose':
+                        torch_img, _, fg_bbox, _ = convert_nifti_to_numpy(image_list, None)
+                    else:
+                        torch_img, _, fg_bbox, _ = convert_dose_nifti_to_numpy(image_list, None, None)    # image_list: cts, oars, ptvs. No dose fed.
+                else:  # Need to edit this later for dose prediction when there is preprocessing.
                     torch_img, _, fg_bbox, _ = preprocess_example(
                         config, 
                         image_list, 
@@ -384,18 +573,31 @@ def test_time_inference(df,
                 torch_img = torch.Tensor(torch_img.copy()).to(torch.float32)
                 torch_img = torch_img.to("cuda")
 
-                prediction, std_images = predict_single_example(
-                    torch_img,
-                    og_ants_img,
-                    config,
-                    models,
-                    overlap,
-                    blend_mode,
-                    tta,
-                    output_std,
-                    fg_bbox
-                )
-
+                if config['modality'] != 'dose':
+                    prediction, std_images = predict_single_example(
+                        torch_img,
+                        og_ants_img,
+                        config,
+                        models,
+                        overlap,
+                        blend_mode,
+                        tta,
+                        output_std,
+                        fg_bbox
+                    )
+                else:
+                    prediction, std_images = predict_dose_single_example(
+                        torch_img,
+                        og_ants_img,
+                        config,
+                        model_config,
+                        models,
+                        overlap,
+                        blend_mode,
+                        tta,
+                        output_std,
+                        fg_bbox
+                    )
                 # Apply postprocessing if required
                 transforms = ["remove_small_objects", "top_k_cc", "fill_holes"]
                 for transform in transforms:
@@ -410,11 +612,14 @@ def test_time_inference(df,
                             if transform == "fill_holes":
                                 transform_kwargs = {"fill_label": config[transform][i][1]}
 
-                            prediction = apply_transform(prediction,
-                                                         transform,
-                                                         config["labels"],
-                                                         config[transform][i][0],
-                                                         transform_kwargs)
+                            if config["modality"] != 'dose':
+                                prediction = apply_transform(prediction,
+                                                            transform,
+                                                            config["labels"],
+                                                            config[transform][i][0],
+                                                            transform_kwargs)
+                            else:
+                                print(f"Check later if any postprocessing is needed for dose prediction.")
 
                 # Write prediction mask to nifti file and save to disk
                 prediction_filename = '{}.nii.gz'.format(str(patient['id']))

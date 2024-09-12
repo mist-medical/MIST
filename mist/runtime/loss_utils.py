@@ -13,6 +13,20 @@ def get_one_hot(y_true, n_classes):
     return y_true
 
 
+def voi_weighted_loss(y_true, y_pred):
+    # grab the ground truth and predicted dose
+    gt_dose, p_dose = y_true[..., 0], y_pred[..., 0] 
+
+    # grab the voxel weights. Will only be called if use_voi_weights is True
+    weights = y_true[..., -1]  # note: element 0 is the GT dose, elt 1 is weights
+    
+    y_pred_weighted = weights * p_dose
+    y_true_weighted = weights * gt_dose
+
+    return torch.mean((y_true_weighted - y_pred_weighted) ** 2)
+    
+
+
 class SoftSkeletonize(nn.Module):
 
     def __init__(self, num_iter=40):

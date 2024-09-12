@@ -4,6 +4,7 @@ import json
 import ants
 import pandas as pd
 import numpy as np
+import logging
 
 # Rich progres bar
 from rich.console import Console
@@ -58,6 +59,7 @@ class Analyzer:
 
         self.config = dict()
         self.df = get_files_df(self.data, "train")
+        self.__logger = logging.getLogger(__name__)
 
     def check_crop_fg(self):
         """
@@ -265,20 +267,43 @@ class Analyzer:
 
     def config_if_no_preprocess(self):
         """
-        Create basic config file if we don't use preprocessing
+        Create basic config file if we don't use preprocessing.  
         """
-        self.config = {"modality": self.data["modality"],
-                       "labels": self.labels,
-                       "final_classes": self.data["final_classes"],
-                       "crop_to_fg": None,
-                       "use_nz_mask": None,
-                       "target_spacing": None,
-                       "window_range": None,
-                       "global_z_score_mean": None,
-                       "global_z_score_std": None,
-                       "use_n4_bias_correction": None,
-                       "median_image_size": None,
-                       "class_weights": None}
+        if self.data["modality"] == 'dose': # Define target_spacing especially if no preprocessing. Could decide to fix patch_size as below or give it in self.args!
+            self.config = {"modality": self.data["modality"],
+                        "labels": self.data['labels'],
+                        "final_classes": self.data["final_classes"],
+                        "target_spacing": self.data["target_spacing"],
+                        "patch_size": self.data["patch_size"],
+                        "dose_norm_shift": self.data["data_processing"]["dose"]["normalization_strategy"]["shift"],
+                        "dose_norm_scale": self.data["data_processing"]["dose"]["normalization_strategy"]["scale"],
+                        "ct_norm_shift": self.data["data_processing"]["ct"]["normalization_strategy"]["shift"],
+                        "ct_norm_scale": self.data["data_processing"]["ct"]["normalization_strategy"]["scale"],
+                        "use_voi_weights": self.args.use_voi_weights,
+                        "voi_weights": self.data["loss_function_params"]["voi_weights"],
+                        "dvh_loss_parameters": self.data["loss_function_params"]["dvh_loss_parameters"],
+                        "crop_to_fg": None,
+                        "use_nz_mask": None,
+                        "window_range": None,
+                        "global_z_score_mean": None,
+                        "global_z_score_std": None,
+                        "use_n4_bias_correction": None,
+                        "median_image_size": None,
+                        "class_weights": None}
+        else:
+            self.config = {"modality": self.data["modality"],
+                        "labels": self.labels,  # Might be self.data['labels'] here!!!
+                        "final_classes": self.data["final_classes"],
+                        "crop_to_fg": None,
+                        "use_nz_mask": None,
+                        "target_spacing": None,
+                        "window_range": None,
+                        "global_z_score_mean": None,
+                        "global_z_score_std": None,
+                        "use_n4_bias_correction": None,
+                        "median_image_size": None,
+                        "class_weights": None}
+
 
     def analyze_dataset(self):
         """
@@ -295,6 +320,15 @@ class Analyzer:
             global_z_score_mean, global_z_score_std, global_window_range = self.get_ct_norm_parameters()
 
             self.config = {"modality": "ct",
+                           "window_range": [float(global_window_range[i]) for i in range(2)],
+                           "global_z_score_mean": float(global_z_score_mean),
+                           "global_z_score_std": float(global_z_score_std),
+                           "use_n4_bias_correction": bool(False)}
+        elif self.data["modality"] == "dose": # Will edit this processing step later for dose!
+            # Get CT normalization parameters
+            global_z_score_mean, global_z_score_std, global_window_range = self.get_ct_norm_parameters()
+
+            self.config = {"modality": "dose",
                            "window_range": [float(global_window_range[i]) for i in range(2)],
                            "global_z_score_mean": float(global_z_score_mean),
                            "global_z_score_std": float(global_z_score_std),
@@ -393,24 +427,112 @@ class Analyzer:
 
         self.df.to_csv(self.train_paths_csv, index=False)
 
+
+    # Edit validate_dataset() to account for dose data.
+    def validate_dose_dataset(self):  
+        """
+        QA dataset to see if mask, dose and ptvs headers match the images's (cts), check whether the images are 3D,
+        or the labels in the dataset description match those in the data.
+        """
+        progress = get_progress_bar("Verifying dataset for dose prediction")
+
+        bad_data = list()
+        messages = ""
+        with progress as pb:
+            for i in pb.track(range(len(self.df))):
+                patient = self.df.iloc[i].to_dict()  # id, mask, cts, ptvs, dose
+
+                # Check if labels are correct
+                mask = ants.image_read(patient["mask"])
+                mask_labels = set(mask.unique().astype("int"))
+                if not mask_labels.issubset(set(self.labels)):
+                    messages += "In {}: Labels in mask do not match those specified in {}\n".format(patient["id"],
+                                                                                                    self.args.data)
+                    bad_data.append(i)
+                    continue
+
+                # Get list of image, targets and dose paths and segmentation mask. patient: df of keys id, mask, ct, ptvs, dose
+                data_list = list(patient.values())[2:-1]  # These are paths. ct, targets, all floats and should stay as such.
+                image_list = list((data_list[0], patient["mask"], data_list[1])) # cts, mask/oars, ptvs
+
+                dose_header = ants.image_header_info(patient["dose"])
+                for image_path in image_list:  
+                    image_header = ants.image_header_info(image_path)  # compare ct/mask/ptvs headers to dose_header
+
+                    is_valid = compare_headers(dose_header, image_header)
+                    is_3d_image = is_single_channel(image_header)
+                    is_3d_dose = is_single_channel(dose_header)     # here mask==dose
+
+                    if not is_valid:
+                        messages += "In {}: Mismatch between image and dose header information\n".format(patient["id"])
+                        bad_data.append(i)
+                        break
+
+                    if not is_3d_image:  # ct
+                        messages += "In {}: Got 4D image, make sure all images are 3D\n".format(patient["id"])
+                        bad_data.append(i)
+                        break
+
+                    if not is_3d_dose:
+                        messages += "In {}: Got 4D dose, make sure all images are 3D\n".format(patient["id"])
+                        bad_data.append(i)
+                        break
+
+                if len(image_list) > 1:  # ie in df: id, mask, ct, other data and image_list starts at 2:len(patient) as with mri
+                    anchor_image = image_list[0]  # ct is the anchor image
+                    anchor_header = ants.image_header_info(anchor_image)
+
+                    for image_path in image_list[1:]:   # compare headers info between cts and mask/ptvs
+                        image_header = ants.image_header_info(image_path)
+
+                        is_valid = compare_headers(anchor_header, image_header)
+
+                        if not is_valid:
+                            messages += "In {}: Mismatch between images header information\n".format(patient["id"])  # hence between targets/dose and mask, so break
+                            bad_data.append(i)
+                            break
+
+
+        if len(messages) > 0:
+            messages += "Excluding these from training\n"
+            text = Text(messages)
+            console.print(text)
+
+        assert len(bad_data) < len(self.df), "Dataset did not meet verification requirements, please check your data!"
+
+        rows_to_drop = self.df.index[bad_data]
+        self.df.drop(rows_to_drop, inplace=True)
+
+        # Add folds to paths dataframe
+        self.df = add_folds_to_df(self.df, n_splits=self.args.nfolds)       
+
+        self.df.to_csv(self.train_paths_csv, index=False)
+
+
     def run(self):
         text = Text("\nAnalyzing dataset\n")
         text.stylize("bold")
         console.print(text)
 
         # QA dataset
-        self.validate_dataset()
+        self.__logger.info(f"Data validated. Arguments read from user_input_config_dose json file and defined as default in get_main_args() \n: {self.args}")
+        if self.data['modality'] == 'dose':
+            self.validate_dose_dataset()  # dose prediction case
+        else:
+            self.validate_dataset()  # segmentation cts and mri case
 
         # Get configuration file
-        if self.args.no_preprocess:
+        if self.args.no_preprocess:     # input are preprocessed for now for dose prediction, so we create a basic config file.
             self.config_if_no_preprocess()
         else:
-            self.analyze_dataset()
+            self.analyze_dataset()  # Need to edit this for dose prediction
 
         # Add default postprocessing arguments
         transforms = ["remove_small_objects", "top_k_cc", "fill_holes"]
         for transform in transforms:
             self.config[transform] = []
+
+        self.__logger.info(f"Created config json file \n: {self.config}")
 
         # Save inferred parameters as json file
         with open(self.config_file, "w") as outfile:

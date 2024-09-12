@@ -75,12 +75,16 @@ def get_main_args():
     p.arg("--patch-size", nargs="+", type=int, help="Height, width, and depth of patch size")
     p.arg("--max-patch-size", default=[256, 256, 256], nargs="+", type=int, help="Max patch size")
     p.arg("--val-percent", type=float_0_1, default=0.1, help="Percentage of training data used for validation")
-    p.arg("--learning-rate", type=float, default=0.0003, help="Learning rate")
+    p.arg("--learning-rate", type=float, default=0.0003, help="(Initial) Learning rate")
     p.arg("--exp_decay", type=float, default=0.9999, help="Exponential decay factor")
+    p.arg("--mode", type=str, default="min", help="Mode for learning rate scheduler ReduceLROnPlateau")
+    p.arg("--factor", type=float, default=0.5, help="Factor by which the learning rate will be reduced. new_lr = lr * factor")
+    p.arg("--patience", type=int, default=20, help="number of allowed epochs with no improvement after which the learning rate will be reduced.")
+    p.arg("--min-lr", type=float, default=0.000001, help="A scalar or a list of scalars. A lower bound on the learning rate of all param groups or each group respectively")
     p.arg("--lr-scheduler",
           type=str,
           default="constant",
-          choices=["constant", "polynomial", "cosine", "cosine_warm_restarts", "exponential"],
+          choices=["constant", "polynomial", "cosine", "cosine_warm_restarts", "exponential", "reduce_lr_on_plateau"],
           help="Learning rate scheduler")
     p.arg("--cosine-first-steps",
           type=positive_int,
@@ -121,6 +125,7 @@ def get_main_args():
     p.boolean_flag("--use-n4-bias-correction", default=False, help="Use N4 bias field correction (only for MR images)")
     p.boolean_flag("--use-config-class-weights", default=False, help="Use class weights in config file")
     p.boolean_flag("--use-dtms", default=False, help="Compute and use DTMs during training")
+    p.boolean_flag("--use-voi-weights", default=False, help="Dose prediction: use voi weights in loss function defined in dataset json file")
     p.boolean_flag("--normalize-dtms", default=False, help="Normalize DTMs to have values between -1 and 1")
 
     p.arg("--class-weights", nargs="+", type=float, help="Specify class weights")
@@ -129,7 +134,7 @@ def get_main_args():
     p.arg("--loss",
           type=str,
           default="dice_ce",
-          choices=["dice_ce", "dice", "gdl", "gdl_ce", "bl", "hdl", "gsl", "cldice"],
+          choices=["dice_ce", "dice", "gdl", "gdl_ce", "bl", "hdl", "gsl", "cldice", "mae", "mse", "w_mse", "dvh"],
           help="Loss function for training")
     p.arg("--boundary-loss-schedule",
           default="constant",

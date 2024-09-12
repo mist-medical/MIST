@@ -2,6 +2,9 @@ import os
 import numpy as np
 
 import torch
+import logging
+
+from datetime import datetime
 
 from mist.analyze_data.analyze import Analyzer
 from mist.preprocess_data.preprocess import preprocess_dataset
@@ -49,22 +52,43 @@ def create_folders(args):
 def main(args):
     # Create file structure for MIST output
     create_folders(args)
+
+    # check if a log folder exists in the current directory, create it if not
+    if not os.path.exists(os.path.join(args.results, 'logfiles')): os.makedirs(os.path.join(args.results, 'logfiles'))
+
+    # prepare logger
+    logger  = logging.getLogger(__name__)
+    log_file = os.path.join(os.path.join(args.results, 'logfiles'),f'mist_dose_prediction_{datetime.now().strftime("%Y-%m-%d-%H-%M-%S")}.log')
+    logging.basicConfig(filename=log_file, filemode = 'w',
+                        level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+    logger.info(f"Inputs and defaults arguments are:\n {args}\n")
+
     if args.exec_mode == "all" or args.exec_mode == "analyze":
+        logger.info(f'Analyzing data')
+        logger.info(f"Inputs and defaults arguments are:\n {args}")
         analyze = Analyzer(args)
         analyze.run()
+        logger.info(f'Finished analyzing data\n')
 
     if args.exec_mode == "all" or args.exec_mode == "preprocess":
+        logger.info(f'Preprocessing data')
+        logger.info(f"Inputs and defaults arguments are:\n {args}")
         preprocess_dataset(args)
+        logger.info(f'Finished preprocessing data\n')
 
     if args.exec_mode == "all" or args.exec_mode == "train":
         mist_trainer = Trainer(args)
         mist_trainer.fit()
-        
-        # Test for each fold
-        for fold in args.folds:
-            test_on_fold(args, fold)
+        logger.info(f'Finished training\n')
 
-        # Evaluate predictions
+        # Test for each fold
+        logger.info(f"Run inferences on each fold's test set for all folds")  
+        for fold in args.folds:
+            test_on_fold(args, fold)  
+            
+        # Evaluate predictions. 
+        logger.info(f"Compute metrics on each fold's test set for all folds")  
         evaluate(args.data,
                  os.path.join(args.results, "train_paths.csv"),
                  os.path.join(args.results, "predictions", "train", "raw"),
@@ -82,10 +106,12 @@ def main(args):
             models = [model.eval() for model in models]
             models = [model.to("cuda") for model in models]
 
+            # Added 'model_config' line to accomodate for dose prediction
             with torch.no_grad():
                 test_time_inference(test_df,
                                     os.path.join(args.results, "predictions", "test"),
                                     os.path.join(args.results, "config.json"),
+                                    os.path.join(args.results, "models", "model_config.json"),
                                     models,
                                     args.sw_overlap,
                                     args.blend_mode,

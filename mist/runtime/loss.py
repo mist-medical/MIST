@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
-from torch.nn.functional import softmax
-from mist.runtime.loss_utils import get_one_hot, SoftSkeletonize
+from torch.nn.functional import softmax, one_hot, relu
+from mist.runtime.loss_utils import get_one_hot, voi_weighted_loss, SoftSkeletonize
 
 
 class DiceLoss(nn.Module):
@@ -249,7 +249,120 @@ class VAELoss(nn.Module):
         return self.reconstruction_loss(y_true, y_pred[0]) + self.kl_loss(y_pred[1], y_pred[2])
 
 
-def get_loss(args, **kwargs):
+class MAELoss(nn.Module):
+    def __init__(self): 
+        super(MAELoss, self).__init__()
+        self.reduction = 'mean' # default
+        
+    def forward(self, y_true, y_pred):  # 0 gt_dose, 1 weights
+        # Prepare inputs. Regression, so output last layer activation with ReLU. 
+        y_pred = relu(y_pred)
+
+        # elt-wise MSE loss
+        loss = torch.nn.L1Loss(reduction=self.reduction)  # default of reduction='mean'. Use none to get individual losses
+        loss = loss(y_true[...,0], y_pred[...,0])
+                 
+        # Apply reduction (mean, sum, or no reduction)
+        if self.reduction == 'mean':
+            return loss.mean()
+        elif self.reduction == 'sum':
+            return loss.sum()
+        else:
+            return loss  # No reduction
+
+
+class MSELoss(nn.Module):
+    def __init__(self): 
+        super(MSELoss, self).__init__()
+        self.reduction = 'mean' # default
+        
+    def forward(self, y_true, y_pred):  # 0 gt_dose, 1 weights
+        # Prepare inputs. Regression, so output last layer activation with ReLU. y_pred comes from the layer before the last that still has many neurons.
+        y_pred = relu(y_pred)
+
+        # elt-wise MSE loss
+        loss = torch.nn.MSELoss(reduction=self.reduction)  # default of reduction='mean'. Use none to get individual losses
+        loss = loss(y_true[...,0], y_pred[...,0])
+                 
+        # Apply reduction (mean, sum, or no reduction)
+        if self.reduction == 'mean':
+            return loss.mean()
+        elif self.reduction == 'sum':
+            return loss.sum()
+        else:
+            return loss  # No reduction
+
+
+# This one has an issue as it gives tensors of different size, so fix it later!!!
+class WeightedMSELoss(nn.Module):
+    def __init__(self): 
+        super(WeightedMSELoss, self).__init__()
+        self.mse_loss = torch.nn.MSELoss(reduction='none')  # default of reduction='mean'. Use none to get individual losses
+        self.reduction = 'mean' # For w_mse, we will just assume the mean() version
+            
+
+    def forward(self, y_true, y_pred):  
+        # Prepare inputs. Regression, so output last layer activation with ReLU. y_pred comes from the layer before the last that still has many neurons.
+        y_pred = relu(y_pred)
+
+        weighted_mse = voi_weighted_loss(y_true, y_pred)
+
+        # elt-wise MSE loss
+        loss = self.mse_loss(y_true[...,0], y_pred[...,0])
+        mse = loss.mean()  # Apply reduction (mean)
+                 
+        return mse + weighted_mse
+ 
+
+# Fix this too
+class DVHLoss(nn.Module):   # Later test weighted/modified dvh. Also class to combine losses???
+    def __init__(self, min_dose=0, max_dose=85, b=1, m=1.0, Ns=23, norm_ord=2, name='dvh_loss'):
+        super(DVHLoss, self).__init__()
+        
+        self.d = torch.arange(min_dose, max_dose, b, dtype=torch.float32)
+        self.Nd = float(self.d.numel())  # Number of dose bins
+        self.b = float(b)
+        self.m = float(m)
+        self.mb_factor = self.m / self.b  # m/b from UTSW equation
+        self.ord = norm_ord
+        self.NsNd = self.Nd * (Ns - 1)
+        self.Ns = Ns
+
+    def forward(self, y_true, y_pred):
+        # Prepare inputs. Regression, so output last layer activation with ReLU. 
+        y_pred = relu(y_pred)
+
+        loss = 0.0  # Initialize loss
+        print(f"Ns {self.Ns}, Nd {self.Nd}, NsNd {self.NsNd}")
+
+        for s in range(1, self.Ns):  # Iterate over the structures
+
+            # Get the indices of the non-zero voxels in the structure s
+            non_zero_indices = (y_true[..., s] != 0).nonzero(as_tuple=False)
+            print(f"non_zero_indices {non_zero_indices}, non_zero_indices_numel {non_zero_indices.numel()}")
+            
+            if non_zero_indices.numel() > 0:
+                # Get the dose values of the non-zero voxels in the structure s
+                y_true_roi = y_true[..., 0].index_select(0, non_zero_indices[:, 0]).unsqueeze(-1)
+                y_pred_roi = y_pred[..., 0].index_select(0, non_zero_indices[:, 0]).unsqueeze(-1)
+
+                # Calculate total volume
+                tot_vol = float(y_true_roi.numel()) + torch.finfo(torch.float32).eps
+                
+                # Calculating dvh_true and dvh_pred in a vectorized manner
+                dvh_true = torch.sum(torch.sigmoid(self.mb_factor * (y_true_roi - self.d)), dim=0)
+                dvh_pred = torch.sum(torch.sigmoid(self.mb_factor * (y_pred_roi - self.d)), dim=0)
+                
+                # Calculating the loss for the structure s
+                loss += torch.norm((dvh_true - dvh_pred) / tot_vol, p=self.ord)
+            else:
+                # Handle case with no non-zero indices
+                loss += 0.0
+
+        return loss / self.NsNd
+
+
+def get_loss(args, **kwargs):  
     if args.loss == "dice":
         return DiceLoss()
     elif args.loss == "dice_ce":
@@ -266,5 +379,13 @@ def get_loss(args, **kwargs):
         return GenSurfLoss(class_weights=kwargs["class_weights"])
     elif args.loss == "cldice":
         return SoftDiceCLDice()
+    elif args.loss == "mae":
+        return MAELoss()  
+    elif args.loss == "mse":
+        return MSELoss()  # default for dose prediction
+    elif args.loss == "w_mse":
+        return WeightedMSELoss()  
+    elif args.loss == "dvh":
+        return DVHLoss()  
     else:
         raise ValueError("Invalid loss function")
