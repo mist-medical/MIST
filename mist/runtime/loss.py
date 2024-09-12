@@ -260,7 +260,7 @@ class MAELoss(nn.Module):
 
         # elt-wise MSE loss
         loss = torch.nn.L1Loss(reduction=self.reduction)  # default of reduction='mean'. Use none to get individual losses
-        loss = loss(y_true[...,0], y_pred[...,0])
+        loss = loss(y_true[:, 0, ...], y_pred[:, 0, ...])  # y_true/y_pred of shape BCDWH
                  
         # Apply reduction (mean, sum, or no reduction)
         if self.reduction == 'mean':
@@ -282,7 +282,7 @@ class MSELoss(nn.Module):
 
         # elt-wise MSE loss
         loss = torch.nn.MSELoss(reduction=self.reduction)  # default of reduction='mean'. Use none to get individual losses
-        loss = loss(y_true[...,0], y_pred[...,0])
+        loss = loss(y_true[:, 0, ...], y_pred[:, 0, ...])
                  
         # Apply reduction (mean, sum, or no reduction)
         if self.reduction == 'mean':
@@ -308,7 +308,7 @@ class WeightedMSELoss(nn.Module):
         weighted_mse = voi_weighted_loss(y_true, y_pred)
 
         # elt-wise MSE loss
-        loss = self.mse_loss(y_true[...,0], y_pred[...,0])
+        loss = self.mse_loss(y_true[:, 0, ...], y_pred[:, 0, ...])
         mse = loss.mean()  # Apply reduction (mean)
                  
         return mse + weighted_mse
@@ -342,9 +342,9 @@ class DVHLoss(nn.Module):   # Later test weighted/modified dvh. Also class to co
             print(f"non_zero_indices {non_zero_indices}, non_zero_indices_numel {non_zero_indices.numel()}")
             
             if non_zero_indices.numel() > 0:
-                # Get the dose values of the non-zero voxels in the structure s
-                y_true_roi = y_true[..., 0].index_select(0, non_zero_indices[:, 0]).unsqueeze(-1)
-                y_pred_roi = y_pred[..., 0].index_select(0, non_zero_indices[:, 0]).unsqueeze(-1)
+                # Get the dose values of the non-zero voxels in the structures. LIKELY CHANGE THIS non_zero_indices[:, 0] and entire 2 lines below???
+                y_true_roi = y_true[:, 0, ...].index_select(0, non_zero_indices[:, 0]).unsqueeze(-1)
+                y_pred_roi = y_pred[:, 0, ...].index_select(0, non_zero_indices[:, 0]).unsqueeze(-1)
 
                 # Calculate total volume
                 tot_vol = float(y_true_roi.numel()) + torch.finfo(torch.float32).eps

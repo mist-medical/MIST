@@ -15,10 +15,10 @@ def get_one_hot(y_true, n_classes):
 
 def voi_weighted_loss(y_true, y_pred):
     # grab the ground truth and predicted dose
-    gt_dose, p_dose = y_true[..., 0], y_pred[..., 0] 
+    gt_dose, p_dose = y_true[:, 0, ...], y_pred[:, 0, ...] 
 
     # grab the voxel weights. Will only be called if use_voi_weights is True
-    weights = y_true[..., -1]  # note: element 0 is the GT dose, elt 1 is weights
+    weights = y_true[:, 1, ...]  # note: element 0 is the GT dose, elt 1 is weights
     
     y_pred_weighted = weights * p_dose
     y_true_weighted = weights * gt_dose
