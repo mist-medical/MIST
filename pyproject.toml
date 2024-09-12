@@ -1,6 +1,6 @@
 [project]
 name = "mist-medical"
-version = "0.4.16-alpha"
+version = "0.4.17-alpha"
 requires-python = ">= 3.8"
 description = "MIST is a simple, fully automated framework for 3D medical imaging segmentation."
 readme = "README.md"
@@ -54,8 +54,8 @@ dependencies = [
 ]
 
 [project.urls]
-homepage = "https://github.com/aecelaya/MIST"
-repository = "https://github.com/aecelaya/MIST"
+homepage = "https://github.com/mist-medical/MIST"
+repository = "https://github.com/mist-medical/MIST"
 
 [project.scripts]
 mist_run_all = "mist.scripts.run_all_entrypoint:run_all_entry"
