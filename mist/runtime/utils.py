@@ -677,9 +677,9 @@ def sitk_get_sum(image):
 
 
 def decrop_from_fg(
-        ants_image: ants.ANTsImage,
+        ants_image: ants.core.ants_image.ANTsImage,
         fg_bbox: Dict[str, str | int]
-) -> ants.ANTsImage:
+) -> ants.core.ants_image.ANTsImage:
     """Decrop image to original size using foreground bounding box.
 
     Args:
@@ -707,9 +707,9 @@ def decrop_from_fg(
 
 
 def crop_to_fg(
-        img_ants: ants.ANTsImage,
+        img_ants: ants.core.ants_image.ANTsImage,
         fg_bbox: Dict[str, str | int]
-) -> ants.ANTsImage:
+) -> ants.core.ants_image.ANTsImage:
     """Crop image to foreground bounding box.
 
     Args:
