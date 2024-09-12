@@ -18,6 +18,7 @@ medical imaging segmentation.
     3. [A. Celaya et al. "MIST: A Simple and Scalable End-To-End 3D Medical Imaging Segmentation Framework," arXiv preprint arXiv:2407.21343](https://www.arxiv.org/abs/2407.21343)
 
 ## What's New
+* August 2024 - Added clDice as an available loss function.
 * April 2024 - The Read the Docs page is up!
 * March 2024 - Simplify and decouple postprocessing from main MIST pipeline.
 * March 2024 - Support for using transfer learning with pretrained MIST models is now available.
