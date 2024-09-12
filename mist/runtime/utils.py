@@ -1,146 +1,263 @@
-import os
+"""Utility functions for MIST."""
 import json
-
-import ants
+import os
 import random
 import warnings
-import skimage
-import pandas as pd
+from typing import Any, Dict, Tuple, List
+
+import ants
 import numpy as np
+import pandas as pd
 import SimpleITK as sitk
-from sklearn.model_selection import KFold
-from skimage.measure import label
-from scipy import ndimage
-
-from rich.progress import (
-    BarColumn,
-    MofNCompleteColumn,
-    Progress,
-    TextColumn,
-    TimeElapsedColumn
-)
-
+import skimage
 import torch
 import torch.nn as nn
+from rich.progress import (BarColumn, MofNCompleteColumn, Progress, TextColumn,
+                           TimeElapsedColumn)
+from scipy import ndimage
+from skimage.measure import label
+from sklearn.model_selection import KFold
 
 
 def read_json_file(json_file):
-    """Read json file and output it as a dictionary
+    """Read json file and output it as a dictionary.
     
     Args:
-        json_file: Path to json file
+        json_file: Path to json file.
     Returns:
-        json_data: Dictionary with json file data
+        json_data: Dictionary with json file data.
     """
-    with open(json_file, "r") as file:
+    with open(json_file, "r", encoding="utf-8") as file:
         json_data = json.load(file)
     return json_data
 
 
-def set_warning_levels():
-    warnings.simplefilter(action="ignore",
-                          category=np.VisibleDeprecationWarning)
-    warnings.simplefilter(action="ignore",
-                          category=FutureWarning)
-    warnings.simplefilter(action="ignore",
-                          category=RuntimeWarning)
-    warnings.simplefilter(action="ignore",
-                          category=UserWarning)
+def compare_headers(
+    header1: Dict[str, Any],
+    header2: Dict[str, Any],
+) -> bool:
+    """Compare two image headers to see if they match.
+
+    We compare the dimensions, origin, spacing, and direction of the two images.
+
+    Args:
+        header1: Image header information from ants.image_header_info
+        header2: Image header information from ants.image_header_info
+    
+    Returns:
+        True if the dimensions, origin, spacing, and direction match.
+    """
+    if header1["dimensions"] != header2["dimensions"]:
+        is_valid = False
+    elif header1["origin"] != header2["origin"]:
+        is_valid = False
+    elif not np.array_equal(
+        np.array(header1["spacing"]), np.array(header2["spacing"])
+    ):
+        is_valid = False
+    elif not np.array_equal(header1["direction"], header2["direction"]):
+        is_valid = False
+    else:
+        is_valid = True
+    return is_valid
 
 
-def create_empty_dir(path):
-    if not (os.path.exists(path)):
+def is_image_3d(header: Dict[str, Any]) -> bool:
+    """Check if image is 3D.
+
+    Args:
+        header: Image header information from ants.image_header_info
+    
+    Returns:
+        True if the image is 3D.
+    """
+    return len(header["dimensions"]) == 3
+
+
+def get_resampled_image_dimensions(
+        original_dimensions: Tuple[int],
+        original_spacing: Tuple[float],
+        target_spacing: Tuple[float]
+) -> Tuple[int]:
+    """Get new image dimensions after resampling.
+
+    Args:
+        original_dimensions: Original image dimensions.
+        original_spacing: Original image spacing.
+        target_spacing: Target image spacing.
+
+    Returns:
+        new_dimensions: New image dimensions after resampling.
+    """
+    original_spacing = np.array(original_spacing)
+    original_dimensions = np.array(original_dimensions)
+    new_dimensions = np.round(
+        (original_dimensions * original_spacing) / target_spacing
+    ).astype(int)
+    return tuple(new_dimensions)
+
+
+def get_float32_example_memory_size(
+        dimensions: Tuple[int],
+        number_of_channels: int,
+        number_of_labels: int,
+) -> int:
+    """Get memory size of float32 image-mask pair in bytes.
+
+    Args:
+        dimensions: Image dimensions.
+        number_of_channels: Number of image channels.
+        number_of_labels: Number of labels in mask.
+
+    Returns:
+        Memory size of image-mask pair in bytes.
+    """
+    return 4 * (np.prod(dimensions) * (number_of_channels + number_of_labels))
+
+
+def set_warning_levels() -> None:
+    """Set warning levels to ignore warnings."""
+    warnings.simplefilter(
+        action="ignore", category=np.VisibleDeprecationWarning
+    )
+    warnings.simplefilter(action="ignore", category=FutureWarning)
+    warnings.simplefilter(action="ignore", category=RuntimeWarning)
+    warnings.simplefilter(action="ignore", category=UserWarning)
+
+
+def create_empty_dir(path: str) -> None:
+    """Create directory if it does not exist."""
+    if not os.path.exists(path):
         os.makedirs(path)
 
 
-def get_progress_bar(task):
+def get_progress_bar(task_name: str) -> Progress:
+    """Set up rich progress bar.
+
+    Args:
+        task_name: Name of the task. This will be displayed on the left side of
+            the progress bar.
+
+    Returns:
+        A rich progress bar object.
+    """
     # Set up rich progress bar
-    progress = Progress(TextColumn(task),
-                        BarColumn(),
-                        MofNCompleteColumn(),
-                        TextColumn("•"),
-                        TimeElapsedColumn())
-    return progress
+    return Progress(
+        TextColumn(task_name),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TextColumn("•"),
+        TimeElapsedColumn()
+    )
 
 
-def get_files_list(path):
-    files_list = list()
+def get_files_list(path: str) -> List[str]:
+    """Get list of files in a directory.
+    
+    Args:
+        path: Path to directory.
+    
+    Returns:
+        files_list: List of files in the directory.
+    """
+    files_list = []
     for root, _, files in os.walk(path, topdown=False):
         for name in files:
             files_list.append(os.path.join(root, name))
     return files_list
 
 
-def has_test_data(data):
-    # Convert load json file if given as input
-    with open(data, "r") as file:
-        data = json.load(file)
+def has_test_data(dataset_json_path: str) -> bool:
+    """Check if dataset json file has test data.
 
-    return "test-data" in data.keys()
+    Args:
+        dataset_json_path: Path to dataset json file.
+    
+    Returns:
+        True if test data is present in the dataset json file.
+    """
+    dataset_information = read_json_file(dataset_json_path)
+    return "test-data" in dataset_information.keys()
 
 
-def make_test_df_from_list(images, output):
-    assert(istinstance(images, list)), "Images argument must be a list"
-    assert len(images) > 0, "No images found"
+def get_files_df(path_to_dataset_json: str, train_or_test: str) -> pd.DataFrame:
+    """Get dataframe with file paths for each patient in the dataset.
 
-    output_name = output.split("/")[-1].split(".")[0]
-    data = {"id": [f"{output_name}"]}
+    Args:
+        path_to_dataset_json: Path to dataset json file with the dataset
+            information.
+        train_or_test: "train" or "test". If "train", the dataframe will have
+            columns for the mask and images. If "test", the dataframe will have
+            columns for the images.
+    
+    Returns:
+        df: Dataframe with file paths for each patient in the dataset.
+    """
+    # Read JSON file with dataset parameters.
+    dataset_information = read_json_file(path_to_dataset_json)
 
-    for i in range(len(images)):
-        data[f"image_{i}"] = [images[i]]
+    # Get the names of the columns in the dataframe.
+    filename_dictionary = {}
+    if train_or_test == "train":
+        filename_dictionary["mask"] = dataset_information["mask"]
 
-    df = pd.DataFrame.from_dict(data=data)
+    for key in dataset_information["images"].keys():
+        filename_dictionary[key] = dataset_information["images"][key]
 
-    return df
+    dataframe_columns = ["id"] + list(filename_dictionary.keys())
+    paths_dataframe = pd.DataFrame(columns=dataframe_columns)
+    row_data_as_dictionary = dict.fromkeys(dataframe_columns)
 
-def get_files_df(params, mode):
-    # Get JSON file with dataset parameters
-    if "json" in params:
-        with open(params, "r") as file:
-            params = json.load(file)
+    # Get the base directory for the dataset.
+    base_directory = os.path.abspath(
+        dataset_information[f"{train_or_test}-data"]
+    )
 
-    base_dir = os.path.abspath(params["{}-data".format(mode)])
-    names_dict = dict()
-    if mode == "train":
-        names_dict["mask"] = params["mask"]
+    # Get the list of patient IDs.
+    patient_ids = os.listdir(base_directory)
 
-    for key in params["images"].keys():
-        names_dict[key] = params["images"][key]
+    for patient_id in patient_ids:
+        row_data_as_dictionary["id"] = patient_id
+        path_to_patient_data = os.path.join(base_directory, patient_id)
+        patient_files = get_files_list(path_to_patient_data)
 
-    cols = ["id"] + list(names_dict.keys())
-    df = pd.DataFrame(columns=cols)
-    row_dict = dict.fromkeys(cols)
+        for file in patient_files:
+            for image_type in filename_dictionary:
+                for image_identifying_string in filename_dictionary[image_type]:
+                    if image_identifying_string in file:
+                        row_data_as_dictionary[image_type] = file
 
-    ids = os.listdir(base_dir)
-
-    for i in ids:
-        row_dict["id"] = i
-        path = os.path.join(base_dir, i)
-        files = get_files_list(path)
-
-        for file in files:
-            for img_type in names_dict.keys():
-                for img_string in names_dict[img_type]:
-                    if img_string in file:
-                        row_dict[img_type] = file
-
-        df = pd.concat([df, pd.DataFrame(row_dict, index=[0])], ignore_index=True)
-    return df
+        paths_dataframe = pd.concat(
+            [paths_dataframe, pd.DataFrame(row_data_as_dictionary, index=[0])],
+            ignore_index=True
+        )
+    return paths_dataframe
 
 
 def add_folds_to_df(df, n_splits=5):
-    # Get folds for k-fold cross validation
+    """Add folds to the dataframe for k-fold cross-validation.
+
+    Args:
+        df: Dataframe with file paths for each patient in the dataset.
+        n_splits: Number of splits for k-fold cross-validation.
+
+    Returns:
+        df: Dataframe with folds added. The folds are added as a new column. The
+            dataframe is sorted by the fold column. The fold next to each 
+            patient ID is the fold that the patient belongs to the test set for
+            that given fold.
+    """
+    # Get folds for k-fold cross validation.
     kfold = KFold(n_splits=5, shuffle=True, random_state=42)
 
     splits = kfold.split(list(range(len(df))))
 
-    # Extract folds so that users can specify folds to train on
-    test_splits = list()
+    # Extract folds so that users can specify folds to train on.
+    test_splits = []
     for split in splits:
         test_splits.append(split[1])
 
-    folds = dict()
-
+    folds = {}
     for i in range(n_splits):
         for j in range(len(df)):
             if j in test_splits[i]:
@@ -153,6 +270,7 @@ def add_folds_to_df(df, n_splits=5):
 
 
 def convert_dict_to_df(patients):
+    """Converts a dictionary"""
     columns = ["id"]
 
     ids = list(patients.keys())
@@ -246,7 +364,7 @@ def set_seed(my_seed):
 
 
 def create_model_config_file(args, config, data, output):
-    model_config = dict()
+    model_config = {}
 
     model_config["model_name"] = args.model
     model_config["n_channels"] = int(len(data["images"]))
@@ -259,7 +377,7 @@ def create_model_config_file(args, config, data, output):
     model_config["vae_reg"] = args.vae_reg
     model_config["use_res_block"] = args.use_res_block
 
-    with open(output, "w") as outfile:
+    with open(output, "w", encoding="utf-8") as outfile:
         json.dump(model_config, outfile, indent=2)
 
     return model_config
@@ -318,51 +436,6 @@ def compute_results_stats(results_df):
     return results_df
 
 
-def resize_image_with_crop_or_pad(image, img_size, **kwargs):
-    """Image resizing. Resizes image by cropping or padding dimension
-     to fit specified size.
-    Args:
-        image (np.ndarray): image to be resized
-        img_size (list or tuple): new image size
-        kwargs (): additional arguments to be passed to np.pad
-    Returns:
-        np.ndarray: resized image
-    """
-
-    assert isinstance(image, (np.ndarray, np.generic))
-    assert (image.ndim - 1 == len(img_size) or image.ndim == len(img_size)), \
-        "Example size doesnt fit image size"
-
-    # Get the image dimensionality
-    rank = len(img_size)
-
-    # Create placeholders for the new shape
-    from_indices = [[0, image.shape[dim]] for dim in range(rank)]
-    to_padding = [[0, 0] for dim in range(rank)]
-
-    slicer = [slice(None)] * rank
-
-    # For each dimensions find whether it is supposed to be cropped or padded
-    for i in range(rank):
-        if image.shape[i] < img_size[i]:
-            to_padding[i][0] = (img_size[i] - image.shape[i]) // 2
-            to_padding[i][1] = img_size[i] - image.shape[i] - to_padding[i][0]
-        else:
-            from_indices[i][0] = int(np.floor((image.shape[i] - img_size[i]) / 2.))
-            from_indices[i][1] = from_indices[i][0] + img_size[i]
-
-        # Create slicer object to crop or leave each dimension
-        slicer[i] = slice(from_indices[i][0], from_indices[i][1])
-
-    # Pad the cropped image to extend the missing dimension
-    return np.pad(image[tuple(slicer)], to_padding, **kwargs)
-
-
-"""
-Conversion between SimpleITK and ANTs
-"""
-
-
 def ants_to_sitk(img_ants):
     spacing = img_ants.spacing
     origin = img_ants.origin
@@ -389,11 +462,6 @@ def sitk_to_ants(img_sitk):
     img_ants.set_direction(direction)
 
     return img_ants
-
-
-"""
-Morphological tools
-"""
 
 
 def get_largest_cc(mask_npy):
@@ -516,11 +584,6 @@ def get_fg_mask_bbox(img_ants, patient_id=None):
     return fg_bbox
 
 
-"""
-Preprocessing tools
-"""
-
-
 def npy_make_onehot(mask_npy, labels):
     mask_onehot = np.zeros((*mask_npy.shape, len(labels)))
     for i, label in enumerate(labels):
@@ -613,18 +676,56 @@ def sitk_get_sum(image):
     return image_sum
 
 
-def decrop_from_fg(img_ants, fg_bbox):
-    padding = [(np.max([0, fg_bbox["x_start"]]), np.max([0, fg_bbox["x_og_size"] - fg_bbox["x_end"]]) - 1),
-               (np.max([0, fg_bbox["y_start"]]), np.max([0, fg_bbox["y_og_size"] - fg_bbox["y_end"]]) - 1),
-               (np.max([0, fg_bbox["z_start"]]), np.max([0, fg_bbox["z_og_size"] - fg_bbox["z_end"]]) - 1)]
-    return ants.pad_image(img_ants, pad_width=padding)
+def decrop_from_fg(
+        ants_image: ants.ANTsImage,
+        fg_bbox: Dict[str, str | int]
+) -> ants.ANTsImage:
+    """Decrop image to original size using foreground bounding box.
+
+    Args:
+        ants_image: ANTs image object.
+        fg_bbox: Foreground bounding box.
+
+    Returns:
+        Decropped ANTs image object.
+    """
+    padding = [
+        (
+            np.max([0, fg_bbox["x_start"]]),
+            np.max([0, fg_bbox["x_og_size"] - fg_bbox["x_end"]]) - 1
+        ),
+        (
+            np.max([0, fg_bbox["y_start"]]),
+            np.max([0, fg_bbox["y_og_size"] - fg_bbox["y_end"]]) - 1
+        ),
+        (
+            np.max([0, fg_bbox["z_start"]]),
+            np.max([0, fg_bbox["z_og_size"] - fg_bbox["z_end"]]) - 1
+        )
+    ]
+    return ants.pad_image(ants_image, pad_width=padding)
 
 
-def crop_to_fg(img_ants, fg_bbox):
-    img_ants = ants.crop_indices(img_ants,
-                                 lowerind=[fg_bbox["x_start"], fg_bbox["y_start"], fg_bbox["z_start"]],
-                                 upperind=[fg_bbox["x_end"] + 1, fg_bbox["y_end"] + 1, fg_bbox["z_end"] + 1])
-    return img_ants
+def crop_to_fg(
+        img_ants: ants.ANTsImage,
+        fg_bbox: Dict[str, str | int]
+) -> ants.ANTsImage:
+    """Crop image to foreground bounding box.
+
+    Args:
+        img_ants: ANTs image object.
+        fg_bbox: Foreground bounding box.
+
+    Returns:
+        Cropped ANTs image object.
+    """
+    return ants.crop_indices(
+        img_ants,
+        lowerind=[fg_bbox["x_start"], fg_bbox["y_start"], fg_bbox["z_start"]],
+        upperind=[
+            fg_bbox["x_end"] + 1, fg_bbox["y_end"] + 1, fg_bbox["z_end"] + 1
+        ]
+    )
 
 
 # Get nearest power of two less than median images size for patch size selection
