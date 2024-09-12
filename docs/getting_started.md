@@ -13,7 +13,7 @@ pip install mist-medical
 If you want to install MIST and customize the underlying code (i.e., add a loss function or new architecture), 
 then clone the MIST repo and install as follows:
 ```console
-git clone https://github.com/aecelaya/MIST.git
+git clone https://github.com/mist-medical/MIST.git
 cd MIST
 pip install -e .
 ```
