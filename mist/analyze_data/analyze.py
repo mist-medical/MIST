@@ -1,3 +1,4 @@
+"""Analyzer class for creating MIST configuration file."""
 import os
 import json
 
@@ -5,164 +6,176 @@ import ants
 import pandas as pd
 import numpy as np
 
-# Rich progres bar
-from rich.console import Console
-from rich.text import Text
+# Rich console and text.
+import rich
 
-from mist.runtime.utils import (
-    get_files_df,
-    add_folds_to_df,
-    get_fg_mask_bbox,
-    get_progress_bar,
-    get_best_patch_size
-)
+# MIST imports.
+from mist.runtime import utils
+from mist.analyze_data import analyzer_constants
 
-
-def compare_headers(header1, header2):
-    if header1["dimensions"] != header2["dimensions"]:
-        is_valid = False
-    elif header1["origin"] != header2["origin"]:
-        is_valid = False
-    elif not np.array_equal(np.array(header1["spacing"]), np.array(header2["spacing"])):
-        is_valid = False
-    elif not np.array_equal(header1["direction"], header2["direction"]):
-        is_valid = False
-    else:
-        is_valid = True
-    return is_valid
-
-
-def is_single_channel(header):
-    return len(header["dimensions"]) == 3
-
-
-console = Console()
+# Set up console for rich text.
+console = rich.console.Console()
 
 
 class Analyzer:
-    def __init__(self, args):
-        self.args = args
-        with open(self.args.data, "r") as file:
-            self.data = json.load(file)
+    """Analyzer class for getting config.json file for MIST.
 
-        self.labels = self.data["labels"]
-        self.train_dir = os.path.abspath(self.data["train-data"])
-        self.output_dir = os.path.abspath(self.args.results)
-
-        # Get paths to dataset
-        self.train_paths_csv = os.path.join(self.output_dir, "train_paths.csv")
-        self.bbox_csv = os.path.join(self.output_dir, "fg_bboxes.csv")
-
-        # Set up configuration file
-        self.config_file = os.path.join(self.args.results, "config.json")
-
-        self.config = dict()
-        self.df = get_files_df(self.data, "train")
+    Attributes:
+        mist_arguments: MIST arguments.
+        dataset_information: Dataset information from MIST arguments.
+        config: Configuration dictionary.
+        file_paths: Paths to save configuration, foreground bounding boxes, and
+            image/mask paths files.
+        paths_dataframe: Dataframe containing paths to images and masks.
+    """
+    def __init__(self, mist_arguments):
+        self.mist_arguments = mist_arguments
+        self.dataset_information = utils.read_json_file(
+            self.mist_arguments.data
+        )
+        self.config = {}
+        self.file_paths = {
+            "configuration": (
+                os.path.join(self.mist_arguments.results, "config.json")
+            ),
+            "foreground_bounding_boxes": (
+                os.path.join(self.mist_arguments.results, "fg_bboxes.csv")
+            ),
+            "image_mask_paths": (
+                os.path.join(self.mist_arguments.results, "train_paths.csv")
+            ),
+        }
+        self.paths_dataframe = utils.get_files_df(
+            mist_arguments.data, "train"
+        )
 
     def check_crop_fg(self):
-        """
-        Check if cropping to foreground reduces image volumes by at least 20%
-        """
-        progress = get_progress_bar("Checking FG vol. reduction")
+        """Check if cropping to foreground reduces image volume by 20%."""
+        progress = utils.get_progress_bar("Checking FG vol. reduction")
 
-        bbox_df = pd.DataFrame(columns=["id",
-                                        "x_start", "x_end",
-                                        "y_start", "y_end",
-                                        "z_start", "z_end",
-                                        "x_og_size",
-                                        "y_og_size",
-                                        "z_og_size"])
+        bbox_df = pd.DataFrame(
+            columns=[
+                "id",
+                "x_start", 
+                "x_end",
+                "y_start", 
+                "y_end",
+                "z_start", 
+                "z_end",
+                "x_og_size",
+                "y_og_size",
+                "z_og_size",
+            ]
+        )
 
-        vol_reduction = list()
-        cropped_dims = np.zeros((len(self.df), 3))
+        vol_reduction = []
+        cropped_dims = np.zeros((len(self.paths_dataframe), 3))
         with progress as pb:
-            for i in pb.track(range(len(self.df))):
-                patient = self.df.iloc[i].to_dict()
+            for i in pb.track(range(len(self.paths_dataframe))):
+                patient = self.paths_dataframe.iloc[i].to_dict()
                 image_list = list(patient.values())[3:len(patient)]
 
                 # Read original images
                 image = ants.image_read(image_list[0])
 
                 # Get foreground mask and save it to save computation time later
-                fg_bbox = get_fg_mask_bbox(image, patient_id=patient["id"])
+                fg_bbox = utils.get_fg_mask_bbox(
+                    image, patient_id=patient["id"]
+                )
 
                 # Get cropped dimensions from bounding box
-                cropped_dims[i, :] = [fg_bbox["x_end"] - fg_bbox["x_start"] + 1,
-                                      fg_bbox["y_end"] - fg_bbox["y_start"] + 1,
-                                      fg_bbox["z_end"] - fg_bbox["z_start"] + 1]
+                cropped_dims[i, :] = [
+                    fg_bbox["x_end"] - fg_bbox["x_start"] + 1,
+                    fg_bbox["y_end"] - fg_bbox["y_start"] + 1,
+                    fg_bbox["z_end"] - fg_bbox["z_start"] + 1,
+                ]
 
-                vol_reduction.append(1. - (np.prod(cropped_dims[i, :]) / np.prod(image.shape)))
+                vol_reduction.append(
+                    1. - (np.prod(cropped_dims[i, :]) / np.prod(image.shape))
+                )
 
                 # Update bounding box dataframe to save for later
-                bbox_df = pd.concat([bbox_df, pd.DataFrame(fg_bbox, index=[0])], ignore_index=True)
+                bbox_df = pd.concat(
+                    [bbox_df, pd.DataFrame(fg_bbox, index=[0])],
+                    ignore_index=True
+                )
 
-        bbox_df.to_csv(self.bbox_csv, index=False)
-        crop_to_fg = np.mean(vol_reduction) >= 0.2
+        bbox_df.to_csv(
+            self.file_paths["foreground_bounding_boxes"], index=False
+        )
+        crop_to_fg = (
+            np.mean(vol_reduction) >=
+            analyzer_constants.AnalyzeConstants.MIN_AVERAGE_VOLUME_REDUCTION_FRACTION
+        )
         return crop_to_fg, cropped_dims
 
     def compute_class_weights(self):
-        """
-        Compute class weights on original data
-        """
+        """Compute class weights on original data."""
 
-        # Either compute class weights or use user provided weights
-        if self.args.class_weights is None:
-            class_weights = [0. for i in range(len(self.labels))]
-            progress = get_progress_bar("Computing class weights")
+        # Either compute class weights or use user provided weights.
+        if self.mist_arguments.class_weights is None:
+            # Initialize class weights if not provided.
+            class_weights = [
+                0. for i in range(len(self.dataset_information["labels"]))
+            ]
+            progress = utils.get_progress_bar("Computing class weights")
 
             with progress as pb:
-                for i in pb.track(range(len(self.df))):
-                    patient = self.df.iloc[i].to_dict()
+                for i in pb.track(range(len(self.paths_dataframe))):
+                    patient = self.paths_dataframe.iloc[i].to_dict()
                     mask = ants.image_read(patient["mask"])
                     mask = mask.numpy()
 
-                    # Update class weights with counts
-                    for j, label in enumerate(self.labels):
-                        temp = (mask == label)
+                    # Update class weights with counts.
+                    for j, label in enumerate(
+                        self.dataset_information["labels"]
+                    ):
+                        temp = mask == label
                         class_weights[j] += np.count_nonzero(temp)
 
-                # Compute final class weights
-                den = np.sum(1. / np.array(class_weights))
-                class_weights = [(1. / class_weights[j]) / den for j in range(len(self.labels))]
+                # Compute final class weights.
+                den = np.sum(1. / (np.square(np.array(class_weights)) + 1.))
+                class_weights = [
+                    (1. / (weight + 1.))**2 / den for weight in class_weights
+                ]
         else:
-            class_weights = self.args.class_weights
+            class_weights = self.mist_arguments.class_weights
         return class_weights
 
     def check_nz_ratio(self):
-        """
-        If ratio of nonzeros vs entire image is less than 0.25, only normalize non-zero values
-        """
-        progress = get_progress_bar("Checking non-zero ratio")
+        """Check if ratio of nonzeros vs entire image is less than 0.2."""
+        progress = utils.get_progress_bar("Checking non-zero ratio")
 
-        nz_ratio = list()
+        nz_ratio = []
         with progress as pb:
-            for i in pb.track(range(len(self.df))):
-                patient = self.df.iloc[i].to_dict()
+            for i in pb.track(range(len(self.paths_dataframe))):
+                patient = self.paths_dataframe.iloc[i].to_dict()
                 image_list = list(patient.values())[3:len(patient)]
 
                 # Read original images
                 image = ants.image_read(image_list[0])
 
                 # Get nonzero ratio
-                nz_ratio.append(np.sum(image.numpy() != 0) / np.prod(image.shape))
+                nz_ratio.append(
+                    np.sum(image.numpy() != 0) / np.prod(image.shape)
+                )
 
-        use_nz_mask = (1. - np.mean(nz_ratio)) >= 0.2
+        use_nz_mask = (
+            (1. - np.mean(nz_ratio)) >=
+            analyzer_constants.AnalyzeConstants.MIN_SPARSITY_FRACTION
+        )
         return use_nz_mask
 
     def get_target_spacing(self):
-        """
-        For non-uniform spacing, get median image spacing in each direction.
-        This is median image spacing is our target image spacing for preprocessing.
-        If data is isotropic, then set target spacing to given spacing in data.
-        """
-        progress = get_progress_bar("Getting target spacing")
+        """Get target spacing for preprocessing."""
+        progress = utils.get_progress_bar("Getting target spacing")
 
         # If data is anisotropic, get median image spacing
-        original_spacings = np.zeros((len(self.df), 3))
+        original_spacings = np.zeros((len(self.paths_dataframe), 3))
 
         with progress as pb:
-            for i in pb.track(range(len(self.df))):
-                patient = self.df.iloc[i].to_dict()
+            for i in pb.track(range(len(self.paths_dataframe))):
+                patient = self.paths_dataframe.iloc[i].to_dict()
 
                 # Read mask image. This is faster to load.
                 spacing = ants.image_header_info(patient["mask"])["spacing"]
@@ -173,34 +186,35 @@ class Analyzer:
         # Initialize target spacing
         target_spacing = list(np.median(original_spacings, axis=0))
 
-        # If anisotropic, adjust the coarsest resolution to bring ratio down
-        if np.max(target_spacing) / np.min(target_spacing) > 3:
+        # If anisotropic, adjust the coarsest resolution to bring ratio down.
+        if (
+            np.max(target_spacing) / np.min(target_spacing) >
+            analyzer_constants.AnalyzeConstants.MAX_DIVIDED_BY_MIN_SPACING_THRESHOLD
+        ):
             low_res_axis = np.argmax(target_spacing)
-            target_spacing[low_res_axis] = np.percentile(original_spacings[:, low_res_axis], 10)
+            target_spacing[low_res_axis] = (
+                np.percentile(
+                    original_spacings[:, low_res_axis],
+                    analyzer_constants.AnalyzeConstants.ANISOTROPIC_LOW_RESOLUTION_AXIS_PERCENTILE
+                )
+            )
 
         return target_spacing
 
-    def get_resampled_dims(self, dims, mask_spacing, n_channels):
-        # Compute resampled dimensions
-        dims = [int(np.round((dims[i] * mask_spacing[i]) / self.config["target_spacing"][i])) for i in range(len(dims))]
-
-        # Get image buffer sizes
-        image_memory_size = 4 * (np.prod(dims) * (n_channels + len(self.labels)))
-        return dims, image_memory_size
-
     def check_resampled_dims(self, cropped_dims):
-        """
-        Determine dims from resampled data.
-        """
-        resampled_dims = np.zeros((len(self.df), 3))
-        max_memory_per_image = 2e9
+        """Determine dimensions of resampled data."""
 
-        progress = get_progress_bar("Checking resampled dimensions")
+        # If an example exceeds the maximum allowed memory size, then update the
+        # target spacing to coarser resolution until all examples are within the
+        # memory limit.
+        resampled_dims = np.zeros((len(self.paths_dataframe), 3))
+
+        progress = utils.get_progress_bar("Checking resampled dimensions")
         messages = ""
 
         with progress as pb:
-            for i in pb.track(range(len(self.df))):
-                patient = self.df.iloc[i].to_dict()
+            for i in pb.track(range(len(self.paths_dataframe))):
+                patient = self.paths_dataframe.iloc[i].to_dict()
                 mask_header = ants.image_header_info(patient["mask"])
                 image_list = list(patient.values())[3:len(patient)]
 
@@ -211,159 +225,251 @@ class Analyzer:
 
                 current_spacing = mask_header["spacing"]
 
-                new_dims, image_memory_size = self.get_resampled_dims(current_dims,
-                                                                      current_spacing,
-                                                                      len(image_list))
+                # Compute resampled dimensions.
+                new_dims = utils.get_resampled_image_dimensions(
+                    current_dims, current_spacing, self.config["target_spacing"]
+                )
 
-                # If data exceeds maximum allowed memory size, then resample to coarser resolution
-                while image_memory_size > max_memory_per_image:
-                    self.config["target_spacing"] = list(1.25 * np.array(self.config["target_spacing"]))
+                # Compute memory size of resampled image.
+                image_memory_size = utils.get_float32_example_memory_size(
+                    new_dims,
+                    len(image_list),
+                    len(self.dataset_information["labels"])
+                )
 
-                    new_dims, image_memory_size = self.get_resampled_dims(current_dims,
-                                                                          current_spacing,
-                                                                          len(image_list))
-                    pt1 = patient["id"]
-                    pt2 = np.round(self.config["target_spacing"], 4)
-                    messages += "In {}: Images are too large, coarsening target spacing to {}\n".format(pt1, pt2)
+                # If data exceeds maximum allowed memory size, then resample
+                # to coarser resolution.
+                while (
+                    image_memory_size >
+                    analyzer_constants.AnalyzeConstants.MAX_MEMORY_PER_IMAGE_MASK_PAIR_BYTES
+                ):
+                    self.config["target_spacing"] = (
+                        analyzer_constants.AnalyzeConstants.COARSEN_TARGET_SPACING_FACTOR *
+                        np.array(self.config["target_spacing"])
+                    ).tolist()
 
+                    # Get new dimensions and memory size with coarsened
+                    # target spacing.
+                    new_dims = utils.get_resampled_image_dimensions(
+                        current_dims,
+                        current_spacing,
+                        self.config["target_spacing"]
+                    )
+
+                    image_memory_size = utils.get_float32_example_memory_size(
+                        new_dims,
+                        len(image_list),
+                        len(self.dataset_information["labels"])
+                    )
+
+                    print_patient_id = patient["id"]
+                    print_target_spacing = np.round(
+                        self.config["target_spacing"],
+                        analyzer_constants.AnalyzeConstants.PRINT_FLOATING_POINT_PRECISION
+                    )
+                    messages += (
+                        f"In {print_patient_id}: Images are too large,\n"
+                        f"coarsening target spacing to {print_target_spacing}\n"
+                    )
+
+                # Update resampled dimensions for this example.
                 resampled_dims[i, :] = new_dims
 
         if len(messages) > 0:
-            text = Text(messages)
+            text = rich.text.Text(messages)
             console.print(text)
 
         median_resampled_dims = list(np.median(resampled_dims, axis=0))
         return median_resampled_dims
 
-    def get_ct_norm_parameters(self):
-        """
-        Get normalization parameters (i.e., window ranges and z-score) for CT images.
-        """
-        progress = get_progress_bar("Getting CT norm. params.")
-        fg_intensities = list()
+    def get_ct_normalization_parameters(self):
+        """Get windowing and normalization parameters for CT images."""
+        progress = utils.get_progress_bar("Getting CT norm. params.")
+        fg_intensities = []
         with progress as pb:
-            for i in pb.track(range(len(self.df))):
-                patient = self.df.iloc[i].to_dict()
+            for i in pb.track(range(len(self.paths_dataframe))):
+                patient = self.paths_dataframe.iloc[i].to_dict()
                 image_list = list(patient.values())[3:len(patient)]
 
-                # Read original image
+                # Read original image.
                 image = ants.image_read(image_list[0])
 
-                # Get foreground mask and binarize it
+                # Get foreground mask and make it binary.
                 mask = ants.image_read(patient["mask"])
 
-                # Get foreground voxels in original image
-                # You don"t need to use all of the voxels for this
-                fg_intensities += (image[mask != 0]).tolist()[::10]
+                # Get foreground voxels in original image.
+                # You don"t need to use all of the voxels for this.
+                fg_intensities += (
+                    image[mask != 0]
+                ).tolist()[::analyzer_constants.AnalyzeConstants.CT_GATHER_EVERY_ITH_VOXEL_VALUE]
 
         global_z_score_mean = np.mean(fg_intensities)
         global_z_score_std = np.std(fg_intensities)
-        global_window_range = [np.percentile(fg_intensities, 0.5),
-                               np.percentile(fg_intensities, 99.5)]
+        global_window_range = [
+            np.percentile(
+                fg_intensities,
+                analyzer_constants.AnalyzeConstants.CT_GLOBAL_CLIP_MIN_PERCENTILE
+            ),
+            np.percentile(
+                fg_intensities,
+                analyzer_constants.AnalyzeConstants.CT_GLOBAL_CLIP_MAX_PERCENTILE
+            ),
+        ]
 
-        return global_z_score_mean, global_z_score_std, global_window_range
+        return {
+            "ct_global_z_score_mean": global_z_score_mean,
+            "ct_global_z_score_std": global_z_score_std,
+            "ct_global_clip_min": global_window_range[0],
+            "ct_global_clip_max": global_window_range[1],
+        }
 
     def config_if_no_preprocess(self):
-        """
-        Create basic config file if we don't use preprocessing
-        """
-        self.config = {"modality": self.data["modality"],
-                       "labels": self.labels,
-                       "final_classes": self.data["final_classes"],
-                       "crop_to_fg": None,
-                       "use_nz_mask": None,
-                       "target_spacing": None,
-                       "window_range": None,
-                       "global_z_score_mean": None,
-                       "global_z_score_std": None,
-                       "use_n4_bias_correction": None,
-                       "median_image_size": None,
-                       "class_weights": None}
+        """Create basic config file if we don't use preprocessing."""
+        configuration_with_no_preprocessing = {
+            "modality": self.dataset_information["modality"],
+            "labels": self.dataset_information["labels"],
+            "final_classes": self.dataset_information["final_classes"],
+            "crop_to_fg": None,
+            "use_nz_mask": None,
+            "target_spacing": None,
+            "window_range": None,
+            "global_z_score_mean": None,
+            "global_z_score_std": None,
+            "use_n4_bias_correction": None,
+            "median_image_size": None,
+            "class_weights": None
+        }
+        self.config.update(configuration_with_no_preprocessing)
 
     def analyze_dataset(self):
-        """
-        Analyze dataset to get configuration file
-        """
-        # Start getting parameters from dataset
+        """Analyze dataset to get configuration file."""
         use_nz_mask = self.check_nz_ratio()
         class_weights = self.compute_class_weights()
         crop_to_fg, cropped_dims = self.check_crop_fg()
         target_spacing = self.get_target_spacing()
 
-        if self.data["modality"] == "ct":
+        if self.dataset_information["modality"] == "ct":
             # Get CT normalization parameters
-            global_z_score_mean, global_z_score_std, global_window_range = self.get_ct_norm_parameters()
+            ct_normalization_parameters = (
+                self.get_ct_normalization_parameters()
+            )
 
-            self.config = {"modality": "ct",
-                           "window_range": [float(global_window_range[i]) for i in range(2)],
-                           "global_z_score_mean": float(global_z_score_mean),
-                           "global_z_score_std": float(global_z_score_std),
-                           "use_n4_bias_correction": bool(False)}
+            configuration_with_ct_parameters = {
+                "modality": "ct",
+                "window_range": [
+                    float(ct_normalization_parameters["ct_global_clip_min"]),
+                    float(ct_normalization_parameters["ct_global_clip_max"]),
+                ],
+                "global_z_score_mean": float(
+                    ct_normalization_parameters["ct_global_z_score_mean"]
+                ),
+                "global_z_score_std": float(
+                    ct_normalization_parameters["ct_global_z_score_std"]
+                ),
+                "use_n4_bias_correction": bool(False),
+            }
+            self.config.update(configuration_with_ct_parameters)
         else:
-            self.config = {"modality": self.data["modality"],
-                           "use_n4_bias_correction": bool(self.args.use_n4_bias_correction)}
+            configuration_no_ct_parameters = {
+                "modality": self.dataset_information["modality"],
+                "use_n4_bias_correction": bool(
+                    self.mist_arguments.use_n4_bias_correction
+                ),
+            }
+            self.config.update(configuration_no_ct_parameters)
 
-        self.config["labels"] = self.labels
-        self.config["final_classes"] = self.data["final_classes"]
+        self.config["labels"] = self.dataset_information["labels"]
+        self.config["final_classes"] = self.dataset_information["final_classes"]
         self.config["crop_to_fg"] = bool(crop_to_fg)
         self.config["use_nz_mask"] = bool(use_nz_mask)
-        self.config["target_spacing"] = [float(target_spacing[i]) for i in range(3)]
-        self.config["class_weights"] = [float(class_weights[i]) for i in range(len(class_weights))]
+        self.config["target_spacing"] = [
+            float(target_spacing[i]) for i in range(3)
+        ]
+        self.config["class_weights"] = [
+            float(class_weights[i]) for i in range(len(class_weights))
+        ]
 
         median_dims = self.check_resampled_dims(cropped_dims)
-        patch_size = get_best_patch_size(median_dims, self.args.max_patch_size)
-
-        self.config["median_image_size"] = [int(median_dims[i]) for i in range(3)]
-        if self.args.patch_size is None:
+        self.config["median_image_size"] = [
+            int(median_dims[i]) for i in range(3)
+        ]
+        if self.mist_arguments.patch_size is None:
+            patch_size = utils.get_best_patch_size(
+                median_dims, self.mist_arguments.max_patch_size
+            )
             self.config["patch_size"] = [int(patch_size[i]) for i in range(3)]
+        else:
+            self.config["patch_size"] = [
+                int(self.mist_arguments.patch_size[i]) for i in range(3)
+            ]
 
     def validate_dataset(self):
-        """
-        QA dataset to see if headers match, check whether the images are 3D,
-        or the labels in the dataset description match those in the data
-        """
-        progress = get_progress_bar("Verifying dataset")
+        """Check if headers match, images are 3D, and create paths dataframe.
 
-        bad_data = list()
+        This runs basic checks on the dataset to ensure that the dataset is
+        valid for training. It checks if the headers of the images and masks
+        match according to their dimensions, origin, and spacing. It also
+        checks that all images are 3D and that the mask is 3D. If there are 
+        multiple images, it checks that they have the same header information.
+        If any of these checks fail, the patient is excluded from training.
+        """
+        progress = utils.get_progress_bar("Verifying dataset")
+
+        bad_data = []
         messages = ""
         with progress as pb:
-            for i in pb.track(range(len(self.df))):
-                patient = self.df.iloc[i].to_dict()
+            for i in pb.track(range(len(self.paths_dataframe))):
+                # Get patient information.
+                patient = self.paths_dataframe.iloc[i].to_dict()
 
-                # Check if labels are correct
+                # Get list of images, mask, labels in mask, and the header.
+                image_list = list(patient.values())[2:len(patient)]
                 mask = ants.image_read(patient["mask"])
-                mask_labels = set(mask.unique().astype("int"))
-                if not mask_labels.issubset(set(self.labels)):
-                    messages += "In {}: Labels in mask do not match those specified in {}\n".format(patient["id"],
-                                                                                                    self.args.data)
+                mask_labels = set(mask.unique().astype(int))
+                mask_header = ants.image_header_info(patient["mask"])
+
+                # Check if labels are correct.
+                if not mask_labels.issubset(
+                    set(self.dataset_information["labels"])
+                ):
+                    messages += (
+                        f"In {patient['id']}: Labels in mask do not match those" 
+                        f" specified in {self.mist_arguments.data}\n"
+                    )
                     bad_data.append(i)
                     continue
 
-                # Get list of image paths and segmentation mask
-                image_list = list(patient.values())[2:len(patient)]
-                mask_header = ants.image_header_info(patient["mask"])
+                # Check that the image and mask headers match and that the
+                # images are 3D.
                 for image_path in image_list:
                     image_header = ants.image_header_info(image_path)
-
-                    is_valid = compare_headers(mask_header, image_header)
-                    is_3d_image = is_single_channel(image_header)
-                    is_3d_mask = is_single_channel(mask_header)
-
-                    if not is_valid:
-                        messages += "In {}: Mismatch between image and mask header information\n".format(patient["id"])
+                    if not utils.compare_headers(
+                        mask_header, image_header
+                    ):
+                        messages += (
+                            f"In {patient['id']}: Mismatch between image and"
+                            " mask header information\n"
+                        )
                         bad_data.append(i)
                         break
 
-                    if not is_3d_image:
-                        messages += "In {}: Got 4D image, make sure all images are 3D\n".format(patient["id"])
+                    if not utils.is_image_3d(image_header):
+                        messages += (
+                            f"In {patient['id']}: Got 4D image, make"
+                            " sure all images are 3D\n"
+                        )
                         bad_data.append(i)
                         break
 
-                    if not is_3d_mask:
-                        messages += "In {}: Got 4D mask, make sure all images are 3D\n".format(patient["id"])
+                    if not utils.is_image_3d(mask_header):
+                        messages += (
+                            f"In {patient['id']}: Got 4D mask, make sure all"
+                            "images are 3D\n"
+                        )
                         bad_data.append(i)
                         break
 
+                # Check that all images have the same header information.
                 if len(image_list) > 1:
                     anchor_image = image_list[0]
                     anchor_header = ants.image_header_info(anchor_image)
@@ -371,47 +477,61 @@ class Analyzer:
                     for image_path in image_list[1:]:
                         image_header = ants.image_header_info(image_path)
 
-                        is_valid = compare_headers(anchor_header, image_header)
-
-                        if not is_valid:
-                            messages += "In {}: Mismatch between images header information\n".format(patient["id"])
+                        if not utils.compare_headers(
+                            anchor_header, image_header
+                        ):
+                            messages += (
+                                f"In {patient['id']}: Mismatch between images"
+                                "header information\n"
+                            )
                             bad_data.append(i)
                             break
 
+        # If there are any bad examples, print their ids.
         if len(messages) > 0:
             messages += "Excluding these from training\n"
-            text = Text(messages)
+            text = rich.text.Text(messages)
             console.print(text)
 
-        assert len(bad_data) < len(self.df), "Dataset did not meet verification requirements, please check your data!"
+        # If all of the data is bad, then raise an error.
+        assert len(bad_data) < len(self.paths_dataframe), (
+            "All examples were excluded from training. Please check your data."
+        )
 
-        rows_to_drop = self.df.index[bad_data]
-        self.df.drop(rows_to_drop, inplace=True)
-
-        # Add folds to paths dataframe
-        self.df = add_folds_to_df(self.df, n_splits=self.args.nfolds)
-
-        self.df.to_csv(self.train_paths_csv, index=False)
+        # Drop bad data from paths dataframe.
+        rows_to_drop = self.paths_dataframe.index[bad_data]
+        self.paths_dataframe.drop(rows_to_drop, inplace=True)
 
     def run(self):
-        text = Text("\nAnalyzing dataset\n")
+        """Run the analyzer to get configuration file."""
+        text = rich.text.Text("\nAnalyzing dataset\n")
         text.stylize("bold")
         console.print(text)
 
-        # QA dataset
+        # Run basic checks on the dataset.
         self.validate_dataset()
 
-        # Get configuration file
-        if self.args.no_preprocess:
+        # Add folds to paths dataframe.
+        self.paths_dataframe = utils.add_folds_to_df(
+            self.paths_dataframe, n_splits=self.mist_arguments.nfolds
+        )
+
+        # Get configuration file.
+        if self.mist_arguments.no_preprocess:
             self.config_if_no_preprocess()
         else:
             self.analyze_dataset()
 
-        # Add default postprocessing arguments
+        # Add default postprocessing arguments.
         transforms = ["remove_small_objects", "top_k_cc", "fill_holes"]
         for transform in transforms:
             self.config[transform] = []
 
-        # Save inferred parameters as json file
-        with open(self.config_file, "w") as outfile:
+        # Save files.
+        self.paths_dataframe.to_csv(
+            self.file_paths["image_mask_paths"], index=False
+        )
+        with open(
+            self.file_paths["configuration"], "w", encoding="utf-8"
+        ) as outfile:
             json.dump(self.config, outfile, indent=2)

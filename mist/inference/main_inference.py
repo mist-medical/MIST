@@ -1,7 +1,6 @@
 import os
 import gc
 import json
-import pdb
 
 import ants
 import pandas as pd
@@ -24,15 +23,13 @@ from mist.data_loading.dali_loader import (
 
 from mist.runtime.utils import (
     read_json_file,
-    convert_dict_to_df, 
-    get_flip_axes, 
-    create_empty_dir, 
+    convert_dict_to_df,
+    get_flip_axes,
+    create_empty_dir,
     get_fg_mask_bbox,
     decrop_from_fg,
     get_progress_bar,
     npy_fix_labels,
-    ants_to_sitk,
-    sitk_to_ants
 )
 
 from mist.preprocess_data.preprocess import (
@@ -80,6 +77,9 @@ def get_sw_prediction(image, model, patch_size, overlap, blend_mode, tta):
 def back_to_original_space(pred, og_ants_img, config, fg_bbox):
     pred = ants.from_numpy(data=pred)
 
+    # Set spacing to target spacing.
+    pred.set_spacing(config["target_spacing"])
+
     # Resample prediction
     # Enforce size for cropped images
     if fg_bbox is not None:
@@ -102,7 +102,7 @@ def back_to_original_space(pred, og_ants_img, config, fg_bbox):
     pred = ants.reorient_image2(pred, og_orientation)
     pred.set_direction(og_ants_img.direction)
     pred.set_origin(og_ants_img.origin)
-    
+
     # Appropriately pad back to original size
     if fg_bbox is not None:
         pred = decrop_from_fg(pred, fg_bbox)
