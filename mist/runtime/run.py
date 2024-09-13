@@ -1,6 +1,6 @@
+"""Training class for MIST."""
 import os
 import json
-import ants
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -27,12 +27,10 @@ from monai.inferers import sliding_window_inference
 from mist.data_loading.dali_loader import (
     get_training_dataset,
     get_validation_dataset,
-    get_test_dataset
 )
 
-from mist.models.get_model import get_model, load_model_from_config, configure_pretrained_model
+from mist.models.get_model import get_model, configure_pretrained_model
 from mist.runtime.loss import get_loss, DiceCELoss, VAELoss
-from mist.inference.main_inference import predict_single_example
 
 from mist.runtime.utils import (
     read_json_file,
@@ -41,7 +39,6 @@ from mist.runtime.utils import (
     Mean,
     create_model_config_file,
     create_pretrained_config_file,
-    get_progress_bar,
     AlphaSchedule,
 )
 
@@ -168,6 +165,15 @@ class Trainer:
                                                                                       random_state=self.args.seed_val)
 
                 train_dtms = None
+
+            # The number of validation images must be greater than or equal to
+            # the number of GPUs used for training.
+            if len(val_images) < world_size:
+                raise ValueError(
+                    f"Validation set size of {len(val_images)} is too small "
+                    f"for {world_size} GPUs. Please increase the validation "
+                    "set size or reduce the number of GPUs."
+                )
 
             # Get number of validation steps per epoch
             # Divide by world size since this dataset is sharded across all GPUs
