@@ -56,11 +56,11 @@ class Analyzer:
         bbox_df = pd.DataFrame(
             columns=[
                 "id",
-                "x_start", 
+                "x_start",
                 "x_end",
-                "y_start", 
+                "y_start",
                 "y_end",
-                "z_start", 
+                "z_start",
                 "z_end",
                 "x_og_size",
                 "y_og_size",
