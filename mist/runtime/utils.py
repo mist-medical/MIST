@@ -1,6 +1,7 @@
 """Utility functions for MIST."""
 import json
 import os
+import glob
 import random
 import warnings
 from typing import Any, Dict, Tuple, List
@@ -152,19 +153,27 @@ def get_progress_bar(task_name: str) -> Progress:
 
 
 def get_files_list(path: str) -> List[str]:
-    """Get list of files in a directory.
+    """Get list of files with their full path in a directory.
     
     Args:
         path: Path to directory.
     
     Returns:
-        files_list: List of files in the directory.
+        files_list: List of files in the directory with their full file path.
     """
-    files_list = []
-    for root, _, files in os.walk(path, topdown=False):
-        for name in files:
-            files_list.append(os.path.join(root, name))
-    return files_list
+    return glob.glob(os.path.join(path, '*'))
+
+
+def listdir_with_no_hidden_files(path: str) -> List[str]:
+    """Get list of files in a directory without hidden files.
+
+    Args:
+        path: Path to directory.
+
+    Returns:
+        List of files in the directory without hidden files.
+    """
+    return [f for f in os.listdir(path) if not f.startswith('.')]
 
 
 def has_test_data(dataset_json_path: str) -> bool:
@@ -214,7 +223,7 @@ def get_files_df(path_to_dataset_json: str, train_or_test: str) -> pd.DataFrame:
     )
 
     # Get the list of patient IDs.
-    patient_ids = os.listdir(base_directory)
+    patient_ids = listdir_with_no_hidden_files(base_directory)
 
     for patient_id in patient_ids:
         row_data_as_dictionary["id"] = patient_id
@@ -248,7 +257,11 @@ def add_folds_to_df(df, n_splits=5):
             that given fold.
     """
     # Get folds for k-fold cross validation.
-    kfold = KFold(n_splits=5, shuffle=True, random_state=42)
+    kfold = KFold(
+        n_splits=n_splits,
+        shuffle=True,
+        random_state=42
+    )
 
     splits = kfold.split(list(range(len(df))))
 
@@ -270,7 +283,6 @@ def add_folds_to_df(df, n_splits=5):
 
 
 def convert_dict_to_df(patients):
-    """Converts a dictionary"""
     columns = ["id"]
 
     ids = list(patients.keys())

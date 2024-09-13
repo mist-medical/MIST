@@ -32,14 +32,15 @@ def main(args):
     set_warning_levels()
 
     # Evaluate predictions
-    evaluate(args.config,
-             args.paths,
-             args.preds_dir,
-             args.output_csv,
-             args.metrics,
-             args.normalize_hd,
-             args.use_native_spacing,
-             args.surf_dice_tol)
+    evaluate(
+        args.config,
+        args.paths,
+        args.preds_dir,
+        args.output_csv,
+        args.metrics,
+        args.use_native_spacing,
+        args.surf_dice_tol
+    )
 
 
 def mist_eval_entry():
