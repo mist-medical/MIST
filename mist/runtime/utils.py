@@ -248,7 +248,11 @@ def add_folds_to_df(df, n_splits=5):
             that given fold.
     """
     # Get folds for k-fold cross validation.
-    kfold = KFold(n_splits=5, shuffle=True, random_state=42)
+    kfold = KFold(
+        n_splits=n_splits,
+        shuffle=True,
+        random_state=42
+    )
 
     splits = kfold.split(list(range(len(df))))
 
@@ -270,7 +274,6 @@ def add_folds_to_df(df, n_splits=5):
 
 
 def convert_dict_to_df(patients):
-    """Converts a dictionary"""
     columns = ["id"]
 
     ids = list(patients.keys())
