@@ -268,7 +268,7 @@ class Analyzer:
                         analyzer_constants.AnalyzeConstants.PRINT_FLOATING_POINT_PRECISION
                     )
                     messages += (
-                        f"In {print_patient_id}: Images are too large,\n"
+                        f"In {print_patient_id}: Images are too large, "
                         f"coarsening target spacing to {print_target_spacing}\n"
                     )
 
