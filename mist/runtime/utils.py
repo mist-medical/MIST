@@ -253,7 +253,7 @@ def get_files_df(path_to_dataset_json: str, train_or_test: str) -> pd.DataFrame:
     return df
 
 
-def add_folds_to_df(df, n_splits=5):
+def add_folds_to_df(df: pd.DataFrame, n_splits: int=5):
     """Add folds to the dataframe for k-fold cross-validation.
 
     Args:
