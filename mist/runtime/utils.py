@@ -118,9 +118,6 @@ def get_float32_example_memory_size(
 
 def set_warning_levels() -> None:
     """Set warning levels to ignore warnings."""
-    warnings.simplefilter(
-        action="ignore", category=np.VisibleDeprecationWarning
-    )
     warnings.simplefilter(action="ignore", category=FutureWarning)
     warnings.simplefilter(action="ignore", category=RuntimeWarning)
     warnings.simplefilter(action="ignore", category=UserWarning)
@@ -193,54 +190,67 @@ def get_files_df(path_to_dataset_json: str, train_or_test: str) -> pd.DataFrame:
     """Get dataframe with file paths for each patient in the dataset.
 
     Args:
-        path_to_dataset_json: Path to dataset json file with the dataset
+        path_to_dataset_json: Path to dataset json file with dataset
             information.
         train_or_test: "train" or "test". If "train", the dataframe will have
-            columns for the mask and images. If "test", the dataframe will have
-            columns for the images.
-    
+            columns for the mask and images. If "test", the dataframe
+            will have columns for the images.
+
     Returns:
-        df: Dataframe with file paths for each patient in the dataset.
+        DataFrame with file paths for each patient in the dataset.
     """
     # Read JSON file with dataset parameters.
-    dataset_information = read_json_file(path_to_dataset_json)
+    dataset_info = read_json_file(path_to_dataset_json)
 
-    # Get the names of the columns in the dataframe.
-    filename_dictionary = {}
+    # Determine columns based on the mode (train or test).
+    columns = ["id"]
     if train_or_test == "train":
-        filename_dictionary["mask"] = dataset_information["mask"]
+        columns.append("mask")
+    columns.extend(dataset_info["images"].keys())
 
-    for key in dataset_information["images"].keys():
-        filename_dictionary[key] = dataset_information["images"][key]
+    # Base directory for the dataset.
+    base_dir = os.path.abspath(dataset_info[f"{train_or_test}-data"])
 
-    dataframe_columns = ["id"] + list(filename_dictionary.keys())
-    paths_dataframe = pd.DataFrame(columns=dataframe_columns)
-    row_data_as_dictionary = dict.fromkeys(dataframe_columns)
+    # Initialize an empty DataFrame with the determined columns.
+    df = pd.DataFrame(columns=columns)
 
-    # Get the base directory for the dataset.
-    base_directory = os.path.abspath(
-        dataset_information[f"{train_or_test}-data"]
-    )
+    # Get list of patient IDs.
+    patient_ids = listdir_with_no_hidden_files(base_dir)
 
-    # Get the list of patient IDs.
-    patient_ids = listdir_with_no_hidden_files(base_directory)
-
+    # Iterate over each patient and get the file paths for each patient.
     for patient_id in patient_ids:
-        row_data_as_dictionary["id"] = patient_id
-        path_to_patient_data = os.path.join(base_directory, patient_id)
-        patient_files = get_files_list(path_to_patient_data)
+        # Initialize row data with 'id' and empty values for other columns.
+        row_data = {"id": patient_id}
 
-        for file in patient_files:
-            for image_type in filename_dictionary:
-                for image_identifying_string in filename_dictionary[image_type]:
-                    if image_identifying_string in file:
-                        row_data_as_dictionary[image_type] = file
+        # Path to patient data.
+        patient_dir = os.path.join(base_dir, patient_id)
+        patient_files = get_files_list(patient_dir)
 
-        paths_dataframe = pd.concat(
-            [paths_dataframe, pd.DataFrame(row_data_as_dictionary, index=[0])],
+        # Map file paths to their respective columns.
+        for image_type, identifying_strings in dataset_info["images"].items():
+            matching_file = next(
+                (file for file in patient_files
+                 if any(s in file for s in identifying_strings)), None
+            )
+            if matching_file:
+                row_data[image_type] = matching_file
+
+        # Add the mask file if in training mode.
+        if train_or_test == "train":
+            mask_file = next(
+                (file for file in patient_files
+                 if any(s in file for s in dataset_info["mask"])), None
+            )
+            if mask_file:
+                row_data["mask"] = mask_file
+
+        # Append the row to the DataFrame.
+        df = pd.concat(
+            [df, pd.DataFrame([row_data], columns=columns)],
             ignore_index=True
         )
-    return paths_dataframe
+
+    return df
 
 
 def add_folds_to_df(df, n_splits=5):
@@ -256,46 +266,70 @@ def add_folds_to_df(df, n_splits=5):
             patient ID is the fold that the patient belongs to the test set for
             that given fold.
     """
-    # Get folds for k-fold cross validation.
-    kfold = KFold(
-        n_splits=n_splits,
-        shuffle=True,
-        random_state=42
-    )
+    # Initialize KFold object
+    kfold = KFold(n_splits=n_splits, shuffle=True, random_state=42)
 
-    splits = kfold.split(list(range(len(df))))
+    # Initialize an empty 'folds' column.
+    df.insert(loc=1, column="fold", value=[None] * len(df))
 
-    # Extract folds so that users can specify folds to train on.
-    test_splits = []
-    for split in splits:
-        test_splits.append(split[1])
+    # Assign fold numbers
+    for fold_number, (_, test_indices) in enumerate(kfold.split(df)):
+        df.loc[test_indices, "fold"] = fold_number
 
-    folds = {}
-    for i in range(n_splits):
-        for j in range(len(df)):
-            if j in test_splits[i]:
-                folds[j] = i
+    # Sort the dataframe by the 'fold' column
+    df = df.sort_values("fold").reset_index(drop=True)
 
-    folds = pd.Series(data=folds, index=list(folds.keys()), name="fold")
-    df.insert(loc=1, column="fold", value=folds)
-    df = df.sort_values("fold", ignore_index=True)
     return df
 
 
-def convert_dict_to_df(patients):
+def convert_dict_to_df(patients: Dict[str, Dict[str, str]]) -> pd.DataFrame:
+    """Converts a nested dictionary of patient data into a pandas DataFrame.
+
+    Args:
+        patients: A dictionary where each key is a patient ID, and each value
+        is another dictionary containing image keys and corresponding values.
+
+    Returns:
+        df: A DataFrame with columns for patient IDs and image data.
+
+    Raises:
+        ValueError: If the input dictionary is empty or if any patient data keys
+        do not match the keys from the first patient.
+    """
+    # Check if the patients dictionary is empty
+    if not patients:
+        raise ValueError(
+            "The 'patients' dictionary is empty. Cannot convert to DataFrame."
+        )
+
+    # Initialize columns with 'id'.
     columns = ["id"]
 
-    ids = list(patients.keys())
-    image_keys = list(patients[ids[0]].keys())
-    columns += image_keys
+    # Get list of patient IDs
+    patient_ids = list(patients.keys())
 
+    # Get image keys from the first patient's data.
+    first_patient_images = set(patients[patient_ids[0]].keys())
+    columns.extend(first_patient_images)
+
+    # Create an empty DataFrame with the desired columns.
     df = pd.DataFrame(columns=columns)
 
-    for i in range(len(patients)):
-        row_dict = {"id": ids[i]}
-        for image in image_keys:
-            row_dict[image] = patients[ids[i]][image]
-        df = pd.concat([df, pd.DataFrame(row_dict, index=[0])], ignore_index=True)
+    # Populate DataFrame with patient data.
+    for patient_id in patient_ids:
+        patient_data = {"id": patient_id}
+
+        # Check if the keys in the current patient's data match the expected
+        # keys.
+        current_keys = set(patient_data.keys())
+        if current_keys != set(columns):
+            raise ValueError(
+                f"Data keys for patient '{patient_id}' do not match expected"
+                " keys."
+            )
+
+        df = pd.concat([df, pd.DataFrame([patient_data])], ignore_index=True)
+
     return df
 
 
