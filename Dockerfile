@@ -1,5 +1,4 @@
-ARG FROM_IMAGE_NAME=pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime
-FROM ${FROM_IMAGE_NAME}
+FROM pytorch/pytorch:2.4.0-cuda12.4-cudnn9-runtime
 
 # Set environment variables for non-interactive installation.
 ENV DEBIAN_FRONTEND=noninteractive
