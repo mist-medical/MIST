@@ -1,11 +1,11 @@
+"""Evaluate predictions against ground truth masks."""
 import os
 import json
 import ants
 import pandas as pd
 import numpy as np
-import SimpleITK as sitk
 
-# Rich progres bar
+# Rich progress bar
 from rich.console import Console
 from rich.text import Text
 
@@ -21,7 +21,8 @@ from mist.runtime.utils import (
     init_results_df,
     compute_results_stats,
     convert_dict_to_df,
-    get_progress_bar
+    get_progress_bar,
+    listdir_with_no_hidden_files
 )
 
 
@@ -126,7 +127,7 @@ def evaluate(config_json, paths, source_dir, output_csv, metrics, use_native_spa
     results_df = init_results_df(config, metrics)
 
     # Get predictions from source directory
-    predictions = os.listdir(source_dir)
+    predictions = listdir_with_no_hidden_files(source_dir)
 
     # Set up rich progress bar and error logging
     eval_progress = get_progress_bar("Evaluating")
