@@ -76,10 +76,10 @@ def is_image_3d(header: Dict[str, Any]) -> bool:
 
 
 def get_resampled_image_dimensions(
-        original_dimensions: Tuple[int],
-        original_spacing: Tuple[float],
-        target_spacing: Tuple[float]
-) -> Tuple[int]:
+        original_dimensions: Tuple[int, int, int],
+        original_spacing: Tuple[float, float, float],
+        target_spacing: Tuple[float, float, float]
+) -> Tuple[int, int, int]:
     """Get new image dimensions after resampling.
 
     Args:
@@ -99,7 +99,7 @@ def get_resampled_image_dimensions(
 
 
 def get_float32_example_memory_size(
-        dimensions: Tuple[int],
+        dimensions: Tuple[int, int, int],
         number_of_channels: int,
         number_of_labels: int,
 ) -> int:
@@ -652,7 +652,13 @@ def get_new_dims(img_sitk, target_spacing):
     return new_size
 
 
-def aniso_intermediate_resample(img_sitk, new_size, target_spacing, low_res_axis):
+def aniso_intermediate_resample(
+        img_sitk,
+        new_size,
+        target_spacing,
+        low_res_axis
+    ):
+    """Intermediate resampling step for anisotropic images."""
     temp_spacing = list(img_sitk.GetSpacing())
     temp_spacing[low_res_axis] = target_spacing[low_res_axis]
 
