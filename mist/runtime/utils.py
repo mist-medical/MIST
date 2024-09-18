@@ -3,16 +3,18 @@ import json
 import os
 import glob
 import random
+import argparse
 import warnings
-from typing import Any, Dict, Tuple, List
+from typing import Any, Dict, Tuple, List, Callable
 
 import ants
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import SimpleITK as sitk
 import skimage
 import torch
-import torch.nn as nn
+from torch import nn
 from rich.progress import (BarColumn, MofNCompleteColumn, Progress, TextColumn,
                            TimeElapsedColumn)
 from scipy import ndimage
@@ -20,17 +22,32 @@ from skimage.measure import label
 from sklearn.model_selection import KFold
 
 
-def read_json_file(json_file):
+def read_json_file(json_file: str) -> Dict[str, Any]:
     """Read json file and output it as a dictionary.
-    
+
     Args:
         json_file: Path to json file.
+
     Returns:
         json_data: Dictionary with json file data.
     """
     with open(json_file, "r", encoding="utf-8") as file:
         json_data = json.load(file)
     return json_data
+
+
+def write_json_file(json_file: str, json_data: Dict[str, Any]) -> None:
+    """Write dictionary as json file.
+
+    Args:
+        json_file: Path to json file.
+        json_data: Dictionary with json data.
+
+    Returns:
+        None.
+    """
+    with open(json_file, "w", encoding="utf-8") as file:
+        json.dump(json_data, file, indent=2)
 
 
 def compare_headers(
@@ -253,7 +270,7 @@ def get_files_df(path_to_dataset_json: str, train_or_test: str) -> pd.DataFrame:
     return df
 
 
-def add_folds_to_df(df: pd.DataFrame, n_splits: int=5):
+def add_folds_to_df(df: pd.DataFrame, n_splits: int=5) -> pd.DataFrame:
     """Add folds to the dataframe for k-fold cross-validation.
 
     Args:
@@ -333,65 +350,145 @@ def convert_dict_to_df(patients: Dict[str, Dict[str, str]]) -> pd.DataFrame:
     return df
 
 
-def get_lr_schedule(args, optimizer):
-    if args.lr_scheduler == "constant":
+def get_lr_schedule(
+        mist_arguments: argparse.Namespace,
+        optimizer: torch.optim.Optimizer
+    ) -> torch.optim.lr_scheduler._LRScheduler:
+    """Get learning rate schedule based on user input.
+
+    Args:
+        mist_arguments: Command line arguments.
+        optimizer: Optimizer for which the learning rate schedule is created.
+
+    Returns:
+        lr_scheduler: Learning rate scheduler.
+
+    Raises:
+        ValueError: If the learning rate scheduler type is not recognized. To
+        add a new learning rate scheduler, add a new if statement and
+        add the corresponding scheduler name to runtime/args.py.
+    """
+    if mist_arguments.lr_scheduler == "constant":
         return torch.optim.lr_scheduler.ConstantLR(optimizer, factor=1)
-    elif args.lr_scheduler == "polynomial":
-        return torch.optim.lr_scheduler.PolynomialLR(optimizer,
-                                                     total_iters=args.steps_per_epoch*args.epochs,
-                                                     power=0.9)
-    elif args.lr_scheduler == "cosine_warm_restarts":
-        return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
-                                                                    T_0=args.cosine_first_steps,
-                                                                    T_mult=2)
-    elif args.lr_scheduler == "cosine":
-        return torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
-                                                          T_max=args.steps_per_epoch*args.epochs)
-    elif args.lr_scheduler == "exponential":
-        return torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.exp_decay)
-    else:
-        raise ValueError("Invalid learning rate scheduler")
+    if mist_arguments.lr_scheduler == "polynomial":
+        return torch.optim.lr_scheduler.PolynomialLR(
+            optimizer,
+            total_iters=mist_arguments.steps_per_epoch * mist_arguments.epochs,
+            power=0.9
+        )
+    if mist_arguments.lr_scheduler == "cosine_warm_restarts":
+        return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            optimizer,
+            T_0=mist_arguments.cosine_first_steps,
+            T_mult=2
+        )
+    if mist_arguments.lr_scheduler == "cosine":
+        return torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=mist_arguments.steps_per_epoch * mist_arguments.epochs
+        )
+    if mist_arguments.lr_scheduler == "exponential":
+        return torch.optim.lr_scheduler.ExponentialLR(
+            optimizer, gamma=mist_arguments.exp_decay
+        )
+    raise ValueError(
+        "Received invalid learning rate scheduler type "
+        f"{mist_arguments.lr_scheduler}."
+    )
 
 
-def get_optimizer(args, model):
-    if args.optimizer == "sgd":
-        return torch.optim.SGD(params=model.parameters(), lr=args.learning_rate, momentum=args.sgd_momentum)
-    elif args.optimizer == "adam":
-        return torch.optim.Adam(params=model.parameters(), lr=args.learning_rate)
-    elif args.optimizer == "adamw":
-        return torch.optim.AdamW(params=model.parameters(), lr=args.learning_rate)
-    else:
-        raise ValueError("Invalid optimizer")
+def get_optimizer(
+        mist_arguments: argparse.Namespace,
+        model: torch.nn.Module
+    ) -> torch.optim.Optimizer:
+    """Get pytorch optimizer based on user input.
+
+    Args:
+        mist_arguments: Command line arguments.
+        model: Pytorch model whose parameters will be optimized.
+
+    Returns:
+        Optimizer for the model parameters.
+
+    Raises:
+        ValueError: If the optimizer type is not recognized. To add a new
+        optimizer, add a new if statement and add the corresponding
+        optimizer name to runtime/args.py.
+    """
+    if mist_arguments.optimizer == "sgd":
+        return torch.optim.SGD(
+            params=model.parameters(),
+            lr=mist_arguments.learning_rate,
+            momentum=mist_arguments.sgd_momentum
+    )
+    if mist_arguments.optimizer == "adam":
+        return torch.optim.Adam(
+            params=model.parameters(), lr=mist_arguments.learning_rate
+        )
+    if mist_arguments.optimizer == "adamw":
+        return torch.optim.AdamW(
+            params=model.parameters(), lr=mist_arguments.learning_rate
+        )
+    raise ValueError(
+        f"Received invalid optimizer type {mist_arguments.optimizer}."
+    )
 
 
 class Mean(nn.Module):
+    """Simple moving average module for loss tracking.
+
+    This class tracks the mean of a series of values (e.g., loss values) over
+    time. It is reset after each epoch.
+
+    Attributes:
+        count: Number of values added.
+        total: Sum of values added.
+    """
     def __init__(self):
-        super(Mean, self).__init__()
+        super().__init__()
         self.count = 0
         self.total = 0
 
-    def forward(self, loss):
+    def forward(self, loss: float) -> float:
+        """Update the mean with a new loss value."""
         self.total += loss
         self.count += 1
         return self.result()
 
-    def result(self):
+    def result(self) -> float:
+        """Return the current mean."""
         return self.total / self.count if self.count != 0 else 0.0
 
     def reset_states(self):
+        """Reset the mean tracker."""
         self.count = 0
         self.total = 0
 
 
-def set_visible_devices(args):
-    # Select GPU(s) for training
-    if len(args.gpus) > 1:
-        n_gpus = len(args.gpus)
-        visible_devices = ",".join([str(args.gpus[j]) for j in range(len(args.gpus))])
-    elif len(args.gpus) == 1 and args.gpus[0] != -1:
-        n_gpus = len(args.gpus)
-        visible_devices = str(args.gpus[0])
-    elif len(args.gpus) == 1 and args.gpus[0] == -1:
+def set_visible_devices(mist_arguments: argparse.Namespace) -> int:
+    """Set visible devices for training based on user input.
+
+    This function determines how many GPUs are available for training based on
+    the command line arguments and sets the appropriate environment variable. In
+    case no GPUs are specified, it will use all available GPUs.
+
+    Args:
+        args: Command line arguments.
+
+    Returns:
+        n_gpus: Number of GPUs available for training.
+    """
+    # Select GPU(s) for training.
+    length_of_gpu_argument = len(mist_arguments.gpus)
+    if length_of_gpu_argument > 1:
+        n_gpus = length_of_gpu_argument
+        visible_devices = ",".join(
+            [str(mist_arguments.gpus[j]) for j in range(length_of_gpu_argument)]
+        )
+    elif length_of_gpu_argument == 1 and mist_arguments.gpus[0] != -1:
+        n_gpus = length_of_gpu_argument
+        visible_devices = str(mist_arguments.gpus[0])
+    elif length_of_gpu_argument == 1 and mist_arguments.gpus[0] == -1:
         n_gpus = torch.cuda.device_count()
         visible_devices = ",".join([str(j) for j in range(n_gpus)])
     else:
@@ -402,16 +499,46 @@ def set_visible_devices(args):
     return n_gpus
 
 
-def set_seed(my_seed):
+def set_seed(my_seed: int) -> None:
+    """Set random seed for reproducibility.
+
+    Args:
+        my_seed: Seed value for random number generation.
+
+    Returns:
+        None
+    """
     random.seed(my_seed)
     np.random.seed(my_seed)
     torch.manual_seed(my_seed)
     torch.cuda.manual_seed(my_seed)
 
 
-def create_model_config_file(args, config, data, output):
-    model_config = {}
+def create_model_config_file(
+        args: argparse.Namespace,
+        config: Dict[str, Any],
+        data: Dict[str, Any],
+        output: str,
+) -> Dict[str, Any]:
+    """Create model configuration file.
 
+    This function generates a JSON file containing the model configuration based
+    on the provided arguments, configuration, and data. This file is used to
+    store important model parameters for reproducibility and to deploy the model
+    for inference.
+
+    Args:
+        args: Command line arguments.
+        config: Configuration dictionary containing the results of the MIST
+            analysis pipeline.
+        data: Description of dataset which is used as the --data argument for
+            MIST. We use this to collect the number of channels and classes.
+        output: Path to the output JSON file.
+
+    Returns:
+        model_config: Dictionary containing the model configuration.
+    """
+    model_config = {}
     model_config["model_name"] = args.model
     model_config["n_channels"] = int(len(data["images"]))
     model_config["n_classes"] = int(len(data["labels"]))
@@ -423,119 +550,247 @@ def create_model_config_file(args, config, data, output):
     model_config["vae_reg"] = args.vae_reg
     model_config["use_res_block"] = args.use_res_block
 
-    with open(output, "w", encoding="utf-8") as outfile:
-        json.dump(model_config, outfile, indent=2)
+    # Save model configuration to JSON file.
+    write_json_file(output, model_config)
 
     return model_config
 
 
-def create_pretrained_config_file(pretrained_model_path, data, output):
+def create_pretrained_config_file(
+        pretrained_model_path: str,
+        data: Dict[str, Any],
+        output: str
+) -> Dict[str, Any]:
+    """Create pretrained model configuration file.
+
+    This function reads the configuration of a pretrained model and updates
+    the number of channels and classes based on the provided dataset
+    description. The updated configuration is then saved to a JSON file.
+
+    Args:
+        pretrained_model_path: Path to the pretrained model directory.
+        data: Description of dataset which is used as the --data argument for
+            MIST. We use this to collect the number of channels and classes.
+        output: Path to the output JSON file.
+
+    Returns:
+        model_config: Dictionary containing the model configuration.
+    """
+    # Get path to pretrained model configuration.
     model_config_path = os.path.join(pretrained_model_path, "model_config.json")
 
-    # Get model configuration
-    with open(model_config_path, "r") as file:
-        model_config = json.load(file)
+    # Read model configuration.
+    model_config = read_json_file(model_config_path)
 
+    # Update number of channels and classes.
     model_config["n_channels"] = int(len(data["images"]))
     model_config["n_classes"] = int(len(data["labels"]))
 
-    with open(output, "w") as outfile:
-        json.dump(model_config, outfile, indent=2)
+    write_json_file(output, model_config)
 
     return model_config
 
 
-def get_flip_axes():
+def get_flip_axes() -> List[List[int]]:
+    """Get axes for flipping images during test time augmentation.
+
+    Returns:
+        List of axes for flipping.
+    """
     return [[2], [3], [4], [2, 3], [2, 4], [3, 4], [2, 3, 4]]
 
 
-def init_results_df(config, metrics):
+def init_results_df(
+        config: Dict[str, Any],
+        metrics: List[str]
+) -> pd.DataFrame:
+    """Initialize results dataframe.
+
+    Args:
+        config: Configuration dictionary.
+        metrics: List of metrics to be included in the results.
+
+    Returns:
+        results_df: Initialized results dataframe. This will have columns for
+        each metric for each class.
+    """
     # Initialize new results dataframe
     results_cols = ["id"]
     for metric in metrics:
         for key in config["final_classes"].keys():
-            results_cols.append("{}_{}".format(key, metric))
+            results_cols.append(f"{key}_{metric}")
 
     results_df = pd.DataFrame(columns=results_cols)
     return results_df
 
 
-def compute_results_stats(results_df):
-    # Get final statistics
-    mean_row = {"id": "Mean"}
-    std_row = {"id": "Std"}
-    percentile50_row = {"id": "Median"}
-    percentile25_row = {"id": "25th Percentile"}
-    percentile75_row = {"id": "75th Percentile"}
-    for col in results_df.columns[1:]:
-        mean_row[col] = np.nanmean(results_df[col])
-        std_row[col] = np.nanstd(results_df[col])
-        percentile25_row[col] = np.nanpercentile(results_df[col], 25)
-        percentile50_row[col] = np.nanpercentile(results_df[col], 50)
-        percentile75_row[col] = np.nanpercentile(results_df[col], 75)
+def compute_results_stats(results_df: pd.DataFrame) -> pd.DataFrame:
+    """Compute statistics for results dataframe.
 
-    results_df = pd.concat([results_df, pd.DataFrame(mean_row, index=[0])], ignore_index=True)
-    results_df = pd.concat([results_df, pd.DataFrame(std_row, index=[0])], ignore_index=True)
-    results_df = pd.concat([results_df, pd.DataFrame(percentile25_row, index=[0])], ignore_index=True)
-    results_df = pd.concat([results_df, pd.DataFrame(percentile50_row, index=[0])], ignore_index=True)
-    results_df = pd.concat([results_df, pd.DataFrame(percentile75_row, index=[0])], ignore_index=True)
+    These statistics include mean, standard deviation, and percentiles for each
+    metric and class in the results dataframe. These will appear in the bottom
+    five rows of the dataframe.
+
+    Args:
+        results_df: Dataframe containing the metrics for each class for each
+            patient.
+
+    Returns:
+        results_df: Updated results dataframe with statistics added at the 
+            bottom five rows of the dataframe.
+    """
+    # Define the labels for the statistical rows.
+    stats_labels = [
+        "Mean", "Std", "25th Percentile", "Median", "75th Percentile"
+    ]
+    stats_functions = [
+        np.nanmean,
+        np.nanstd,
+        lambda x: np.nanpercentile(x, 25),
+        lambda x: np.nanpercentile(x, 50),
+        lambda x: np.nanpercentile(x, 75),
+    ]
+
+    # Compute statistics for each column and create corresponding rows.
+    stats_rows = [
+        {
+            "id": label, **{
+                col: func(results_df[col]) for col in results_df.columns[1:]
+                }
+        }
+        for label, func in zip(stats_labels, stats_functions)
+    ]
+
+    # Append all statistics rows at once.
+    results_df = pd.concat(
+        [results_df, pd.DataFrame(stats_rows)], ignore_index=True
+    )
+
     return results_df
 
 
-def ants_to_sitk(img_ants):
+def ants_to_sitk(img_ants: ants.core.ants_image.ANTsImage) -> sitk.Image:
+    """Convert ANTs image to SimpleITK image.
+
+    Args:
+        img_ants: ANTs image object.
+
+    Returns:
+        img_sitk: SimpleITK image object.
+    """
+    # Get spacing, origin, and direction from ANTs image.
     spacing = img_ants.spacing
     origin = img_ants.origin
     direction = tuple(img_ants.direction.flatten())
 
+    # Convert ANTs image to numpy array and create SimpleITK image.
     img_sitk = sitk.GetImageFromArray(img_ants.numpy().T)
+
+    # Set spacing, origin, and direction for SimpleITK image.
     img_sitk.SetSpacing(spacing)
     img_sitk.SetOrigin(origin)
     img_sitk.SetDirection(direction)
-
     return img_sitk
 
 
-def sitk_to_ants(img_sitk):
+def sitk_to_ants(img_sitk: sitk.Image) -> ants.core.ants_image.ANTsImage:
+    """Convert SimpleITK image to ANTs image.
+
+    Args:
+        img_sitk: SimpleITK image object.
+
+    Returns:
+        img_ants: ANTs image object.
+    """
+    # Get spacing, origin, and direction from SimpleITK image.
     spacing = img_sitk.GetSpacing()
     origin = img_sitk.GetOrigin()
     direction_sitk = img_sitk.GetDirection()
     dim = int(np.sqrt(len(direction_sitk)))
     direction = np.reshape(np.array(direction_sitk), (dim, dim))
 
+    # Convert SimpleITK image to numpy array and create ANTs image.
     img_ants = ants.from_numpy(sitk.GetArrayFromImage(img_sitk).T)
+
+    # Set spacing, origin, and direction for ANTs image.
     img_ants.set_spacing(spacing)
     img_ants.set_origin(origin)
     img_ants.set_direction(direction)
-
     return img_ants
 
 
-def get_largest_cc(mask_npy):
-    # Get connected components
+def get_largest_cc(mask_npy: npt.NDArray[np.uint8]) -> npt.NDArray[np.uint8]:
+    """Get the largest connected component from a binary mask.
+
+    Args:
+        mask_npy: Binary mask as a numpy array.
+
+    Returns:
+        mask_npy: Binary mask with only the largest connected component.
+    """
+    # Get connected components.
     labels = label(mask_npy)
 
-    # Assume at least one component
+    # Assume at least one component.
     if labels.max() > 0:
         mask_npy = labels == np.argmax(np.bincount(labels.flat)[1:]) + 1
     return mask_npy
 
 
-def remove_small_objects(mask_npy, **kwargs):
-    # Get connected components
+def remove_small_objects(
+        mask_npy: npt.NDArray[np.uint8],
+        **kwargs
+) -> npt.NDArray[np.uint8]:
+    """
+    Removes small connected objects in the mask based on a threshold.
+
+    Args:
+        mask_npy: Input binary mask as a numpy array.
+        **kwargs: Additional keyword arguments. Requires
+            'small_object_threshold' to specify the minimum size for objects to
+            retain.
+
+    Returns:
+        mask_npy: Updated mask with small objects removed.
+    """
+    # Get connected components.
     labels = label(mask_npy)
 
-    # Assume at least one component
+    # Assume at least one component.
     if labels.max() > 0:
-        # Remove small objects of size lower than our threshold
-        mask_npy = skimage.morphology.remove_small_objects(mask_npy.astype("bool"),
-                                                           min_size=kwargs["small_object_threshold"])
+        # Remove small objects smaller than the threshold.
+        mask_npy = skimage.morphology.remove_small_objects(
+            mask_npy.astype(bool),
+            min_size=kwargs["small_object_threshold"]
+        )
     return mask_npy
 
 
-def get_top_k_components(mask_npy, **kwargs):
-    # Morphological cleaning
+def get_top_k_components(
+        mask_npy: npt.NDArray[np.uint8],
+        **kwargs
+) -> npt.NDArray[np.uint8]:
+    """Get the top k largest connected components from a binary mask.
+
+    Args:
+        mask_npy: Input binary mask as a numpy array.
+        **kwargs: Additional keyword arguments. Requires
+            'top_k' to specify the number of largest components to retain. Other
+            optional arguments include 'morph_cleanup' and
+            'morph_cleanup_iterations' for morphological operations. If 
+            'morph_cleanup' is True, 'morph_cleanup_iterations' iterations of
+            binary erosion will be applied before taking the top k components.
+            After that, the same number of iterations of dilation will be
+            applied to the remaining components in the binary mask.
+
+    Returns:
+        mask_npy: Updated mask with only the top k components.
+    """
+    # Morphological cleaning.
     if kwargs["morph_cleanup"]:
-        mask_npy = ndimage.binary_erosion(mask_npy, iterations=kwargs["morph_cleanup_iterations"])
+        mask_npy = ndimage.binary_erosion(
+            mask_npy, iterations=kwargs["morph_cleanup_iterations"]
+    )
 
     # Get connected components
     labels = label(mask_npy)
@@ -554,7 +809,26 @@ def get_top_k_components(mask_npy, **kwargs):
     return mask_npy
 
 
-def get_holes(mask_npy, **kwargs):
+def get_holes(
+        mask_npy: npt.NDArray[np.uint8],
+        **kwargs
+) -> npt.NDArray[np.uint8]:
+    """Get holes in a binary mask and apply a label to them.
+
+    This function is an intermediate step for filling holes in multi-label
+    segmentation masks. It identifies holes in the binary mask and returns an
+    image where the holes are the non-zero values. The holes are multiplied by
+    the specified fill label.
+
+    Args:
+        mask_npy: Input binary mask as a numpy array.
+        **kwargs: Additional keyword arguments. Requires 'fill_label' to specify
+            the label to fill the holes with.
+
+    Returns:
+        holes: A numpy array where the non-zero values represent the holes in
+            the input mask. The holes are multiplied by the fill label.
+    """
     labels = label(mask_npy)
 
     if labels.max() > 0:
@@ -568,118 +842,262 @@ def get_holes(mask_npy, **kwargs):
     return holes
 
 
-def clean_mask(mask_npy, iterations=2):
+def clean_mask(
+        mask_npy: npt.NDArray[np.uint8],
+        iterations: int=2
+    ) -> npt.NDArray[np.uint8]:
+    """Clean a binary mask by applying morphological operations.
+
+    This function applies binary erosion followed by binary dilation to the
+    input binary mask. It also retains only the largest connected component. The
+    default number of erosion and dilation iterations is set to 2.
+
+    Args:
+        mask_npy: Input binary mask as a numpy array.
+        iterations: Number of iterations for morphological operations.
+
+    Returns:
+        mask_npy: Updated binary mask after cleaning.
+    """
     mask_npy = ndimage.binary_erosion(mask_npy, iterations=iterations)
     mask_npy = get_largest_cc(mask_npy)
     mask_npy = ndimage.binary_dilation(mask_npy, iterations=iterations)
     return mask_npy
 
 
-def group_labels(mask_npy, labels):
-    grouped_labels = np.zeros(mask_npy.shape)
-    for label in labels:
-        grouped_labels += label*(mask_npy == label)
+def group_labels(
+        mask_npy: npt.NDArray[np.uint8],
+        labels_list: List[int]
+) -> npt.NDArray[np.uint8]:
+    """Extract a group of labels from a multi-label mask.
+
+    Args:
+        mask_npy: Input multi-label mask as a numpy array.
+        labels_list: List of labels to group.
+
+    Returns:
+        grouped_labels: A mask with only the specified labels.
+    """
+    # Create a mask where the values in mask_npy match any in labels_list.
+    mask = np.isin(mask_npy, labels_list)
+
+    # Assign corresponding labels to the grouped mask.
+    grouped_labels = mask_npy * mask
     return grouped_labels
 
 
-def get_transform(transform):
-    if transform == "fill_holes":
-        return get_holes
-    elif transform == "remove_small_objects":
-        return remove_small_objects
-    elif transform == "top_k_cc":
-        return get_top_k_components
-    else:
-        raise ValueError("Invalid morphological transform")
+def get_transform(transform: str) -> Callable:
+    """Get the appropriate transformation function based on the input string.
+
+    Args:
+        transform: Name of the transformation to apply.
+
+    Returns:
+        Corresponding transformation function.
+    """
+    transform_dictionary = {
+        "largest_cc": get_largest_cc,
+        "fill_holes": get_holes,
+        "remove_small_objects": remove_small_objects,
+        "top_k_cc": get_top_k_components
+    }
+    return transform_dictionary[transform]
 
 
-def get_fg_mask_bbox(img_ants, patient_id=None):
+def get_fg_mask_bbox(
+        img_ants: ants.core.ants_image.ANTsImage,
+        patient_id: str | None=None,
+) -> Dict[str, str | int]:
+    """Get the bounding box of the foreground mask.
+
+    This function computes the bounding box of the foreground in a 3D image. It
+    uses an Otsu threshold method to create a binary mask and then finds the
+    coordinates of the non-zero elements in the mask to determine the bounding
+    box.
+
+    Args:
+        img_ants: ANTs image object.
+        patient_id: Optional patient ID for identification.
+
+    Returns:
+        fg_bbox: Dictionary containing the bounding box coordinates and original
+        image size.
+    """
+    # Convert ANTs image to numpy array.
     image_npy = img_ants.numpy()
 
-    # Clip image to improve fg bbox
-    lower = np.percentile(image_npy, 33)
-    upper = np.percentile(image_npy, 99.5)
+    # Clip image to remove outliers and improve foreground detection.
+    lower, upper = np.percentile(image_npy, [33, 99.5])
     image_npy = np.clip(image_npy, lower, upper)
 
-    val = skimage.filters.threshold_otsu(image_npy)
-    fg_mask = (image_npy > val)
+    # Apply Otsu threshold to create a binary foreground mask.
+    threshold = skimage.filters.threshold_otsu(image_npy)
+    fg_mask = image_npy > threshold
+
     nz = np.nonzero(fg_mask)
     og_size = img_ants.shape
 
-    if np.sum(fg_mask) > 0:
-        fg_bbox = {"x_start": np.min(nz[0]), "x_end": np.max(nz[0]),
-                   "y_start": np.min(nz[1]), "y_end": np.max(nz[1]),
-                   "z_start": np.min(nz[2]), "z_end": np.max(nz[2]),
-                   "x_og_size": og_size[0],
-                   "y_og_size": og_size[1],
-                   "z_og_size": og_size[2]}
+    # Create the bounding box based on non-zero values.
+    if nz[0].size > 0:
+        fg_bbox = {
+            "x_start": np.min(nz[0]),
+            "x_end": np.max(nz[0]),
+            "y_start": np.min(nz[1]),
+            "y_end": np.max(nz[1]),
+            "z_start": np.min(nz[2]),
+            "z_end": np.max(nz[2]),
+        }
     else:
-        # Fail case if fg_mask is empty
-        fg_bbox = {"x_start": 0, "x_end": og_size[0] - 1,
-                   "y_start": 0, "y_end": og_size[1] - 1,
-                   "z_start": 0, "z_end": og_size[2] - 1,
-                   "x_og_size": og_size[0],
-                   "y_og_size": og_size[1],
-                   "z_og_size": og_size[2]}
+        # If no foreground is detected, use the entire image size as bbox.
+        fg_bbox = {
+            "x_start": 0,
+            "x_end": og_size[0] - 1,
+            "y_start": 0,
+            "y_end": og_size[1] - 1,
+            "z_start": 0,
+            "z_end": og_size[2] - 1,
+        }
 
-    if not (patient_id is None):
-        fg_bbox_with_id = {"id": patient_id}
-        fg_bbox_with_id.update(fg_bbox)
-        fg_bbox = fg_bbox_with_id
+    # Add original image size to the bbox dictionary.
+    fg_bbox.update(
+        {
+            "x_og_size": og_size[0],
+            "y_og_size": og_size[1],
+            "z_og_size": og_size[2],
+        }
+    )
+
+    # Include patient ID if provided
+    if patient_id:
+        fg_bbox["id"] = patient_id
 
     return fg_bbox
 
 
-def npy_make_onehot(mask_npy, labels):
-    mask_onehot = np.zeros((*mask_npy.shape, len(labels)))
-    for i, label in enumerate(labels):
-        mask_onehot[i] = (mask_npy == label)
+def npy_make_onehot(
+        mask_npy: npt.NDArray[Any],
+        labels_list: List[int],
+) -> npt.NDArray[Any]:
+    """Convert a multi-class mask to one-hot encoding.
+
+    Args:
+        mask_npy: Input multi-class mask as a numpy array.
+        labels_list: List of unique labels for one-hot encoding.
+
+    Returns:
+        mask_onehot: One-hot encoded mask as a numpy array.
+    """
+    mask_onehot = np.zeros((*mask_npy.shape, len(labels_list)))
+    for i, current_label in enumerate(labels_list):
+        mask_onehot[i] = mask_npy == current_label
     return mask_onehot
 
 
-def npy_fix_labels(mask_npy, labels):
-    for i, label in enumerate(labels):
-        mask_npy[mask_npy == i] = label
+def npy_fix_labels(
+        mask_npy: npt.NDArray[Any],
+        labels_list: List[int],
+) -> npt.NDArray[Any]:
+    """Adjust labels in a multi-class mask to match a specified list.
+
+    This function is used to correct the labels in a mask to ensure they match
+    a given list of labels. The function assumes that the input mask contains
+    integer labels starting from 0 to the length of the labels list. An example
+    of where this function is useful is for the BraTS 2020 dataset, which
+    has labels 0, 1, 2, 4. We train the model with labels 0, 1, 2, 3, and then
+    update the labels in the predicted mask to match the original labels.
+
+    Args:
+        mask_npy: Input multi-class mask as a numpy array.
+        labels_list: List of unique labels to match.
+
+    Returns:
+        mask_npy: Updated mask with adjusted labels.
+    """
+    for i, current_label in enumerate(labels_list):
+        mask_npy[mask_npy == i] = current_label
     return mask_npy
 
 
-def get_new_dims(img_sitk, target_spacing):
+def get_new_dims(
+        img_sitk: sitk.Image,
+        target_spacing: Tuple[float, float, float],
+) -> List[int]:
+    """Calculate new dimensions for resampling an image based on target spacing.
+
+    Args:
+        img_sitk: SimpleITK image object.
+        target_spacing: Target spacing for resampling.
+
+    Returns:
+        new_size: New dimensions for the image after resampling.
+    """
     og_spacing = img_sitk.GetSpacing()
     og_size = img_sitk.GetSize()
-    new_size = [int(np.round((og_size[0] * og_spacing[0]) / target_spacing[0])),
-                int(np.round((og_size[1] * og_spacing[1]) / target_spacing[1])),
-                int(np.round((og_size[2] * og_spacing[2]) / target_spacing[2]))]
+    new_size = [
+        int(np.round((og_size[0] * og_spacing[0]) / target_spacing[0])),
+        int(np.round((og_size[1] * og_spacing[1]) / target_spacing[1])),
+        int(np.round((og_size[2] * og_spacing[2]) / target_spacing[2])),
+    ]
     return new_size
 
 
 def aniso_intermediate_resample(
-        img_sitk,
-        new_size,
-        target_spacing,
-        low_res_axis
-    ):
-    """Intermediate resampling step for anisotropic images."""
+        img_sitk: sitk.Image,
+        new_size: List[int],
+        target_spacing: Tuple[float, float, float],
+        low_res_axis: int,
+) -> sitk.Image:
+    """Intermediate resampling step for anisotropic images.
+
+    This function resamples an image along the low-resolution axis using nearest
+    neighbor interpolation. This is an intermediate step in the resampling
+    anisotropic images that we use to reduce resampling artifacts.
+
+    Args:
+        img_sitk: SimpleITK image object.
+        new_size: New dimensions for the image after resampling.
+        target_spacing: Target spacing for resampling.
+        low_res_axis: Axis along which the image is low resolution.
+
+    Returns:
+        img_sitk: Resampled SimpleITK image object.
+    """
+    # Create temporary spacing and size for resampling. This spacing is the same
+    # as the original image spacing, except for the low resolution axis.
     temp_spacing = list(img_sitk.GetSpacing())
     temp_spacing[low_res_axis] = target_spacing[low_res_axis]
 
+    # Create temporary size for resampling. This new size is the same as the
+    # original image size, except for the low resolution axis.
     temp_size = list(img_sitk.GetSize())
     temp_size[low_res_axis] = new_size[low_res_axis]
 
-    # Use nearest neighbor interpolation on low res axis
-    img_sitk = sitk.Resample(img_sitk,
-                             size=temp_size,
-                             transform=sitk.Transform(),
-                             interpolator=sitk.sitkNearestNeighbor,
-                             outputOrigin=img_sitk.GetOrigin(),
-                             outputSpacing=temp_spacing,
-                             outputDirection=img_sitk.GetDirection(),
-                             defaultPixelValue=0,
-                             outputPixelType=img_sitk.GetPixelID())
-
+    # Use nearest neighbor interpolation only along the low resolution axis.
+    img_sitk = sitk.Resample(
+        img_sitk,
+        size=temp_size,
+        transform=sitk.Transform(),
+        interpolator=sitk.sitkNearestNeighbor,
+        outputOrigin=img_sitk.GetOrigin(),
+        outputSpacing=temp_spacing,
+        outputDirection=img_sitk.GetDirection(),
+        defaultPixelValue=0,
+        outputPixelType=img_sitk.GetPixelID()
+    )
     return img_sitk
 
 
-def check_anisotropic(img_sitk):
+def check_anisotropic(img_sitk: sitk.Image) -> Tuple[bool, int | None]:
+    """Check if an image is anisotropic.
+
+    Args:
+        img_sitk: SimpleITK image object.
+
+    Returns:
+        anisotropic: Boolean indicating if the image is anisotropic.
+        low_res_axis: Axis along which the image is low resolution, if
+            anisotropic.
+    """
     spacing = img_sitk.GetSpacing()
     if np.max(spacing) / np.min(spacing) > 3:
         anisotropic = True
@@ -691,34 +1109,58 @@ def check_anisotropic(img_sitk):
     return anisotropic, low_res_axis
 
 
-def make_onehot(mask_ants, labels):
+def make_onehot(
+        mask_ants: ants.core.ants_image.ANTsImage,
+        labels_list: List[int]
+) -> List[sitk.Image]:
+    """Convert a multi-class ANTs image into a list of binary sitk images.
+
+    Args:
+        mask_ants: ANTs image object.
+        labels_list: List of unique labels to create binary masks for.
+
+    Returns:
+        masks_sitk: List of binary SimpleITK images corresponding to each label.
+    """
+    # Get spacing, origin, and direction from ANTs image.
     spacing = mask_ants.spacing
     origin = mask_ants.origin
     direction = tuple(mask_ants.direction.flatten())
 
     mask_npy = mask_ants.numpy()
-    masks_sitk = list()
-    for i in range(len(labels)):
-        sitk_label_i = sitk.GetImageFromArray((mask_npy == labels[i]).T.astype("float32"))
+    masks_sitk = []
+    for current_label in labels_list:
+        sitk_label_i = sitk.GetImageFromArray(
+            (mask_npy == current_label).T.astype("float32")
+        )
         sitk_label_i.SetSpacing(spacing)
         sitk_label_i.SetOrigin(origin)
         sitk_label_i.SetDirection(direction)
         masks_sitk.append(sitk_label_i)
-
     return masks_sitk
 
 
-def sitk_get_min_max(image):
+def sitk_get_min_max(image: sitk.Image) -> Tuple[float, float]:
+    """Get minimum and maximum voxel values from a SimpleITK image.
+
+    Args:
+        image: SimpleITK image object.
+
+    Returns:
+        min_val: Minimum voxel value in the image.
+        max_val: Maximum voxel value in the image.
+    """
     stats_filter = sitk.StatisticsImageFilter()
     stats_filter.Execute(image)
     return stats_filter.GetMinimum(), stats_filter.GetMaximum()
 
 
-def sitk_get_sum(image):
+def sitk_get_sum(image: sitk.Image) -> float:
     """Get sum of voxels in SITK image.
-    
+
     Args:
         image: SITK image object.
+
     Returns:
         image_sum: Sum of all voxel values in image.
     """
@@ -780,9 +1222,29 @@ def crop_to_fg(
     )
 
 
-# Get nearest power of two less than median images size for patch size selection
-def get_best_patch_size(med_img_size, max_size):
-    assert len(med_img_size) == 3, "Input variable med_img_size must have length three"
+def get_best_patch_size(
+        med_img_size: List[int],
+        max_size: List[int],
+) -> List[int]:
+    """Get the best patch size based on median image size and maximum size.
+
+    The best patch size is computed as the nearest power of two less than the
+    median image size up to a specified maximum size.
+
+    Args:
+        med_img_size: Median image size in the x y and z directions.
+        max_size: Maximum allowed patch size in the x, y, and z directions.
+
+    Returns:
+        patch_size: Selected patch size based on the input sizes.
+
+    Raises:
+        AssertionError: If the input sizes are invalid.
+    """
+    # Check input sizes.
+    assert len(med_img_size) == 3, (
+        "Input variable med_img_size must have length three"
+    )
     assert np.min(med_img_size) > 1, "Image size is too small"
 
     patch_size = []
@@ -794,26 +1256,49 @@ def get_best_patch_size(med_img_size, max_size):
     return patch_size
 
 
-"""
-Alpha schedule functions
-"""
-
-
 class ConstantSchedule:
+    """Constant schedule for boundary loss weighting.
+
+    Boundary loss weightings are defined as follows:
+
+    total_loss = (1 - alpha) * region_loss + alpha * boundary_loss
+
+    In this case, we set alpha to be a constant value. The value of alpha
+    must be between 0 and 1.
+
+    Attributes:
+        constant: Constant value for the schedule.
+
+    Raises:
+        ValueError: If the constant value is not between 0 and 1.
+    """
     def __init__(self, constant):
+        if not 0 <= constant <= 1:
+            raise ValueError("Constant value must be between 0 and 1.")
         self.constant = constant
 
-    def __call__(self, epoch):
+    def __call__(self, epoch: int) -> float:
         return self.constant
 
 
 class StepSchedule:
+    """Step schedule for boundary loss weighting.
+
+    This class implements a step schedule for adjusting the weighting between
+    a region and boundary loss during training. The schedule reduces the weight
+    of the region loss in a stepwise fashion after a specified number of epochs.
+
+    Attributes:
+        step_length: Number of epochs for each step.
+        num_steps: Total number of steps.
+        num_epochs: Total number of epochs.
+    """
     def __init__(self, num_epochs, step_length):
         self.step_length = step_length
         self.num_steps = num_epochs // step_length
         self.num_epochs = num_epochs + step_length
 
-    def __call__(self, epoch):
+    def __call__(self, epoch: int) -> float:
         if epoch >= self.num_epochs - self.step_length:
             return 0
         step = epoch // self.step_length
@@ -821,48 +1306,83 @@ class StepSchedule:
 
 
 class CosineSchedule:
+    """Cosine schedule for boundary loss weighting.
+
+    This class implements a cosine schedule for adjusting the weighting between
+    a region and boundary loss during training. The schedule smoothly reduces
+    the weight of the region loss over the course of training.
+
+    Attributes:
+        num_epochs: Total number of epochs.
+        min_val: Minimum value for the schedule.
+        max_val: Maximum value for the schedule.
+    """
     def __init__(self, num_epochs, min_val=0, max_val=1):
         self.num_epochs = num_epochs - 1
         self.min_val = min_val
         self.max_val = max_val
 
-    def __call__(self, epoch):
+    def __call__(self, epoch: int) -> float:
         cos_out = (1 + np.cos(np.pi * epoch / self.num_epochs)) / 2
         return self.min_val + (self.max_val - self.min_val) * cos_out
 
 
 class LinearSchedule:
-    def __init__(self, num_epochs, init_pause):
-        # if num_epochs <= init_pause:
-        #     raise ValueError("The number of epochs must be greater than the initial pause.")
+    """
+    Linear schedule for boundary loss weighting.
+
+    This class implements a linear schedule for adjusting the weighting between
+    a region and boundary loss during training. The schedule linearly reduces
+    the weight of the region loss over the course of training after an initial
+    pause defined as a number of epochs.
+
+    Attributes:
+        num_epochs: Total number of epochs.
+        init_pause: Number of epochs to pause before starting to reduce the
+            weight.
+    """
+
+    def __init__(self, num_epochs: int, init_pause: int):
         self.num_epochs = num_epochs - 1
         self.init_pause = init_pause
+        self.denominator = num_epochs - init_pause
 
-    def __call__(self, epoch):
-        # if epoch > self.num_epochs:
-        #     raise ValueError("The current epoch is greater than the total number of epochs.")
+    def __call__(self, epoch: int) -> float:
         if epoch > self.init_pause:
-            return min(1, max(0, 1.0 - (float(epoch - self.init_pause) / (self.num_epochs - self.init_pause))))
-        else:
-            return 1.0
+            current_value = float(epoch - self.init_pause) / self.denominator
+            return min(1, max(0, 1.0 - current_value))
+        return 1.0
 
 
 class AlphaSchedule:
+    """Group of schedules for boundary loss weighting.
+
+    This class combines multiple scheduling strategies for adjusting the
+    weighting between a region and boundary loss during training.
+
+    Attributes:
+        schedule: Type of schedule to use.
+        constant: Constant weighting schedule.
+        linear: Linear weighting schedule.
+        step: Step weighting schedule.
+        cosine: Cosine weighting schedule.
+    """
     def __init__(self, n_epochs, schedule, **kwargs):
         self.schedule = schedule
         self.constant = ConstantSchedule(constant=kwargs["constant"])
         self.linear = LinearSchedule(n_epochs, init_pause=kwargs["init_pause"])
-        self.step = StepSchedule(n_epochs - kwargs["step_length"], step_length=kwargs["step_length"])
+        self.step = StepSchedule(
+            n_epochs - kwargs["step_length"], step_length=kwargs["step_length"]
+        )
         self.cosine = CosineSchedule(n_epochs)
 
-    def __call__(self, epoch):
+    def __call__(self, epoch: int) -> float:
         if self.schedule == "constant":
             return self.constant(epoch)
         if self.schedule == "linear":
             return self.linear(epoch)
-        elif self.schedule == "step":
+        if self.schedule == "step":
             return self.step(epoch)
-        elif self.schedule == "cosine":
+        if self.schedule == "cosine":
             return self.cosine(epoch).astype("float32")
-        else:
-            raise ValueError("Enter valid schedule type")
+        raise ValueError(f"Received invalid schedule type {self.schedule}.")
