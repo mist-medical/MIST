@@ -107,12 +107,14 @@ def get_resampled_image_dimensions(
     Returns:
         new_dimensions: New image dimensions after resampling.
     """
-    original_spacing = np.array(original_spacing)
-    original_dimensions = np.array(original_dimensions)
-    new_dimensions = np.round(
-        (original_dimensions * original_spacing) / target_spacing
-    ).astype(int)
-    return tuple(new_dimensions)
+    new_dimensions = [
+        int(
+            np.round(
+                original_dimensions[i] * original_spacing[i] / target_spacing[i]
+            )
+        ) for i in range(3)
+    ]
+    return (new_dimensions[0], new_dimensions[1], new_dimensions[2])
 
 
 def get_float32_example_memory_size(
@@ -130,7 +132,7 @@ def get_float32_example_memory_size(
     Returns:
         Memory size of image-mask pair in bytes.
     """
-    return 4 * (np.prod(dimensions) * (number_of_channels + number_of_labels))
+    return 4 * (np.prod(dimensions) * (number_of_channels + number_of_labels)) # type: ignore
 
 
 def set_warning_levels() -> None:
@@ -352,8 +354,8 @@ def convert_dict_to_df(patients: Dict[str, Dict[str, str]]) -> pd.DataFrame:
 
 def get_lr_schedule(
         mist_arguments: argparse.Namespace,
-        optimizer: torch.optim.Optimizer
-    ) -> torch.optim.lr_scheduler._LRScheduler:
+        optimizer: torch.optim.Optimizer # type: ignore
+    ) -> torch.optim.lr_scheduler.LRScheduler:
     """Get learning rate schedule based on user input.
 
     Args:
@@ -400,7 +402,7 @@ def get_lr_schedule(
 def get_optimizer(
         mist_arguments: argparse.Namespace,
         model: torch.nn.Module
-    ) -> torch.optim.Optimizer:
+    ) -> torch.optim.Optimizer: # type: ignore
     """Get pytorch optimizer based on user input.
 
     Args:
@@ -416,17 +418,17 @@ def get_optimizer(
         optimizer name to runtime/args.py.
     """
     if mist_arguments.optimizer == "sgd":
-        return torch.optim.SGD(
+        return torch.optim.SGD( # type: ignore
             params=model.parameters(),
             lr=mist_arguments.learning_rate,
             momentum=mist_arguments.sgd_momentum
     )
     if mist_arguments.optimizer == "adam":
-        return torch.optim.Adam(
+        return torch.optim.Adam( # type: ignore
             params=model.parameters(), lr=mist_arguments.learning_rate
         )
     if mist_arguments.optimizer == "adamw":
-        return torch.optim.AdamW(
+        return torch.optim.AdamW( # type: ignore
             params=model.parameters(), lr=mist_arguments.learning_rate
         )
     raise ValueError(
@@ -515,9 +517,9 @@ def set_seed(my_seed: int) -> None:
 
 
 def create_model_config_file(
-        args: argparse.Namespace,
-        config: Dict[str, Any],
-        data: Dict[str, Any],
+        mist_arguments: argparse.Namespace,
+        mist_configuration: Dict[str, Any],
+        mist_dataset_json: Dict[str, Any],
         output: str,
 ) -> Dict[str, Any]:
     """Create model configuration file.
@@ -528,27 +530,30 @@ def create_model_config_file(
     for inference.
 
     Args:
-        args: Command line arguments.
-        config: Configuration dictionary containing the results of the MIST
-            analysis pipeline.
-        data: Description of dataset which is used as the --data argument for
-            MIST. We use this to collect the number of channels and classes.
+        mist_arguments: Command line arguments.
+        mist_configuration: Configuration dictionary containing the results of
+            the MIST analysis pipeline.
+        mist_dataset_json: Description of dataset which is used as the --data
+            argument for MIST. We use this to collect the number of channels and
+            classes.
         output: Path to the output JSON file.
 
     Returns:
         model_config: Dictionary containing the model configuration.
     """
     model_config = {}
-    model_config["model_name"] = args.model
-    model_config["n_channels"] = int(len(data["images"]))
-    model_config["n_classes"] = int(len(data["labels"]))
-    model_config["deep_supervision"] = args.deep_supervision
-    model_config["deep_supervision_heads"] = args.deep_supervision_heads
-    model_config["pocket"] = args.pocket
-    model_config["patch_size"] = config["patch_size"]
-    model_config["target_spacing"] = config["target_spacing"]
-    model_config["vae_reg"] = args.vae_reg
-    model_config["use_res_block"] = args.use_res_block
+    model_config["model_name"] = mist_arguments.model
+    model_config["n_channels"] = int(len(mist_dataset_json["images"]))
+    model_config["n_classes"] = int(len(mist_dataset_json["labels"]))
+    model_config["deep_supervision"] = mist_arguments.deep_supervision
+    model_config["deep_supervision_heads"] = (
+        mist_arguments.deep_supervision_heads
+    )
+    model_config["pocket"] = mist_arguments.pocket
+    model_config["patch_size"] = mist_configuration["patch_size"]
+    model_config["target_spacing"] = mist_configuration["target_spacing"]
+    model_config["vae_reg"] = mist_arguments.vae_reg
+    model_config["use_res_block"] = mist_arguments.use_res_block
 
     # Save model configuration to JSON file.
     write_json_file(output, model_config)
@@ -558,7 +563,7 @@ def create_model_config_file(
 
 def create_pretrained_config_file(
         pretrained_model_path: str,
-        data: Dict[str, Any],
+        mist_dataset_json: Dict[str, Any],
         output: str
 ) -> Dict[str, Any]:
     """Create pretrained model configuration file.
@@ -569,8 +574,9 @@ def create_pretrained_config_file(
 
     Args:
         pretrained_model_path: Path to the pretrained model directory.
-        data: Description of dataset which is used as the --data argument for
-            MIST. We use this to collect the number of channels and classes.
+        mist_dataset_json: Description of dataset which is used as the --data
+            argument for MIST. We use this to collect the number of channels and
+            classes.
         output: Path to the output JSON file.
 
     Returns:
@@ -583,8 +589,8 @@ def create_pretrained_config_file(
     model_config = read_json_file(model_config_path)
 
     # Update number of channels and classes.
-    model_config["n_channels"] = int(len(data["images"]))
-    model_config["n_classes"] = int(len(data["labels"]))
+    model_config["n_channels"] = int(len(mist_dataset_json["images"]))
+    model_config["n_classes"] = int(len(mist_dataset_json["labels"]))
 
     write_json_file(output, model_config)
 
@@ -719,28 +725,10 @@ def sitk_to_ants(img_sitk: sitk.Image) -> ants.core.ants_image.ANTsImage:
     return img_ants
 
 
-def get_largest_cc(mask_npy: npt.NDArray[np.uint8]) -> npt.NDArray[np.uint8]:
-    """Get the largest connected component from a binary mask.
-
-    Args:
-        mask_npy: Binary mask as a numpy array.
-
-    Returns:
-        mask_npy: Binary mask with only the largest connected component.
-    """
-    # Get connected components.
-    labels = label(mask_npy)
-
-    # Assume at least one component.
-    if labels.max() > 0:
-        mask_npy = labels == np.argmax(np.bincount(labels.flat)[1:]) + 1
-    return mask_npy
-
-
 def remove_small_objects(
-        mask_npy: npt.NDArray[np.uint8],
+        mask_npy: npt.NDArray[Any],
         **kwargs
-) -> npt.NDArray[np.uint8]:
+) -> npt.NDArray[Any]:
     """
     Removes small connected objects in the mask based on a threshold.
 
@@ -757,7 +745,7 @@ def remove_small_objects(
     labels = label(mask_npy)
 
     # Assume at least one component.
-    if labels.max() > 0:
+    if labels.max() > 0: # type: ignore
         # Remove small objects smaller than the threshold.
         mask_npy = skimage.morphology.remove_small_objects(
             mask_npy.astype(bool),
@@ -767,9 +755,9 @@ def remove_small_objects(
 
 
 def get_top_k_components(
-        mask_npy: npt.NDArray[np.uint8],
+        mask_npy: npt.NDArray[Any],
         **kwargs
-) -> npt.NDArray[np.uint8]:
+) -> npt.NDArray[Any]:
     """Get the top k largest connected components from a binary mask.
 
     Args:
@@ -777,7 +765,7 @@ def get_top_k_components(
         **kwargs: Additional keyword arguments. Requires
             'top_k' to specify the number of largest components to retain. Other
             optional arguments include 'morph_cleanup' and
-            'morph_cleanup_iterations' for morphological operations. If 
+            'morph_cleanup_iterations' for morphological operations. If
             'morph_cleanup' is True, 'morph_cleanup_iterations' iterations of
             binary erosion will be applied before taking the top k components.
             After that, the same number of iterations of dilation will be
@@ -790,29 +778,33 @@ def get_top_k_components(
     if kwargs["morph_cleanup"]:
         mask_npy = ndimage.binary_erosion(
             mask_npy, iterations=kwargs["morph_cleanup_iterations"]
-    )
+        )
 
     # Get connected components
     labels = label(mask_npy)
-    label_bin_cnts = list(np.bincount(labels.flat)[1:])
+    label_bin_cnts = list(np.bincount(labels.flat)[1:]) # type: ignore
     label_bin_cnts_sort = sorted(label_bin_cnts, reverse=True)
 
     # Assume at least one component
-    if labels.max() > 0 and len(label_bin_cnts) >= kwargs["top_k"]:
+    if labels.max() > 0 and len(label_bin_cnts) >= kwargs["top_k"]: # type: ignore
         temp = np.zeros(mask_npy.shape)
         for i in range(kwargs["top_k"]):
-            temp += labels == np.where(label_bin_cnts == label_bin_cnts_sort[i])[0][0] + 1
+            temp += labels == np.where(
+                label_bin_cnts == label_bin_cnts_sort[i]
+            )[0][0] + 1
         mask_npy = temp
 
     if kwargs["morph_cleanup"]:
-        mask_npy = ndimage.binary_dilation(mask_npy, iterations=kwargs["morph_cleanup_iterations"])
+        mask_npy = ndimage.binary_dilation(
+            mask_npy, iterations=kwargs["morph_cleanup_iterations"]
+        )
     return mask_npy
 
 
 def get_holes(
-        mask_npy: npt.NDArray[np.uint8],
+        mask_npy: npt.NDArray[Any],
         **kwargs
-) -> npt.NDArray[np.uint8]:
+) -> npt.NDArray[Any]:
     """Get holes in a binary mask and apply a label to them.
 
     This function is an intermediate step for filling holes in multi-label
@@ -831,7 +823,7 @@ def get_holes(
     """
     labels = label(mask_npy)
 
-    if labels.max() > 0:
+    if labels.max() > 0: # type: ignore
         # Fill holes with specified label
         mask_npy_binary = (mask_npy != 0).astype("uint8")
         holes = ndimage.binary_fill_holes(mask_npy_binary) - mask_npy_binary
@@ -842,33 +834,10 @@ def get_holes(
     return holes
 
 
-def clean_mask(
-        mask_npy: npt.NDArray[np.uint8],
-        iterations: int=2
-    ) -> npt.NDArray[np.uint8]:
-    """Clean a binary mask by applying morphological operations.
-
-    This function applies binary erosion followed by binary dilation to the
-    input binary mask. It also retains only the largest connected component. The
-    default number of erosion and dilation iterations is set to 2.
-
-    Args:
-        mask_npy: Input binary mask as a numpy array.
-        iterations: Number of iterations for morphological operations.
-
-    Returns:
-        mask_npy: Updated binary mask after cleaning.
-    """
-    mask_npy = ndimage.binary_erosion(mask_npy, iterations=iterations)
-    mask_npy = get_largest_cc(mask_npy)
-    mask_npy = ndimage.binary_dilation(mask_npy, iterations=iterations)
-    return mask_npy
-
-
 def group_labels(
-        mask_npy: npt.NDArray[np.uint8],
+        mask_npy: npt.NDArray[Any],
         labels_list: List[int]
-) -> npt.NDArray[np.uint8]:
+) -> npt.NDArray[Any]:
     """Extract a group of labels from a multi-label mask.
 
     Args:
@@ -890,13 +859,13 @@ def get_transform(transform: str) -> Callable:
     """Get the appropriate transformation function based on the input string.
 
     Args:
-        transform: Name of the transformation to apply.
+        transform: Name of the transformation to apply. Valid options are
+            "fill_holes", "remove_small_objects", and "top_k_cc".
 
     Returns:
         Corresponding transformation function.
     """
     transform_dictionary = {
-        "largest_cc": get_largest_cc,
         "fill_holes": get_holes,
         "remove_small_objects": remove_small_objects,
         "top_k_cc": get_top_k_components
@@ -906,8 +875,7 @@ def get_transform(transform: str) -> Callable:
 
 def get_fg_mask_bbox(
         img_ants: ants.core.ants_image.ANTsImage,
-        patient_id: str | None=None,
-) -> Dict[str, str | int]:
+) -> Dict[str, int]:
     """Get the bounding box of the foreground mask.
 
     This function computes the bounding box of the foreground in a 3D image. It
@@ -938,14 +906,14 @@ def get_fg_mask_bbox(
     og_size = img_ants.shape
 
     # Create the bounding box based on non-zero values.
-    if nz[0].size > 0:
+    if nz[0].size > 0 or nz[1].size > 0 or nz[2].size > 0:
         fg_bbox = {
-            "x_start": np.min(nz[0]),
-            "x_end": np.max(nz[0]),
-            "y_start": np.min(nz[1]),
-            "y_end": np.max(nz[1]),
-            "z_start": np.min(nz[2]),
-            "z_end": np.max(nz[2]),
+            "x_start": int(np.min(nz[0])),
+            "x_end": int(np.max(nz[0])),
+            "y_start": int(np.min(nz[1])),
+            "y_end": int(np.max(nz[1])),
+            "z_start": int(np.min(nz[2])),
+            "z_end": int(np.max(nz[2])),
         }
     else:
         # If no foreground is detected, use the entire image size as bbox.
@@ -967,10 +935,6 @@ def get_fg_mask_bbox(
         }
     )
 
-    # Include patient ID if provided
-    if patient_id:
-        fg_bbox["id"] = patient_id
-
     return fg_bbox
 
 
@@ -978,7 +942,7 @@ def npy_make_onehot(
         mask_npy: npt.NDArray[Any],
         labels_list: List[int],
 ) -> npt.NDArray[Any]:
-    """Convert a multi-class mask to one-hot encoding.
+    """Convert a multi-class Numpy mask array to one-hot encoding.
 
     Args:
         mask_npy: Input multi-class mask as a numpy array.
@@ -1018,32 +982,9 @@ def npy_fix_labels(
     return mask_npy
 
 
-def get_new_dims(
-        img_sitk: sitk.Image,
-        target_spacing: Tuple[float, float, float],
-) -> List[int]:
-    """Calculate new dimensions for resampling an image based on target spacing.
-
-    Args:
-        img_sitk: SimpleITK image object.
-        target_spacing: Target spacing for resampling.
-
-    Returns:
-        new_size: New dimensions for the image after resampling.
-    """
-    og_spacing = img_sitk.GetSpacing()
-    og_size = img_sitk.GetSize()
-    new_size = [
-        int(np.round((og_size[0] * og_spacing[0]) / target_spacing[0])),
-        int(np.round((og_size[1] * og_spacing[1]) / target_spacing[1])),
-        int(np.round((og_size[2] * og_spacing[2]) / target_spacing[2])),
-    ]
-    return new_size
-
-
 def aniso_intermediate_resample(
         img_sitk: sitk.Image,
-        new_size: List[int],
+        new_size: Tuple[int, int, int],
         target_spacing: Tuple[float, float, float],
         low_res_axis: int,
 ) -> sitk.Image:
@@ -1075,7 +1016,7 @@ def aniso_intermediate_resample(
     # Use nearest neighbor interpolation only along the low resolution axis.
     img_sitk = sitk.Resample(
         img_sitk,
-        size=temp_size,
+        size=np.array(temp_size).tolist(),
         transform=sitk.Transform(),
         interpolator=sitk.sitkNearestNeighbor,
         outputOrigin=img_sitk.GetOrigin(),
@@ -1087,26 +1028,30 @@ def aniso_intermediate_resample(
     return img_sitk
 
 
-def check_anisotropic(img_sitk: sitk.Image) -> Tuple[bool, int | None]:
+def check_anisotropic(img_sitk: sitk.Image) -> Dict[str, bool | int | None]:
     """Check if an image is anisotropic.
 
     Args:
         img_sitk: SimpleITK image object.
 
     Returns:
-        anisotropic: Boolean indicating if the image is anisotropic.
-        low_res_axis: Axis along which the image is low resolution, if
-            anisotropic.
+        Dictionary with the following keys:
+            is_anisotropic: Boolean indicating if the image is anisotropic.
+            low_resolution_axis: Axis along which the image is low resolution,
+                if anisotropic.
     """
     spacing = img_sitk.GetSpacing()
     if np.max(spacing) / np.min(spacing) > 3:
-        anisotropic = True
-        low_res_axis = np.argmax(spacing)
+        is_anisotropic = True
+        low_resolution_axis = int(np.argmax(spacing))
     else:
-        anisotropic = False
-        low_res_axis = None
+        is_anisotropic = False
+        low_resolution_axis = None
 
-    return anisotropic, low_res_axis
+    return {
+        "is_anisotropic": is_anisotropic,
+        "low_resolution_axis": low_resolution_axis
+    }
 
 
 def make_onehot(
@@ -1172,7 +1117,7 @@ def sitk_get_sum(image: sitk.Image) -> float:
 
 def decrop_from_fg(
         ants_image: ants.core.ants_image.ANTsImage,
-        fg_bbox: Dict[str, str | int]
+        fg_bbox: Dict[str, int]
 ) -> ants.core.ants_image.ANTsImage:
     """Decrop image to original size using foreground bounding box.
 
@@ -1197,12 +1142,12 @@ def decrop_from_fg(
             np.max([0, fg_bbox["z_og_size"] - fg_bbox["z_end"]]) - 1
         )
     ]
-    return ants.pad_image(ants_image, pad_width=padding)
+    return ants.pad_image(ants_image, pad_width=padding, return_padvals=False) # type: ignore
 
 
 def crop_to_fg(
         img_ants: ants.core.ants_image.ANTsImage,
-        fg_bbox: Dict[str, str | int]
+        fg_bbox: Dict[str, int]
 ) -> ants.core.ants_image.ANTsImage:
     """Crop image to foreground bounding box.
 
@@ -1378,11 +1323,11 @@ class AlphaSchedule:
 
     def __call__(self, epoch: int) -> float:
         if self.schedule == "constant":
-            return self.constant(epoch)
+            return float(self.constant(epoch))
         if self.schedule == "linear":
-            return self.linear(epoch)
+            return float(self.linear(epoch))
         if self.schedule == "step":
-            return self.step(epoch)
+            return float(self.step(epoch))
         if self.schedule == "cosine":
-            return self.cosine(epoch).astype("float32")
+            return float(self.cosine(epoch))
         raise ValueError(f"Received invalid schedule type {self.schedule}.")
