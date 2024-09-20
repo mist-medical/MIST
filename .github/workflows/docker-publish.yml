@@ -22,7 +22,7 @@ jobs:
       - name: Extract and transform version from pyproject.toml
         id: extract_version
         run: |
-          VERSION=$(grep -m1 -Po '(?<=version\s?=\s?")[^"]*' pyproject.toml)
+          VERSION=$(grep -m 1 version pyproject.toml | tr -s ' ' | tr -d '"' | tr -d "'" | cut -d' ' -f3)
           # Replace "-alpha" with "a0", "-beta" with "b0", and so on
           DOCKER_VERSION=$(echo $VERSION | sed 's/-alpha/a0/' | sed 's/-beta/b0/' | sed 's/-rc/rc0/')
           echo "DOCKER_VERSION=$DOCKER_VERSION" >> $GITHUB_ENV
