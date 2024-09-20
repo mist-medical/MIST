@@ -75,15 +75,13 @@ class Analyzer:
                 patient = self.paths_dataframe.iloc[i].to_dict()
                 image_list = list(patient.values())[3:len(patient)]
 
-                # Read original images
+                # Read original images.
                 image = ants.image_read(image_list[0])
 
-                # Get foreground mask and save it to save computation time later
-                fg_bbox = utils.get_fg_mask_bbox(
-                    image, patient_id=patient["id"]
-                )
+                # Get foreground mask and save it to save computation time.
+                fg_bbox = utils.get_fg_mask_bbox(image)
 
-                # Get cropped dimensions from bounding box
+                # Get cropped dimensions from bounding box.
                 cropped_dims[i, :] = [
                     fg_bbox["x_end"] - fg_bbox["x_start"] + 1,
                     fg_bbox["y_end"] - fg_bbox["y_start"] + 1,
@@ -94,7 +92,8 @@ class Analyzer:
                     1. - (np.prod(cropped_dims[i, :]) / np.prod(image.shape))
                 )
 
-                # Update bounding box dataframe to save for later
+                # Update bounding box dataframe with foreground bounding box.
+                fg_bbox["id"] = patient["id"]
                 bbox_df = pd.concat(
                     [bbox_df, pd.DataFrame(fg_bbox, index=[0])],
                     ignore_index=True
@@ -152,10 +151,10 @@ class Analyzer:
                 patient = self.paths_dataframe.iloc[i].to_dict()
                 image_list = list(patient.values())[3:len(patient)]
 
-                # Read original images
+                # Read original images.
                 image = ants.image_read(image_list[0])
 
-                # Get nonzero ratio
+                # Get nonzero ratio.
                 nz_ratio.append(
                     np.sum(image.numpy() != 0) / np.prod(image.shape)
                 )
@@ -170,7 +169,7 @@ class Analyzer:
         """Get target spacing for preprocessing."""
         progress = utils.get_progress_bar("Getting target spacing")
 
-        # If data is anisotropic, get median image spacing
+        # If data is anisotropic, get median image spacing.
         original_spacings = np.zeros((len(self.paths_dataframe), 3))
 
         with progress as pb:
@@ -180,7 +179,7 @@ class Analyzer:
                 # Read mask image. This is faster to load.
                 spacing = ants.image_header_info(patient["mask"])["spacing"]
 
-                # Get spacing
+                # Get voxel spacing.
                 original_spacings[i, :] = spacing
 
         # Initialize target spacing
@@ -276,7 +275,7 @@ class Analyzer:
                 resampled_dims[i, :] = new_dims
 
         if len(messages) > 0:
-            text = rich.text.Text(messages)
+            text = rich.text.Text(messages) # type: ignore
             console.print(text)
 
         median_resampled_dims = list(np.median(resampled_dims, axis=0))
@@ -301,7 +300,7 @@ class Analyzer:
                 # You don"t need to use all of the voxels for this.
                 fg_intensities += (
                     image[mask != 0]
-                ).tolist()[::analyzer_constants.AnalyzeConstants.CT_GATHER_EVERY_ITH_VOXEL_VALUE]
+                ).tolist()[::analyzer_constants.AnalyzeConstants.CT_GATHER_EVERY_ITH_VOXEL_VALUE] # type: ignore
 
         global_z_score_mean = np.mean(fg_intensities)
         global_z_score_std = np.std(fg_intensities)
@@ -349,7 +348,7 @@ class Analyzer:
         target_spacing = self.get_target_spacing()
 
         if self.dataset_information["modality"] == "ct":
-            # Get CT normalization parameters
+            # Get CT normalization parameters.
             ct_normalization_parameters = (
                 self.get_ct_normalization_parameters()
             )
@@ -490,7 +489,7 @@ class Analyzer:
         # If there are any bad examples, print their ids.
         if len(messages) > 0:
             messages += "Excluding these from training\n"
-            text = rich.text.Text(messages)
+            text = rich.text.Text(messages) # type: ignore
             console.print(text)
 
         # If all of the data is bad, then raise an error.
@@ -504,7 +503,7 @@ class Analyzer:
 
     def run(self):
         """Run the analyzer to get configuration file."""
-        text = rich.text.Text("\nAnalyzing dataset\n")
+        text = rich.text.Text("\nAnalyzing dataset\n") # type: ignore
         text.stylize("bold")
         console.print(text)
 
