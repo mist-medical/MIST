@@ -18,7 +18,6 @@ from torch import nn
 from rich.progress import (BarColumn, MofNCompleteColumn, Progress, TextColumn,
                            TimeElapsedColumn)
 from scipy import ndimage
-from skimage.measure import label
 from sklearn.model_selection import KFold
 
 
@@ -61,7 +60,7 @@ def compare_headers(
     Args:
         header1: Image header information from ants.image_header_info
         header2: Image header information from ants.image_header_info
-    
+
     Returns:
         True if the dimensions, origin, spacing, and direction match.
     """
@@ -742,7 +741,7 @@ def remove_small_objects(
         mask_npy: Updated mask with small objects removed.
     """
     # Get connected components.
-    labels = label(mask_npy)
+    labels = skimage.measure.label(mask_npy)
 
     # Assume at least one component.
     if labels.max() > 0: # type: ignore
@@ -781,7 +780,7 @@ def get_top_k_components(
         )
 
     # Get connected components
-    labels = label(mask_npy)
+    labels = skimage.measure.label(mask_npy)
     label_bin_cnts = list(np.bincount(labels.flat)[1:]) # type: ignore
     label_bin_cnts_sort = sorted(label_bin_cnts, reverse=True)
 
@@ -821,7 +820,7 @@ def get_holes(
         holes: A numpy array where the non-zero values represent the holes in
             the input mask. The holes are multiplied by the fill label.
     """
-    labels = label(mask_npy)
+    labels = skimage.measure.label(mask_npy)
 
     if labels.max() > 0: # type: ignore
         # Fill holes with specified label
