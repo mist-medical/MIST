@@ -33,8 +33,8 @@ def get_sw_prediction(
     image. You can vary the patch size, overlap, blend mode, and add test time
     augmentation. The output of the function is the prediction for the image.
 
-    Note that MIST models do not have a softmax layer, so the output of this
-    function requires a softmax layer to be applied to it.
+    Note that MIST models do not have a softmax layer, so we apply softmax to
+    the output of the model in this function.
 
     Args:
         image: The image to predict on.
@@ -57,6 +57,8 @@ def get_sw_prediction(
         mode=blend_mode,
         device=torch.device("cuda")
     )
+
+    # Apply softmax to prediction.
     prediction = torch.nn.functional.softmax(prediction, dim=1)
 
     # Test time augmentation.
