@@ -21,7 +21,7 @@ from mist.postprocess_preds import postprocess
 
 def get_sw_prediction(
         image: torch.Tensor,
-        model: Callable,
+        model: Callable[[torch.Tensor], torch.Tensor],
         patch_size: Tuple[int, int, int],
         overlap: float,
         blend_mode: str,
@@ -89,7 +89,7 @@ def back_to_original_space(
     og_ants_img: ants.core.ants_image.ANTsImage,
     config: Dict[str, Any],
     fg_bbox: Dict[str, Any],
-):
+) -> ants.core.ants_image.ANTsImage:
     """Place prediction back into original image space.
 
     All predictions are natively in RAI orientation, possibly cropped to the
@@ -160,7 +160,7 @@ def predict_single_example(
         torch_img: torch.Tensor,
         og_ants_img: ants.core.ants_image.ANTsImage,
         config: Dict[str, Any],
-        models_list: List[Callable],
+        models_list: List[Callable[[torch.Tensor], torch.Tensor]],
         fg_bbox: Optional[Dict[str, Any]]=None,
         overlap: float=0.5,
         blend_mode: str="gaussian",
@@ -294,7 +294,7 @@ def predict_single_example(
 def load_test_time_models(
         models_dir: str,
         fast: bool,
-) -> List[Callable]:
+) -> List[Callable[[torch.Tensor], torch.Tensor]]:
     """Load models for test time inference.
     
     This function will load the models for test time inference. The models are
@@ -479,7 +479,7 @@ def test_time_inference(
         df: pd.DataFrame,
         dest: str,
         config_file: str,
-        models: List[Callable],
+        models: List[Callable[[torch.Tensor], torch.Tensor]],
         overlap: float,
         blend_mode: str,
         tta: bool,
