@@ -394,7 +394,9 @@ def preprocess_example(
 
         # Put mask into standard space
         mask = ants.reorient_image2(mask, "RAI")
-        mask.set_direction(np.eye(3))
+        mask.set_direction(
+            preprocessing_constants.PreprocessingConstants.RAI_ANTS_DIRECTION
+        )
         mask = resample_mask(
             mask,
             labels=config["labels"],
