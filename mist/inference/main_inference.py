@@ -415,7 +415,7 @@ def test_on_fold(
     )
     model.eval()
     model.to("cuda")
-    
+
     # Progress bar and error messages.
     progress_bar = utils.get_progress_bar(f'Testing on fold {fold_number}')
     console = rich.console.Console()
