@@ -109,7 +109,10 @@ class Trainer:
         # Check if the corresponding files exist. We omit the model
         # configuration file since it does not exist yet. The model
         # configuration will be created later.
-        for file_path in self.file_paths.pop("model_configuration").values():
+        for file_path in (
+            path for key, path in self.file_paths.items()
+            if key != "model_configuration"
+        ):
             if not os.path.exists(file_path):
                 raise FileNotFoundError(f"File not found: {file_path}")
 
@@ -361,20 +364,23 @@ class Trainer:
                         "--use-dtms flag must be enabled."
                     )
 
-                if not (
-                    len(train_images) == len(train_labels) == len(train_dtms)
-                ):
-                    raise ValueError(
-                        "Mismatch in the number of training images, labels, "
-                        "and distance transforms. Ensure that the number of "
-                        "distance transforms matches the number of training "
-                        "images and labels. Please check that distance "
-                        "transforms were computed correctly. Found "
-                        f"{len(train_images)} training images, "
-                        f"{len(train_labels)} training labels, and "
-                        f"{len(train_dtms)} training distance transforms."
-                    )
-
+                if isinstance(train_dtms, list):
+                    # Check if the number of training images, labels, and
+                    # distance transforms match. If not, raise an error.
+                    if not(
+                        len(train_images) == len(train_labels) == len(
+                            train_dtms
+                        )
+                    ):
+                        raise ValueError(
+                            "Mismatch in the number of training images, "
+                            "labels, and distance transforms. Ensure that the "
+                            "number of distance transforms matches the number "
+                            "of training images and labels. Found "
+                            f"{len(train_images)} training images, "
+                            f"{len(train_labels)} training labels, and "
+                            f"{len(train_dtms)} training distance transforms."
+                        )
 
             # Define the model from the model configuration file.
             if self.mist_arguments.model != "pretrained":
@@ -410,7 +416,7 @@ class Trainer:
             # underflow. Gradients must be unscaled before the optimizer updates
             # the parameters to ensure the learning rate is unaffected.
             if self.mist_arguments.amp:
-                amp_gradient_scaler = torch.cuda.amp.GradScaler()  # Correct module
+                amp_gradient_scaler = torch.amp.GradScaler("cuda")
 
             # Only log metrics on first process (i.e., rank 0).
             if rank == 0:
