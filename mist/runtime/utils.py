@@ -196,12 +196,51 @@ def has_test_data(dataset_json_path: str) -> bool:
 
     Args:
         dataset_json_path: Path to dataset json file.
-    
+
     Returns:
         True if test data is present in the dataset json file.
     """
     dataset_information = read_json_file(dataset_json_path)
     return "test-data" in dataset_information.keys()
+
+
+def get_numpy_file_paths_list(
+        base_dir: str,
+        folder: str,
+        patient_ids: List[str]
+) -> List[str]:
+    """Create a list of file paths for each patient ID.
+
+    This function is used to get the file paths for images, labels, or DTMs for
+    each patient ID in the dataset.
+
+    Args:
+        base_dir: Base directory for the dataset.
+        folder: Subdirectory within the base directory for images, labels, or
+            DTMs.
+        patient_ids: List of patient IDs.
+
+    Returns:
+        List of file paths corresponding to each patient ID.
+
+    Raises:
+        FileNotFoundError: If the base directory or folder does not exist.
+    """
+    folder_path = os.path.join(base_dir, folder)
+
+    if not os.path.isdir(base_dir):
+        raise FileNotFoundError(
+            f"Base directory '{base_dir}' does not exist."
+        )
+
+    if not os.path.isdir(folder_path):
+        raise FileNotFoundError(
+            f"Folder '{folder}' does not exist in '{base_dir}'."
+        )
+
+    return [
+        os.path.join(folder_path, f"{patient}.npy") for patient in patient_ids
+    ]
 
 
 def get_files_df(path_to_dataset_json: str, train_or_test: str) -> pd.DataFrame:
@@ -435,7 +474,7 @@ def get_optimizer(
     )
 
 
-class Mean(nn.Module):
+class RunningMean(nn.Module):
     """Simple moving average module for loss tracking.
 
     This class tracks the mean of a series of values (e.g., loss values) over
@@ -513,87 +552,6 @@ def set_seed(my_seed: int) -> None:
     np.random.seed(my_seed)
     torch.manual_seed(my_seed)
     torch.cuda.manual_seed(my_seed)
-
-
-def create_model_config_file(
-        mist_arguments: argparse.Namespace,
-        mist_configuration: Dict[str, Any],
-        mist_dataset_json: Dict[str, Any],
-        output: str,
-) -> Dict[str, Any]:
-    """Create model configuration file.
-
-    This function generates a JSON file containing the model configuration based
-    on the provided arguments, configuration, and data. This file is used to
-    store important model parameters for reproducibility and to deploy the model
-    for inference.
-
-    Args:
-        mist_arguments: Command line arguments.
-        mist_configuration: Configuration dictionary containing the results of
-            the MIST analysis pipeline.
-        mist_dataset_json: Description of dataset which is used as the --data
-            argument for MIST. We use this to collect the number of channels and
-            classes.
-        output: Path to the output JSON file.
-
-    Returns:
-        model_config: Dictionary containing the model configuration.
-    """
-    model_config = {}
-    model_config["model_name"] = mist_arguments.model
-    model_config["n_channels"] = int(len(mist_dataset_json["images"]))
-    model_config["n_classes"] = int(len(mist_dataset_json["labels"]))
-    model_config["deep_supervision"] = mist_arguments.deep_supervision
-    model_config["deep_supervision_heads"] = (
-        mist_arguments.deep_supervision_heads
-    )
-    model_config["pocket"] = mist_arguments.pocket
-    model_config["patch_size"] = mist_configuration["patch_size"]
-    model_config["target_spacing"] = mist_configuration["target_spacing"]
-    model_config["vae_reg"] = mist_arguments.vae_reg
-    model_config["use_res_block"] = mist_arguments.use_res_block
-
-    # Save model configuration to JSON file.
-    write_json_file(output, model_config)
-
-    return model_config
-
-
-def create_pretrained_config_file(
-        pretrained_model_path: str,
-        mist_dataset_json: Dict[str, Any],
-        output: str
-) -> Dict[str, Any]:
-    """Create pretrained model configuration file.
-
-    This function reads the configuration of a pretrained model and updates
-    the number of channels and classes based on the provided dataset
-    description. The updated configuration is then saved to a JSON file.
-
-    Args:
-        pretrained_model_path: Path to the pretrained model directory.
-        mist_dataset_json: Description of dataset which is used as the --data
-            argument for MIST. We use this to collect the number of channels and
-            classes.
-        output: Path to the output JSON file.
-
-    Returns:
-        model_config: Dictionary containing the model configuration.
-    """
-    # Get path to pretrained model configuration.
-    model_config_path = os.path.join(pretrained_model_path, "model_config.json")
-
-    # Read model configuration.
-    model_config = read_json_file(model_config_path)
-
-    # Update number of channels and classes.
-    model_config["n_channels"] = int(len(mist_dataset_json["images"]))
-    model_config["n_classes"] = int(len(mist_dataset_json["labels"]))
-
-    write_json_file(output, model_config)
-
-    return model_config
 
 
 def get_flip_axes() -> List[List[int]]:
