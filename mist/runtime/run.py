@@ -400,7 +400,14 @@ class Trainer:
 
             # Set up model for distributed data parallel training.
             model.to(rank)
-            model = DDP(model, device_ids=[rank])
+            if self.mist_arguments.model != "pretrained":
+                model = DDP(model, device_ids=[rank])
+            else:
+                # This seems to work with pretrained models. We will need to
+                # test this further.
+                model = DDP(
+                    model, device_ids=[rank], find_unused_parameters=True
+                )
 
             # Get optimizer and lr scheduler
             optimizer = utils.get_optimizer(self.mist_arguments, model)
@@ -534,27 +541,24 @@ class Trainer:
                         )
                         loss *= c_norm
 
-                        loss *= c_norm
-
-                        # Check if Variational Autoencoder (VAE) regularization
-                        # is enabled. VAE regularization encourages the model to
-                        # learn a latent space that follows a normal
-                        # distribution, which helps the model generalize better.
-                        # This term adds a penalty to the loss, based on how
-                        # much the learned latent space deviates from the
-                        # expected distribution (usually Gaussian). We then
-                        # sample from this latent space to reconstruct the input
-                        # image. The total VAE loss is the sum of the
-                        # Kullback-Leibler (KL) divergence and the
-                        # reconstruction loss.
-                        if self.mist_arguments.vae_reg:
-                            vae_loss = self.fixed_loss_functions["vae"](
-                                image, output["vae_reg"]
-                            )
-                            # Multiply the computed VAE loss by a scaling
-                            # factor, vae_penalty, which controls the strength
-                            # of the regularization.
-                            loss += self.mist_arguments.vae_penalty * vae_loss
+                    # Check if Variational Autoencoder (VAE) regularization
+                    # is enabled. VAE regularization encourages the model to
+                    # learn a latent space that follows a normal
+                    # distribution, which helps the model generalize better.
+                    # This term adds a penalty to the loss, based on how much
+                    # the learned latent space deviates from the expected
+                    # distribution (usually Gaussian). We then sample from this
+                    # latent space to reconstruct the input image. The total VAE
+                    # loss is the sum of the Kullback-Leibler (KL) divergence
+                    # and the reconstruction loss.
+                    if self.mist_arguments.vae_reg:
+                        vae_loss = self.fixed_loss_functions["vae"](
+                            image, output["vae_reg"]
+                        )
+                        # Multiply the computed VAE loss by a scaling
+                        # factor, vae_penalty, which controls the strength of
+                        # the regularization.
+                        loss += self.mist_arguments.vae_penalty * vae_loss
 
 
                     # L2 regularization term. This term adds a penalty to the

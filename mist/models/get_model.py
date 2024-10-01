@@ -98,7 +98,7 @@ def load_model_from_config(weights_path, model_config_path):
     model = get_model(**model_config)
 
     # Trick for loading DDP model
-    state_dict = torch.load(weights_path)
+    state_dict = torch.load(weights_path, weights_only=True)
     new_state_dict = OrderedDict()
     for k, v in state_dict.items():
         # remove 'module.' of DataParallel/DistributedDataParallel

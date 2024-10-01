@@ -249,8 +249,8 @@ class MGNet(nn.Module):
         # VAE regularization
         if self.vae_reg:
             self.normal_dist = torch.distributions.Normal(0, 1)
-            self.normal_dist.loc = self.normal_dist.loc  # .cuda()
-            self.normal_dist.scale = self.normal_dist.scale  # .cuda()
+            self.normal_dist.loc = self.normal_dist.loc.cuda()
+            self.normal_dist.scale = self.normal_dist.scale.cuda()
 
             self.mu = nn.Linear(self.out_channels * (len(self.spikes) + 1), self.latent_dim)
             self.sigma = nn.Linear(self.out_channels * (len(self.spikes) + 1), self.latent_dim)
