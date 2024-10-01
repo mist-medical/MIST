@@ -1,6 +1,6 @@
 [project]
 name = "mist-medical"
-version = "0.4.19-alpha"
+version = "0.4.20-alpha"
 requires-python = ">= 3.8"
 description = "MIST is a simple, fully automated framework for 3D medical imaging segmentation."
 readme = "README.md"
@@ -9,10 +9,6 @@ authors = [
     {name = "Adrian Celaya", email = "aecelaya@rice.edu"},
     {name = "David Fuentes", email = "dtfuentes@mdanderson.org"},
     {name = "Beatrice Riviere", email = "riviere@rice.edu"},
-    {name = "Evan Lim", email = "EMLim@mdanderson.org"},
-    {name = "Brayden Mi", email = "BMi@mdanderson.org"},
-    {name = "Rachel Glenn", email = "rglenn1@mdanderson.org"},
-    {name = "Alex Balsells", email = "atb8@rice.edu"},
     {name = "Rice University"},
     {name = "The University of Texas MD Anderson Cancer Center"}
 ]
@@ -50,7 +46,8 @@ dependencies = [
     "scikit-learn",
     "scikit-image",
     "nvidia-dali-cuda110",
-    "tensorboard"
+    "tensorboard",
+    "einops",
 ]
 
 [project.urls]

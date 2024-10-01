@@ -99,8 +99,8 @@ class UNet(nn.Module):
         # VAE Regularization
         if self.vae_reg:
             self.normal_dist = torch.distributions.Normal(0, 1)
-            self.normal_dist.loc = self.normal_dist.loc  # .cuda()
-            self.normal_dist.scale = self.normal_dist.scale  # .cuda()
+            self.normal_dist.loc = self.normal_dist.loc.cuda()
+            self.normal_dist.scale = self.normal_dist.scale.cuda()
 
             self.global_maxpool = GlobalMaxPooling3D()
             self.mu = nn.Linear(self.channels[0][0], self.latent_dim)
