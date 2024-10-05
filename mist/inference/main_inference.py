@@ -28,7 +28,7 @@ def get_sw_prediction(
         tta: bool
 ) -> torch.Tensor:
     """Get sliding window prediction for a single image.
-    
+
     This function is used to get the sliding window prediction for a single
     image. You can vary the patch size, overlap, blend mode, and add test time
     augmentation. The output of the function is the prediction for the image.
@@ -90,14 +90,15 @@ def back_to_original_space(
     pred: npt.NDArray[Any],
     og_ants_img: ants.core.ants_image.ANTsImage,
     config: Dict[str, Any],
-    fg_bbox: Dict[str, Any],
+    fg_bbox: Optional[Dict[str, Any]],
 ) -> ants.core.ants_image.ANTsImage:
     """Place prediction back into original image space.
 
     All predictions are natively in RAI orientation, possibly cropped to the
     foreground, and in the target spacing. This function will place the
-    prediction back into the original image space by resampling, reorientating,
-    possibly padding back to the original size, and fixing labels if necessary.
+    prediction back into the original image space by reorienting, resampling,
+    possibly padding back to the original size, and copying the original image
+    header to the prediction's header.
 
     Args:
         pred: The prediction to place back into the original image space. This
@@ -105,16 +106,17 @@ def back_to_original_space(
         og_ants_img: The original ANTs image.
         config: The configuration dictionary.
         fg_bbox: The foreground bounding box.
-    
+
     Returns:
         pred: The prediction in the original image space. This will be an ANTs
             image.
     """
     # Convert prediction to ANTs image.
-    pred = ants.from_numpy(data=pred)
+    pred = ants.from_numpy(data=pred, spacing=config["target_spacing"])
 
-    # Set spacing to target spacing.
-    pred.set_spacing(config["target_spacing"])
+    # Reorient prediction.
+    pred = ants.reorient_image2(pred, ants.get_orientation(og_ants_img))
+    pred.set_direction(og_ants_img.direction)
 
     # Enforce size for cropped images.
     if fg_bbox is not None:
@@ -136,24 +138,13 @@ def back_to_original_space(
         new_size=np.array(new_size, dtype="int").tolist(),
     )
 
-    # Reorient prediction to original orientation.
-    # Get the original image orientation.
-    og_orientation = ants.get_orientation(og_ants_img)
-
-    # Need to update this to be more robust. We may need to create a look up
-    # table that applies the correct series of flips or permutations to get an
-    # RAI image back to the original orientation.
-    pred = ants.reorient_image2(pred, og_orientation)
-    pred.set_direction(og_ants_img.direction)
-
-    # Set origin to original origin.
-    pred.set_origin(og_ants_img.origin)
-
     # Appropriately pad back to original size if necessary.
     if fg_bbox is not None:
         pred = utils.decrop_from_fg(pred, fg_bbox)
 
-    # Copy header from original image onto the prediction so they match.
+    # Copy header from original image onto the prediction so they match. This
+    # will take care of other details in the header like the origin and the
+    # image bounding box.
     pred = og_ants_img.new_image_like(pred.numpy())
     return pred
 
@@ -194,7 +185,7 @@ def predict_single_example(
         blend_mode: The blending mode to use.
         tta: Whether to use test time augmentation.
         output_std: Whether to output the standard deviation of the predictions.
-    
+
     Returns:
         pred: The prediction in the original image space. This will be an ANTs
             image.
@@ -258,7 +249,7 @@ def predict_single_example(
         pred,
         og_ants_img,
         config,
-        fg_bbox
+        fg_bbox,
     )
 
     # Fix labels if necessary. In some cases the labels used for training
@@ -298,7 +289,7 @@ def load_test_time_models(
         fast: bool,
 ) -> List[Callable[[torch.Tensor], torch.Tensor]]:
     """Load models for test time inference.
-    
+
     This function will load the models for test time inference. The models are
     loaded from the models directory. The model configuration file is also
     loaded. If fast is True, only the first model is loaded.
@@ -306,7 +297,7 @@ def load_test_time_models(
     Args:
         models_dir: The directory where the models are stored.
         fast: Whether to only load the first model.
-    
+
     Returns:
         final_model_list: The list of models for test time inference.
     """
@@ -340,7 +331,7 @@ def check_test_time_input(
     Args:
         patients: The input for test time inference. This can be a pandas
             dataframe, a csv file, a json file, or a dictionary.
-    
+
     Returns:
         patients: The input for test time inference as a pandas dataframe.
 
@@ -369,7 +360,7 @@ def test_on_fold(
     This function will run inference on the test set for a fold. The predictions
     will be saved to the results directory. The predictions will be saved as
     nifti files.
-    
+
     Args:
         args: Arguments from MIST arguments.
         fold_number: The fold number to run inference on.
