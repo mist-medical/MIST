@@ -90,7 +90,7 @@ def back_to_original_space(
     pred: npt.NDArray[Any],
     og_ants_img: ants.core.ants_image.ANTsImage,
     config: Dict[str, Any],
-    fg_bbox: Dict[str, Any],
+    fg_bbox: Optional[Dict[str, Any]],
 ) -> ants.core.ants_image.ANTsImage:
     """Place prediction back into original image space.
 
@@ -185,7 +185,7 @@ def predict_single_example(
         blend_mode: The blending mode to use.
         tta: Whether to use test time augmentation.
         output_std: Whether to output the standard deviation of the predictions.
-    
+
     Returns:
         pred: The prediction in the original image space. This will be an ANTs
             image.
