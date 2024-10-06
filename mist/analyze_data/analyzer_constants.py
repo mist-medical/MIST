@@ -1,10 +1,14 @@
 """Constants for the Analyzer class."""
 
 import dataclasses
+import numpy as np
 
 @dataclasses.dataclass(frozen=True)
 class AnalyzeConstants:
     """Dataclass for constants used in the analyze_data module."""
+
+    # RAI orientation direction for ANTs.
+    RAI_ANTS_DIRECTION = np.eye(3)
 
     # Maximum memory in bytes for each image and mask pair.
     MAX_MEMORY_PER_IMAGE_MASK_PAIR_BYTES = 2e9
