@@ -176,17 +176,17 @@ class Analyzer:
             for i in pb.track(range(len(self.paths_dataframe))):
                 patient = self.paths_dataframe.iloc[i].to_dict()
 
-                # Reorient image to RAI to collect target spacing. We do this
-                # to make sure that all of the axes in the target spacing are
-                # the same.
-                image = ants.image_read(patient["image"])
-                image = image.reorient_image2(image, "RAI")
-                image.set_direction(
+                # Reorient masks to RAI to collect target spacing. We do this
+                # to make sure that all of the axes in the spacings match up.
+                # We load the masks because they are smaller and faster to load.
+                mask = ants.image_read(patient["mask"])
+                mask = mask.reorient_image2(mask, "RAI")
+                mask.set_direction(
                     analyzer_constants.AnalyzeConstants.RAI_ANTS_DIRECTION
                 )
 
                 # Get voxel spacing.
-                original_spacings[i, :] = image.spacing
+                original_spacings[i, :] = mask.spacing
 
         # Initialize target spacing.
         target_spacing = list(np.median(original_spacings, axis=0))
