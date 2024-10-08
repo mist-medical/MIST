@@ -349,11 +349,11 @@ def check_test_time_input(
     # Convert input to pandas dataframe
     if isinstance(patients, pd.DataFrame):
         return patients
-    if '.csv' in patients:
+    if '.csv' in patients and isinstance(patients, str):
         return pd.read_csv(patients)
     if isinstance(patients, dict):
         return utils.convert_dict_to_df(patients)
-    if '.json' in patients:
+    if '.json' in patients and isinstance(patients, str):
         patients = utils.read_json_file(patients)
         return utils.convert_dict_to_df(patients)
     raise ValueError(f"Received invalid input format: {type(patients)}")
