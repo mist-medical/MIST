@@ -1,7 +1,7 @@
 """Preprocessing functions for medical images and masks."""
 import os
 import argparse
-from typing import Dict, List, Tuple, Any, Optional
+from typing import Dict, List, Tuple, Any, Optional, Union
 
 import ants
 import numpy as np
@@ -321,7 +321,7 @@ def preprocess_example(
     fg_bbox: Optional[Dict[str, int]]=None,
     use_dtm: bool=False,
     normalize_dtm: bool=False,
-) -> Dict[str, npt.NDArray[Any]]:
+) -> Dict[str, Union[npt.NDArray[Any], Dict[str, int], None]]:
     """Preprocessing function for a single example.
 
     Args:
@@ -439,7 +439,7 @@ def preprocess_example(
 def convert_nifti_to_numpy(
         image_list: List[str],
         mask: Optional[str]=None,
-    ) -> Dict[str, Any]:
+    ) -> Dict[str, Union[npt.NDArray[Any], None]]:
     """Convert NIfTI images to numpy arrays.
 
     Args:
