@@ -112,11 +112,16 @@ class Analyzer:
         """Compute class weights on original data."""
 
         # Either compute class weights or use user provided weights.
+        # Check that number of class weights matches the number of labels.
+        n_labels = len(self.dataset_information["labels"])
+        if len(self.mist_arguments.class_weights) != n_labels:
+            raise ValueError(
+                "Number of class weights must match number of labels."
+            )
+
         if self.mist_arguments.class_weights is None:
             # Initialize class weights if not provided.
-            class_weights = [
-                0. for i in range(len(self.dataset_information["labels"]))
-            ]
+            class_weights = [0. for i in range(n_labels)]
             progress = utils.get_progress_bar("Computing class weights")
 
             with progress as pb:
