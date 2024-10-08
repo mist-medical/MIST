@@ -87,10 +87,10 @@ def get_sw_prediction(
 
 
 def back_to_original_space(
-    pred: npt.NDArray[Any],
-    og_ants_img: ants.core.ants_image.ANTsImage,
-    config: Dict[str, Any],
-    fg_bbox: Optional[Dict[str, Any]],
+    prediction_npy: npt.NDArray[Any],
+    original_image_ants: ants.core.ants_image.ANTsImage,
+    mist_configuration: Dict[str, Any],
+    fg_bounding_box: Optional[Dict[str, Any]],
 ) -> ants.core.ants_image.ANTsImage:
     """Place prediction back into original image space.
 
@@ -101,52 +101,60 @@ def back_to_original_space(
     header to the prediction's header.
 
     Args:
-        pred: The prediction to place back into the original image space. This
-            should be a numpy array.
-        og_ants_img: The original ANTs image.
-        config: The configuration dictionary.
-        fg_bbox: The foreground bounding box.
+        prediction_npy: The prediction to place back into the original image
+            space. This should be a numpy array.
+        original_image_ants: The original ANTs image.
+        mist_configuration: The configuration dictionary.
+        fg_bounding_box: The foreground bounding box.
 
     Returns:
         pred: The prediction in the original image space. This will be an ANTs
             image.
     """
     # Convert prediction to ANTs image.
-    pred = ants.from_numpy(data=pred, spacing=config["target_spacing"])
+    prediction_ants = ants.from_numpy(
+        data=prediction_npy,
+        spacing=mist_configuration["target_spacing"]
+    )
 
     # Reorient prediction.
-    pred = ants.reorient_image2(pred, ants.get_orientation(og_ants_img))
-    pred.set_direction(og_ants_img.direction)
+    prediction_ants = ants.reorient_image2(
+        prediction_ants,
+        ants.get_orientation(original_image_ants)
+    )
+    prediction_ants.set_direction(original_image_ants.direction)
 
     # Enforce size for cropped images.
-    if fg_bbox is not None:
+    if fg_bounding_box is not None:
         # If we have a foreground bounding box, use that to determine the size.
         new_size = [
-            fg_bbox["x_end"] - fg_bbox["x_start"] + 1,
-            fg_bbox["y_end"] - fg_bbox["y_start"] + 1,
-            fg_bbox["z_end"] - fg_bbox["z_start"] + 1,
+            fg_bounding_box["x_end"] - fg_bounding_box["x_start"] + 1,
+            fg_bounding_box["y_end"] - fg_bounding_box["y_start"] + 1,
+            fg_bounding_box["z_end"] - fg_bounding_box["z_start"] + 1,
         ]
     else:
         # Otherwise, use the original image size.
-        new_size = og_ants_img.shape
+        new_size = original_image_ants.shape
 
     # Resample prediction to original image space.
-    pred = preprocess.resample_mask(
-        pred,
-        labels=list(range(len(config["labels"]))),
-        target_spacing=og_ants_img.spacing,
+    prediction_ants = preprocess.resample_mask(
+        prediction_ants,
+        labels=list(range(len(mist_configuration["labels"]))),
+        target_spacing=original_image_ants.spacing,
         new_size=np.array(new_size, dtype="int").tolist(),
     )
 
     # Appropriately pad back to original size if necessary.
-    if fg_bbox is not None:
-        pred = utils.decrop_from_fg(pred, fg_bbox)
+    if fg_bounding_box is not None:
+        prediction_ants = utils.decrop_from_fg(prediction_ants, fg_bounding_box)
 
     # Copy header from original image onto the prediction so they match. This
     # will take care of other details in the header like the origin and the
     # image bounding box.
-    pred = og_ants_img.new_image_like(pred.numpy())
-    return pred
+    prediction_ants = original_image_ants.new_image_like(
+        prediction_ants.numpy()
+    )
+    return prediction_ants
 
 
 def predict_single_example(
