@@ -112,11 +112,20 @@ class Analyzer:
         """Compute class weights on original data."""
 
         # Either compute class weights or use user provided weights.
+        # Check that number of class weights matches the number of labels if
+        # provided.
+        n_labels = len(self.dataset_information["labels"])
+        if (
+            self.mist_arguments.class_weights and
+            len(self.mist_arguments.class_weights) != n_labels
+        ):
+            raise ValueError(
+                "Number of class weights must match number of labels."
+            )
+
         if self.mist_arguments.class_weights is None:
             # Initialize class weights if not provided.
-            class_weights = [
-                0. for i in range(len(self.dataset_information["labels"]))
-            ]
+            class_weights = [0. for i in range(n_labels)]
             progress = utils.get_progress_bar("Computing class weights")
 
             with progress as pb:
@@ -176,13 +185,19 @@ class Analyzer:
             for i in pb.track(range(len(self.paths_dataframe))):
                 patient = self.paths_dataframe.iloc[i].to_dict()
 
-                # Read mask image. This is faster to load.
-                spacing = ants.image_header_info(patient["mask"])["spacing"]
+                # Reorient masks to RAI to collect target spacing. We do this
+                # to make sure that all of the axes in the spacings match up.
+                # We load the masks because they are smaller and faster to load.
+                mask = ants.image_read(patient["mask"])
+                mask = ants.reorient_image2(mask, "RAI")
+                mask.set_direction(
+                    analyzer_constants.AnalyzeConstants.RAI_ANTS_DIRECTION
+                )
 
                 # Get voxel spacing.
-                original_spacings[i, :] = spacing
+                original_spacings[i, :] = mask.spacing
 
-        # Initialize target spacing
+        # Initialize target spacing.
         target_spacing = list(np.median(original_spacings, axis=0))
 
         # If anisotropic, adjust the coarsest resolution to bring ratio down.
