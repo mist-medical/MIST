@@ -1,160 +1,235 @@
+"""Converts medical segmentation decathlon dataset to MIST dataset."""
 import os
-import json
+from typing import Dict, Any
+
 import pprint
-import subprocess
+import rich
 import numpy as np
 import SimpleITK as sitk
-from tqdm import trange
+
+from mist.runtime import utils
+
+console = rich.console.Console()
 
 
-def create_empty_dir(path):
-    if not (os.path.exists(path)):
-        os.mkdir(path)
+def copy_msd_data(
+        source: str,
+        dest: str,
+        msd_json: Dict[str, Any],
+        modalities: Dict[int, str],
+        mode: str,
+        progress_bar_message: str,
+) -> None:
+    """Copy MSD data to destination in MIST format.
+
+    Args:
+        source: Path to the source directory.
+        dest: Path to the destination directory.
+        msd_json: Dictionary containing the MSD dataset information.
+        modalities: Dictionary containing modality information. This dictionary
+            contains the modality index as key and the modality name as value.
+            The modality index is an integer that is zero-indexed.
+        mode: Mode of the data - "training" or "test".
+
+    Returns:
+        None. The data is copied to the destination directory.
+    """
+    # Set up progress bar and error messages.
+    progress_bar = utils.get_progress_bar(progress_bar_message)
+    error_messages = ""
+
+    # Pre-compute mode paths and directory locations
+    image_source_dir = "imagesTr" if mode == "train" else "imagesTs"
+    dest_mode_dir = "train" if mode == "training" else "test"
+
+    is_training = mode == "training"
+
+    # Convert MSD data to MIST format and copy to destination
+    with progress_bar as pb:
+        for i in pb.track(range(len(msd_json[mode]))):
+            # Get patient id and image (and mask if training data) paths.
+            patient_id = os.path.basename(
+                msd_json[mode][i]["image"] if is_training else msd_json[mode][i]
+            ).split(".")[0]
+
+            # Get image path and check if it exists.
+            image_path = os.path.join(
+                source, image_source_dir, f"{patient_id}.nii.gz"
+            )
+            if not os.path.exists(image_path):
+                error_messages += f"Image {image_path} does not exist!\n"
+                continue
+
+            # If we're processing training data, get mask path and check if it
+            # exists.
+            if is_training:
+                mask_path = os.path.join(
+                    source, "labelsTr", f"{patient_id}.nii.gz"
+                )
+                if not os.path.exists(mask_path):
+                    error_messages += f"Mask {mask_path} does not exist!\n"
+                    continue
+
+            # Create patient directory in destination.
+            patient_directory = os.path.join(
+                dest, "raw", dest_mode_dir, patient_id
+            )
+            os.makedirs(patient_directory, exist_ok=True)
+
+            # Process modalities if more than one. We split the 4D image into
+            # multiple 3D images, one for each modality.
+            if len(modalities) > 1:
+                # Read the 4D image.
+                image_sitk = sitk.ReadImage(image_path)
+
+                # Get image as numpy array.
+                image_npy = sitk.GetArrayFromImage(image_sitk)
+
+                # Get image properties - direction, spacing, and origin.
+                direction = np.array(
+                    image_sitk.GetDirection()
+                ).reshape((4, 4))[0:3, 0:3].ravel()
+                spacing = image_sitk.GetSpacing()[:-1]
+                origin = image_sitk.GetOrigin()[:-1]
+
+                # Split and save each 3D image
+                for j, modality in modalities.items():
+                    # Create SimpleITK image for each modality.
+                    img_j = sitk.GetImageFromArray(image_npy[j])
+
+                    # Set image properties.
+                    img_j.SetDirection(direction)
+                    img_j.SetSpacing(spacing)
+                    img_j.SetOrigin(origin)
+
+                    # Write the modality-specific image
+                    sitk.WriteImage(
+                        img_j,
+                        os.path.join(patient_directory, f"{modality}.nii.gz")
+                    )
+            else:
+                # Directly copy the image if only one modality.
+                utils.copy_image_from_source_to_dest(
+                    image_path,
+                    os.path.join(patient_directory, f"{modalities[0]}.nii.gz")
+                )
+
+            # Copy mask for training data.
+            if is_training:
+                utils.copy_image_from_source_to_dest(
+                    mask_path,
+                    os.path.join(patient_directory, "mask.nii.gz")
+                )
+
+    # Print error messages if any.
+    if error_messages:
+        console.print(rich.text.Text(error_messages)) # type: ignore
 
 
-def copy_msd_data(source, dest, msd_json, modalities, mode):
-    # Copy data to destination in MIST format
-    for i in trange(len(msd_json[mode])):
-        if mode == 'training':
-            pat = os.path.basename(msd_json[mode][i]['image']).split('.')[0]
-            image = os.path.join(source, 'imagesTr', '{}.nii.gz'.format(pat))
-            mask = os.path.join(source, 'labelsTr', '{}.nii.gz'.format(pat))
-            patient_dir = os.path.join(dest, 'raw', 'train', pat)
-        if mode == 'test':
-            pat = os.path.basename(msd_json[mode][i]).split('.')[0]
-            image = os.path.join(source, 'imagesTs', '{}.nii.gz'.format(pat))
-            patient_dir = os.path.join(dest, 'raw', 'test', pat)
+def convert_msd(
+        source: str,
+        dest: str,
+) -> None:
+    """Converts medical segmentation decathlon dataset to MIST dataset.
 
-        create_empty_dir(patient_dir)
+    Args:
+        source: Path to the source MSD directory.
+        dest: Path to the destination directory.
 
-        # If images are 4D, split them into individal 3D images
-        if len(modalities) > 1:
-            # Read image as sitk image. ANTs is not good for this bit...
-            image_sitk = sitk.ReadImage(image)
-            image_npy = sitk.GetArrayFromImage(image_sitk)
+    Returns:
+        None. The data is copied to the destination directory.
 
-            # Get individual direction
-            direction = np.array(image_sitk.GetDirection()).reshape((4, 4))
-            direction = direction[0:3, 0:3]
-            direction = np.ravel(direction)
-            direction = tuple(direction)
-
-            # Get individual spacing
-            spacing = image_sitk.GetSpacing()
-            spacing = spacing[:-1]
-
-            # Get individual origin
-            origin = image_sitk.GetOrigin()
-            origin = origin[:-1]
-
-            for j in range(image_npy.shape[0]):
-                # Get image array
-                img_j = image_npy[j, ...]
-
-                # Convert to sitk image
-                img_j = sitk.GetImageFromArray(img_j)
-
-                # Set direction, spacing, and origin
-                img_j.SetDirection(direction)
-                img_j.SetSpacing(spacing)
-                img_j.SetOrigin(origin)
-
-                # Write individual image to nifit
-                output_name = os.path.join(patient_dir, '{}.nii.gz'.format(modalities[j]))
-                sitk.WriteImage(img_j, output_name)
-        else:
-            copy_cmd = 'cp {} {}'.format(image, os.path.join(patient_dir, '{}.nii.gz'.format(modalities[0])))
-            subprocess.call(copy_cmd, shell=True)
-
-        if mode == 'training':
-            # Copy mask to destination
-            copy_cmd = 'cp {} {}'.format(mask, os.path.join(patient_dir, 'mask.nii.gz'))
-            subprocess.call(copy_cmd, shell=True)
-
-
-# Convert MSD data to MIST format
-def convert_msd(source, dest):
+    Raises:
+        FileNotFoundError: If the source directory does not exist.
+        FileNotFoundError: If the MSD dataset json file does not exist.
+    """
+    # Convert relative paths to absolute paths.
     source = os.path.abspath(source)
     dest = os.path.abspath(dest)
 
-    if not (os.path.exists(source)):
-        raise Exception('{} does not exist!'.format(source))
+    if not os.path.exists(source):
+        raise FileNotFoundError(f"{source} does not exist!")
 
-    # Create destination folder and sub-folders
-    create_empty_dir(dest)
-    create_empty_dir(os.path.join(dest, 'raw'))
-    create_empty_dir(os.path.join(dest, 'raw', 'train'))
+    # Create destination directories for train and test data (if test exists).
+    os.makedirs(os.path.join(dest, "raw", "train"), exist_ok=True)
+    test_data_exists = os.path.exists(os.path.join(source, "imagesTs"))
+    if test_data_exists:
+        os.makedirs(os.path.join(dest, "raw", "test"), exist_ok=True)
 
-    exists_test = False
-    if os.path.exists(os.path.join(source, 'imagesTs')):
-        exists_test = True
-        create_empty_dir(os.path.join(dest, 'raw', 'test'))
+    # Check if the MSD dataset JSON file exists.
+    dataset_json_path = os.path.join(source, "dataset.json")
+    if not os.path.exists(dataset_json_path):
+        raise FileNotFoundError(f"{dataset_json_path} does not exist!")
 
-    msd_json_path = os.path.join(source, 'dataset.json')
-    if not (os.path.exists(msd_json_path)):
-        raise Exception('{} does not exist!'.format(msd_json_path))
+    # Load the MSD dataset JSON file.
+    msd_json = utils.read_json_file(dataset_json_path)
 
-    with open(msd_json_path, 'r') as file:
-        msd_json = json.load(file)
+    # Extract modalities.
+    modalities = {int(idx): mod for idx, mod in msd_json["modality"].items()}
 
-    # Get modalities
-    modalities = dict()
-    for idx in msd_json['modality'].keys():
-        modalities[int(idx)] = msd_json['modality'][idx]
+    # Copy training data to destination in MIST format.
+    copy_msd_data(
+        source=source,
+        dest=dest,
+        msd_json=msd_json,
+        modalities=modalities,
+        mode="training",
+        progress_bar_message="Converting training data to MIST format",
+    )
 
-    # Copy data to destination in MIST format
-    print('Converting training data to MIST format...')
-    copy_msd_data(source, dest, msd_json, modalities, 'training')
+    # Copy test data if it exists.
+    if test_data_exists:
+        copy_msd_data(
+            source=source,
+            dest=dest,
+            msd_json=msd_json,
+            modalities=modalities,
+            mode="test",
+            progress_bar_message="Converting test data to MIST format",
+        )
 
-    if exists_test:
-        print('Converting test data to MIST format...')
-        copy_msd_data(source, dest, msd_json, modalities, 'test')
+    # Prepare MIST dataset JSON content.
+    modalities_values_lowercase = [mod.lower() for mod in modalities.values()]
+    labels_list = list(map(int, msd_json["labels"].keys()))
+    dataset_json = {
+        "task": msd_json["name"],
+        "modality": (
+            "ct" if "ct" in modalities_values_lowercase
+            else "mr" if "mri" in modalities_values_lowercase
+            else "other"
+        ),
+        "train-data": os.path.join(dest, "raw", "train"),
+        "test-data": (
+            os.path.join(dest, "raw", "test") if test_data_exists else None
+        ),
+        "mask": ["mask.nii.gz"],
+        "images": {
+            mod: [f"{mod}.nii.gz"] for mod in modalities.values()
+        },
+        "labels": labels_list,
+        "final_classes": {
+            msd_json["labels"][str(label)].replace(" ", "_"): [label]
+            for label in labels_list if label != 0
+        },
+    }
 
-    # Create MIST dataset json file
-    dataset_json = dict()
+    # Remove "test-data" if it doesn't exist (clean-up None values).
+    if not test_data_exists:
+        dataset_json.pop("test-data")
 
-    # Get task name
-    dataset_json['task'] = msd_json['name']
+    # Write MIST dataset description to json file.
+    dataset_json_filename = os.path.join(dest, "dataset_description.json")
+    text = rich.text.Text( # type: ignore
+        f"MIST dataset parameters written to {dataset_json_filename}\n",
+    )
+    console.print(text)
 
-    # Handel modalities input
-    modalities_list = list(modalities.values())
-    modalities_list = [m.lower() for m in modalities_list]
-    if 'ct' in modalities_list:
-        dataset_json['modality'] = 'ct'
-    elif 'mri' in modalities_list:
-        dataset_json['modality'] = 'mr'
-    else:
-        dataset_json['modality'] = 'other'
-
-    # Get training and testing directories
-    dataset_json['train-data'] = os.path.abspath(os.path.join(dest, 'raw', 'train'))
-    if exists_test:
-        dataset_json['test-data'] = os.path.abspath(os.path.join(dest, 'raw', 'test'))
-
-    # Handel mask/images input
-    dataset_json['mask'] = ['mask.nii.gz']
-    images_dict = dict()
-    for i in range(len(modalities)):
-        images_dict[modalities[i]] = ['{}.nii.gz'.format(modalities[i])]
-    dataset_json['images'] = images_dict
-
-    # Handel labels and classes input
-    labels = dict()
-    for idx in msd_json['labels'].keys():
-        labels[int(idx)] = msd_json['labels'][idx]
-    dataset_json['labels'] = list(labels.keys())
-
-    final_classes_dict = dict()
-    for label in labels.keys():
-        if label != 0:
-            final_classes_dict[labels[label].replace(' ', '_')] = [label]
-    dataset_json['final_classes'] = final_classes_dict
-
-    # Write MIST formated dataset to json file
-    dataset_json_filename = os.path.join(dest, '{}_dataset.json'.format(dataset_json['task']))
-    print('MIST dataset parameters written to {}\n'.format(dataset_json_filename))
     pprint.pprint(dataset_json, sort_dicts=False)
-    print('')
+    console.print(rich.text.Text("\n")) # type: ignore
+    text = rich.text.Text( # type: ignore
+        "Please add task, modality, labels, and final classes to parameters.\n"
+    )
+    console.print(text)
 
-    with open(dataset_json_filename, 'w') as outfile:
-        json.dump(dataset_json, outfile, indent=2)
+    utils.write_json_file(dataset_json_filename, dataset_json)
+

@@ -30,28 +30,26 @@ def copy_csv_data(
     Returns:
         None. The data is copied to the destination directory.
     """
-    # Setup rich progress bar.
+    # Setup rich progress bar and error messages.
     progress_bar = utils.get_progress_bar(progress_bar_message)
+    error_messages = ""
 
     # Set image start index based on mode. The csv files have the following
     # format: id, mask, image1, image2, ..., imageN. The mask is only present
     # in the "train" mode.
-    image_start_idx = 2 if mode == "train" else 1
-
-    # Error messages.
-    error_messages = ""
+    image_start_idx = 2 if mode == "training" else 1
 
     with progress_bar as pb:
         for patient in pb.track(df.itertuples(index=False), total=len(df)):
-            # Convert row tuple to dictionary
+            # Convert row tuple to dictionary.
             patient_dict = patient._asdict() # type: ignore
 
-            # Create new patient folder
+            # Create new patient folder.
             patient_dest = os.path.join(dest, str(patient_dict["id"]))
-            utils.create_empty_dir(patient_dest)
+            os.makedirs(patient_dest, exist_ok=True)
 
             # Copy mask only in "train" mode
-            if mode == "train":
+            if mode == "training":
                 mask_source = os.path.abspath(patient_dict["mask"])
                 mask_dest = os.path.join(patient_dest, "mask.nii.gz")
                 if not os.path.exists(mask_source):
@@ -77,15 +75,15 @@ def copy_csv_data(
 
 def convert_csv(
         train_csv: str,
-        test_csv: Optional[str],
         dest: str,
+        test_csv: Optional[str]=None,
 ) -> None:
     """Converts train and test data from csv files to MIST format.
 
     Args:
         train_csv: Path to the training csv file.
-        test_csv: Path to the testing csv file.
         dest: Destination directory to save the data.
+        test_csv: Optional path to the testing csv file.
 
     Returns:
         None. The data is copied to the destination directory.
@@ -97,31 +95,27 @@ def convert_csv(
     # convert to absolute paths.
     if not os.path.exists(train_csv):
         raise FileNotFoundError(f"{train_csv} does not exist!")
-    else:
-        train_csv = os.path.abspath(train_csv)
-
-    if test_csv and not os.path.exists(test_csv):
-        raise FileNotFoundError(f"{test_csv} does not exist!")
-    elif test_csv:
-        test_csv = os.path.abspath(test_csv)
-    else:
-        pass
-
-    # Create destination directories
-    utils.create_empty_dir(dest)
-
-    train_dest = os.path.join(dest, "raw", "train")
-    utils.create_empty_dir(os.path.join(dest, "raw"))
-    utils.create_empty_dir(train_dest)
+    train_csv = os.path.abspath(train_csv)
 
     if test_csv:
+        if os.path.exists(test_csv):
+            raise FileNotFoundError(f"{test_csv} does not exist!")
+        test_csv = os.path.abspath(test_csv)
+
+    # Create destination directories for train and test data (if test exists).
+    train_dest = os.path.join(dest, "raw", "train")
+    os.makedirs(train_dest, exist_ok=True)
+    if test_csv:
         test_dest = os.path.join(dest, "raw", "test")
-        utils.create_empty_dir(test_dest)
+        os.makedirs(test_dest, exist_ok=True)
 
     # Convert training data to MIST-compatible format.
     train_df = pd.read_csv(train_csv)
     copy_csv_data(
-        train_df, train_dest, "train", "Converting training data to MIST format"
+        train_df,
+        train_dest,
+        "training",
+        "Converting training data to MIST format",
     )
 
     # Convert testing data to MIST-compatible format.
@@ -131,34 +125,28 @@ def convert_csv(
             test_df, test_dest, "test", "Converting test data to MIST format"
         )
 
-    # Create MIST dataset json file.
+    # Create MIST dataset json file with task, modality, and paths.
     dataset_json = {
         "task": None,
         "modality": None,
         "train-data": os.path.abspath(train_dest),
+        "test-data": os.path.abspath(test_dest) if test_csv else None,
+        "mask": ["mask.nii.gz"],
+        "images": {
+            modality: [
+                f"{modality}.nii.gz"
+            ] for modality in list(train_df.columns)[2:]
+        },
+        "labels": None,
+        "final_classes": None,
     }
 
-    # Add test data to dataset json if it exists.
-    if test_csv:
-        dataset_json["test-data"] = os.path.abspath(test_dest)
-
-    # Add mask naming convention to dataset json.
-    dataset_json["mask"] = ["mask.nii.gz"]
-    images_dict = {}
-
-    # Add image naming convention to dataset json.
-    modalities = list(train_df.columns)[2:]
-    for modality in modalities:
-        images_dict[modality] = [f"{modality}.nii.gz"]
-    dataset_json["images"] = images_dict
-
-    # Add labels and final classes to dataset json. These are placeholders that
-    # the user must fill in.
-    dataset_json["labels"] = None
-    dataset_json["final_classes"] = None
+    # Remove "test-data" if test_csv doesn't exist (clean-up None values).
+    if not test_csv:
+        dataset_json.pop("test-data")
 
     # Write MIST dataset description to json file.
-    dataset_json_filename = os.path.join(dest, "dataset_description.json")
+    dataset_json_filename = os.path.join(dest, "dataset.json")
     text = rich.text.Text( # type: ignore
         f"MIST dataset parameters written to {dataset_json_filename}\n",
     )
