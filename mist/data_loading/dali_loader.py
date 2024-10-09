@@ -177,7 +177,7 @@ class GenericPipeline(Pipeline):
 
         Args:
             img: The image data to apply Gaussian blur to.
-        
+
         Returns:
             The image data with random Gaussian blur applied with a probability
             of 0.15.
@@ -267,7 +267,7 @@ class GenericPipeline(Pipeline):
 
 class TrainPipeline(GenericPipeline):
     """Training pipeline for loading images and labels using DALI.
-    
+
     Attributes:
         oversampling: The oversampling factor for the training data.
         patch_size: The size of the patches used for training
@@ -838,7 +838,7 @@ def get_training_dataset(
         world_size: int,
 ) -> DALIGenericIterator:
     """Retrieve the appropriate training pipeline based on the input data.
-    
+
     This function returns a DALI training pipeline for loading images, labels,
     and DTM data during training. The pipeline includes patch extraction and
     augmentation to prepare the data for training. The pipeline is configured
@@ -914,7 +914,7 @@ def get_validation_dataset(
         num_workers: The number of workers for data loading.
         rank: The rank of the current process (GPU).
         world_size: The total number of GPUs used for training.
-    
+
     Returns:
         dali_iter: A DALI iterator for validation data loading.
     """
@@ -944,7 +944,7 @@ def get_test_dataset(
         world_size: int=1,
 ) -> DALIGenericIterator:
     """"Build a DALI test pipeline for loading images.
-    
+
     This function returns a DALI test pipeline for loading images during
     testing. The pipeline does not include patch extraction or augmentation. It
     simply streams the images from the input readers to the GPU. This pipeline
