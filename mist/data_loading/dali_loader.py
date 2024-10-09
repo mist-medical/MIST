@@ -48,8 +48,8 @@ def get_numpy_reader(
 
 def random_augmentation(
         probability: float,
-        augmented: TensorGPU,
-        original: TensorGPU,
+        augmented_data: TensorGPU,
+        original_data: TensorGPU,
 ) -> TensorGPU:
     """Apply random augmentation to the data based on a given probability.
 
@@ -58,8 +58,8 @@ def random_augmentation(
 
     Args:
         probability: The probability of applying the augmentation.
-        augmented: The augmented version of the data.
-        original: The original data.
+        augmented_data: The augmented version of the data.
+        original_data: The original data.
 
     Returns:
         The augmented version of the data if the flip_coin function returns true
@@ -75,7 +75,7 @@ def random_augmentation(
     neg_condition = condition ^ True
 
     # Return augmented data if condition is true.
-    return condition * augmented + neg_condition * original
+    return condition * augmented_data + neg_condition * original_data
 
 
 class GenericPipeline(Pipeline):
