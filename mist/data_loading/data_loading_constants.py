@@ -26,8 +26,8 @@ class DataLoadingConstants:
     CONTRAST_FN_PROBABILITY = 0.15
 
     # Zoom function constants.
-    ZOOM_FN_RANGE_MIN = 0.9
-    ZOOM_FN_RANGE_MAX = 1.1
+    ZOOM_FN_RANGE_MIN = 0.7
+    ZOOM_FN_RANGE_MAX = 1.0
     ZOOM_FN_PROBABILITY = 0.15
 
     # Flip function constants.
