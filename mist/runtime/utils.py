@@ -85,7 +85,7 @@ def is_image_3d(header: Dict[str, Any]) -> bool:
 
     Args:
         header: Image header information from ants.image_header_info
-    
+
     Returns:
         True if the image is 3D.
     """
