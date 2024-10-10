@@ -39,7 +39,7 @@ def copy_msd_data(
     error_messages = ""
 
     # Pre-compute mode paths and directory locations
-    image_source_dir = "imagesTr" if mode == "train" else "imagesTs"
+    image_source_dir = "imagesTr" if mode == "training" else "imagesTs"
     dest_mode_dir = "train" if mode == "training" else "test"
 
     is_training = mode == "training"
@@ -218,7 +218,7 @@ def convert_msd(
         dataset_json.pop("test-data")
 
     # Write MIST dataset description to json file.
-    dataset_json_filename = os.path.join(dest, "dataset_description.json")
+    dataset_json_filename = os.path.join(dest, "dataset.json")
     text = rich.text.Text( # type: ignore
         f"MIST dataset parameters written to {dataset_json_filename}\n",
     )
