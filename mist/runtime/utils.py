@@ -4,6 +4,7 @@ import os
 import glob
 import random
 import argparse
+import subprocess
 import warnings
 from typing import Any, Dict, Tuple, List, Callable
 
@@ -84,7 +85,7 @@ def is_image_3d(header: Dict[str, Any]) -> bool:
 
     Args:
         header: Image header information from ants.image_header_info
-    
+
     Returns:
         True if the image is 3D.
     """
@@ -167,12 +168,29 @@ def get_progress_bar(task_name: str) -> Progress:
     )
 
 
+def copy_image_from_source_to_dest(
+        image_source: str,
+        image_destination: str,
+) -> None:
+    """Copy image from source to destination.
+
+    Args:
+        image_source: Source image path.
+        image_destination: Destination image path.
+
+    Returns:
+        None. The image is copied to the destination path.
+    """
+    cp_image_cmd = f"cp {image_source} {image_destination}"
+    subprocess.call(cp_image_cmd, shell=True)
+
+
 def get_files_list(path: str) -> List[str]:
     """Get list of files with their full path in a directory.
-    
+
     Args:
         path: Path to directory.
-    
+
     Returns:
         files_list: List of files in the directory with their full file path.
     """
