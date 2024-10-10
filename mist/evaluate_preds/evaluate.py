@@ -28,13 +28,117 @@ def get_worst_case_hausdorff(
     Args:
         mask_npy: The mask as a numpy array.
         spacing: The spacing of the mask.
-    
+
     Returns:
         The worst case Hausdorff distance.
     """
     width, height, depth = np.multiply(mask_npy.shape, spacing)
     return np.sqrt(width**2 + height**2 + depth**2)
 
+
+def check_best_and_worst_cases(
+        sum_of_truth_mask: int,
+        sum_of_pred_mask: int,
+        best_case_value: float,
+        worst_case_value: float,
+) -> Union[float, None]:
+    """Check if we need to return the best or worst case value for a metric.
+
+    If both the ground truth and predicted masks are empty, the best case value
+    is returned. If only one of the masks is empty, the worst case value is
+    returned. Otherwise, None is returned and we proceed with computing the
+    metric.
+
+    Args:
+        sum_of_truth_mask: The sum of the ground truth mask.
+        sum_of_pred_mask: The sum of the predicted mask.
+        best_case_value: The best case value for the metric.
+        worst_case_value: The worst case value for the metric.
+
+    Returns:
+        final_metric_value: The final metric value.
+    """
+    if sum_of_truth_mask == 0 and sum_of_pred_mask == 0:
+        return best_case_value
+    if sum_of_truth_mask == 0 ^ sum_of_pred_mask == 0:
+        return worst_case_value
+    return None
+
+
+def calculate_metrics(
+        truth_mask: npt.NDArray[np.bool_],
+        pred_mask: npt.NDArray[np.bool_],
+        list_of_metrics: List[str],
+        spacing: Tuple[float, float, float],
+        surf_dice_tol: float,
+) -> Dict[str, float]:
+    """Helper function to compute metrics for a given pair of masks.
+
+    Args:
+        truth_mask: The ground truth mask.
+        pred_mask: The predicted mask.
+        list_of_metrics: The metrics to compute. These are "dice", "haus95",
+            "surf_dice", and "avg_surf", or the Dice, 95th percentile Hausdorff
+            distance, surface Dice coefficient, and average surface distance,
+            respectively.
+        spacing: The voxel spacing of the masks.
+        surf_dice_tol: The tolerance for the surface Dice coefficient.
+
+    Returns:
+        metrics_dict: A dictionary containing the computed metrics.
+
+    Raises:
+        ValueError: If an invalid metric is requested.
+    """
+    # Initialize the metrics dictionary.
+    metrics_dict = {}
+
+    # Get the sum of the ground truth and predicted masks. This will be used to
+    # check if the masks are empty and if we need to return the best or worst
+    # case value for a metric.
+    truth_sum, pred_sum = truth_mask.sum(), pred_mask.sum()
+
+    # Compute the distance maps that we need for computing the Hausdorff,
+    # surface Dice, and average surface distance metrics.
+    distances = metrics.compute_surface_distances(
+        truth_mask, pred_mask, spacing
+    )
+
+    # Compute the worst case Hausdorff distance for the mask. This is the
+    # maximum possible distance between two points in the mask (i.e., the 
+    # diagonal distance of the mask).
+    worst_case_hausdorff = get_worst_case_hausdorff(truth_mask, spacing)
+
+    # Define the (best, worst) case values for each metric.
+    best_and_worst_cases = {
+        "dice": (1.0, 0.0),
+        "haus95": (0.0, worst_case_hausdorff),
+        "surf_dice": (1.0, 0.0),
+        "avg_surf": (0.0, worst_case_hausdorff),
+    }
+
+    # Get the functions to compute the metrics.
+    metric_functions = {
+        "dice": lambda: metrics.compute_dice_coefficient(truth_mask, pred_mask),
+        "haus95": lambda: metrics.compute_robust_hausdorff(
+            distances, percent=95
+        ),
+        "surf_dice": lambda: metrics.compute_surface_dice_at_tolerance(
+            distances, tolerance_mm=surf_dice_tol
+        ),
+        "avg_surf": lambda: metrics.compute_average_surface_distance(distances),
+    }
+
+    # Iterate through the desired metrics and compute them.
+    for metric in list_of_metrics:
+        best_or_worst_case = check_best_and_worst_cases(
+            truth_sum, pred_sum, *best_and_worst_cases[metric]
+        )
+        if best_or_worst_case:
+            metrics_dict[metric] = best_or_worst_case
+        else:
+            metrics_dict[metric] = metric_functions[metric]()
+    return metrics_dict
 
 
 def evaluate_single_example(
@@ -45,7 +149,7 @@ def evaluate_single_example(
         list_of_metrics: List[str],
         use_native_spacing: bool,
         surf_dice_tol: float,
-) -> Dict[str, float]:
+) -> Dict[str, Union[str, float]]:
     """Evaluate a single example.
 
     Evaluate a single example using the specified metrics. The labels or groups
@@ -64,110 +168,45 @@ def evaluate_single_example(
         use_native_spacing: Whether to use the native spacing of the truth mask.
             Otherwise, the spacing is set to (1, 1, 1).
         surf_dice_tol: The tolerance for the surface Dice coefficient.
-    
+
     Returns:
         row_dict: A dictionary containing the evaluation results. The keys are
             "id" for the patient ID, the class names followed by the metric name
-            (e.g., "class1_dice"), and the metric values.
+            (e.g., "class1_dice"), and the metric values. This will be a row in
+            the results DataFrame, which is computed in the `evaluate` function.
     """
-    # Initialize the result dictionary
+    # Initialize the result dictionary.
     row_dict = {"id": patient_id}
 
-    # Load prediction and ground truth masks
-    pred = ants.image_read(path_to_prediction).numpy().astype(np.bool)
-    truth = ants.image_read(path_to_truth).numpy().astype(np.bool)
+    # Load prediction and convert to numpy array.
+    pred = ants.image_read(path_to_prediction).numpy()
 
-    # Set spacing based on config
+    # Load the ground truth mask, get the spacing, and convert to numpy array.
+    truth = ants.image_read(path_to_truth)
     spacing = truth.spacing if use_native_spacing else (1, 1, 1)
+    truth = truth.numpy()
 
-    def calculate_metrics(
-            truth_mask: npt.NDArray[np.bool],
-            pred_mask: npt.NDArray[np.bool],
-            spacing: Tuple[float, float, float]
-    ) -> Dict[str, float]:
-        """Helper function to compute metrics for a given pair of masks.
-
-        Args:
-            truth_mask: The ground truth mask.
-            pred_mask: The predicted mask.
-            spacing: The spacing of the masks.
-
-        Returns:
-            metrics_dict: A dictionary containing the computed metrics.
-
-        Raises:
-            ValueError: If an invalid metric is requested.
-        """
-        metrics_dict = {}
-        truth_sum, pred_sum = truth_mask.sum(), pred_mask.sum()
-
-        # Compute distances if masks are not empty.
-        if truth_sum > 0 and pred_sum > 0:
-            distances = metrics.compute_surface_distances(
-                truth_mask, pred_mask, spacing
-            )
-        else:
-            distances = None
-
-        # Loop through metrics and compute them if they are requested in
-        # the list of metrics.
-        for metric in list_of_metrics:
-            if metric == "dice":
-                if truth_sum == 0 and pred_sum == 0:
-                    metrics_dict["dice"] = 1.0
-                else:
-                    metrics_dict["dice"] = metrics.compute_dice_coefficient(
-                        truth_mask, pred_mask
-                    )
-            if metric == "haus95":
-                if truth_sum == 0 and pred_sum == 0:
-                    metrics_dict["haus95"] = 0.0
-                else:
-                    metrics_dict["haus95"] = (
-                        metrics.compute_robust_hausdorff(distances, percent=95)
-                        if distances
-                        else get_worst_case_hausdorff(truth_mask, spacing)
-                    )
-            if metric == "surf_dice":
-                if truth_sum == 0 and pred_sum == 0:
-                    metrics_dict["surf_dice"] = 1.0
-                else:
-                    metrics_dict["surf_dice"] = (
-                        metrics.compute_surface_dice_at_tolerance(
-                            distances, tolerance_mm=surf_dice_tol
-                        )
-                        if distances
-                        else 0.0
-                    )
-            if metric == "avg_surf":
-                if truth_sum == 0 and pred_sum == 0:
-                    metrics_dict["avg_surf"] = 0.0
-                else:
-                    metrics_dict["avg_surf"] = (
-                        metrics.compute_average_surface_distance(distances)
-                        if distances
-                        else get_worst_case_hausdorff(truth_mask, spacing)
-                    )
-            raise ValueError(f"Invalid metric: {metric}!")
-        return metrics_dict
-
-    # Evaluate metrics for each class in the config
-    for class_name, class_labels in config['final_classes'].items():
-        # Create binary masks for current class
+    # Evaluate metrics for each class in the config.
+    for class_name, class_labels in config["final_classes"].items():
+        # Create binary masks for current class.
         truth_mask = np.isin(truth, class_labels)
         pred_mask = np.isin(pred, class_labels)
 
-        # Calculate and store metrics
-        class_metrics = calculate_metrics(truth_mask, pred_mask, spacing)
-        for metric, value in class_metrics.items():
-            row_dict[f"{class_name}_{metric}"] = value
+        # Calculate and store metrics.
+        class_metrics = calculate_metrics(
+            truth_mask, pred_mask, list_of_metrics, spacing, surf_dice_tol
+        )
+        for metric_name, metric_value in class_metrics.items():
+            row_dict[f"{class_name}_{metric_name}"] = metric_value # type: ignore
 
-    return row_dict
+    return row_dict # type: ignore
 
 
 def evaluate(
         config_json: str,
-        paths_to_predictions: Union[str, pd.DataFrame, Dict[str, str]],
+        paths_to_predictions: Union[
+            str, pd.DataFrame, Dict[str, Dict[str, str]]
+        ],
         source_dir: str,
         output_csv: str,
         list_of_metrics: List[str],
@@ -211,12 +250,12 @@ def evaluate(
                 f"File {paths_to_predictions} does not exist."
             )
 
-        # If it's a CSV file, load it.
-        if paths_to_predictions.endswith('.csv'):
+        # If it"s a CSV file, load it.
+        if paths_to_predictions.endswith(".csv"):
             paths = pd.read_csv(paths_to_predictions)
 
-        # If it's a JSON file, load and convert to DataFrame.
-        elif paths_to_predictions.endswith('.json'):
+        # If it"s a JSON file, load and convert to DataFrame.
+        elif paths_to_predictions.endswith(".json"):
             paths = utils.read_json_file(paths_to_predictions)
             paths = utils.convert_dict_to_df(paths)
 
@@ -228,11 +267,11 @@ def evaluate(
     elif isinstance(paths_to_predictions, pd.DataFrame):
         paths = paths_to_predictions
 
-    # If it's a dictionary, convert it to a DataFrame.
+    # If it"s a dictionary, convert it to a DataFrame.
     elif isinstance(paths_to_predictions, dict):
         paths = utils.convert_dict_to_df(paths_to_predictions)
 
-    # If it's none of the above, raise an error.
+    # If it"s none of the above, raise an error.
     else:
         raise ValueError("Invalid format for paths!")
 
@@ -250,21 +289,21 @@ def evaluate(
         for i in pb.track(range(len(predictions))):
             try:
                 # Get true mask and original_prediction.
-                patient_id = predictions[i].split('.')[0]
-                pred = os.path.join(source_dir, predictions[i])
-                truth = paths.loc[
-                    paths['id'].astype(str) == patient_id
-                ].iloc[0]['mask']
+                patient_id = predictions[i].split(".")[0]
+                path_to_prediction = os.path.join(source_dir, predictions[i])
+                path_to_truth = paths.loc[
+                    paths["id"].astype(str) == patient_id
+                ].iloc[0]["mask"]
 
                 # Evaluate the prediction.
                 eval_results = evaluate_single_example(
-                    pred,
-                    truth,
-                    patient_id,
-                    config,
-                    metrics,
-                    use_native_spacing,
-                    surf_dice_tol
+                    path_to_prediction=path_to_prediction,
+                    path_to_truth=path_to_truth,
+                    patient_id=patient_id,
+                    config=config,
+                    list_of_metrics=list_of_metrics,
+                    use_native_spacing=use_native_spacing,
+                    surf_dice_tol=surf_dice_tol,
                 )
             except ValueError as e:
                 error_messages += f"{e}: Could not evaluate {predictions[i]}\n"
@@ -275,9 +314,9 @@ def evaluate(
                     ignore_index=True
                 )
 
-    # Print error messages to console
+    # Print error messages to console.
     if error_messages:
-        text = rich.text.Text(error_messages)
+        text = rich.text.Text(error_messages) # type: ignore
         console.print(text)
 
     # Compute the statistics for the results and append to the DataFrame.
