@@ -485,8 +485,14 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
 
     Raises:
         ValueError: If N4 bias correction is used for non-MR images.
+        FileNotFoundError: If configuration file, training paths file, or
+            foreground bounding box file is not found.
     """
-    # Read configuration file.
+    # Check if configuration file exists and read it.
+    if not os.path.exists(os.path.join(args.results, "config.json")):
+        raise FileNotFoundError(
+            f"Configuration file not found in {args.results}."
+        )
     config = utils.read_json_file(os.path.join(args.results, "config.json"))
 
     if config["modality"] != "mr" and config["use_n4_bias_correction"]:
@@ -495,7 +501,11 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
             f"Got {config['modality']} instead."
         )
 
-    # Get dataframe with paths to images and masks.
+    # Check if training paths file exists and read it.
+    if not os.path.exists(os.path.join(args.results, "train_paths.csv")):
+        raise FileNotFoundError(
+            "Training paths file not found in {args.results}."
+        )
     df = pd.read_csv(os.path.join(args.results, "train_paths.csv"))
 
     # Create output directories if they do not exist.
@@ -504,10 +514,10 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
         "labels": os.path.join(args.numpy, "labels"),
         "dtms": os.path.join(args.numpy, "dtms"),
     }
-    utils.create_empty_dir(output_directories["images"])
-    utils.create_empty_dir(output_directories["labels"])
+    os.makedirs(output_directories["images"], exist_ok=True)
+    os.makedirs(output_directories["labels"], exist_ok=True)
     if args.use_dtms:
-        utils.create_empty_dir(output_directories["dtms"])
+        os.makedirs(output_directories["dtms"], exist_ok=True)
 
     # Print preprocessing message and get progress bar.
     text = rich.text.Text("\nPreprocessing dataset\n") # type: ignore
@@ -519,8 +529,13 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
     else:
         progress = utils.get_progress_bar("Preprocessing")
 
-    if config["crop_to_fg"] and not args.no_preprocess:
-        fg_bboxes = pd.read_csv(os.path.join(args.results, "fg_bboxes.csv"))
+    # Check if foreground bounding box file exists and read it.
+    if not os.path.exists(os.path.join(args.results, "fg_bboxes.csv")):
+        raise FileNotFoundError(
+            "Foreground bounding box (fg_bboxes.csv) file not found in "
+            f"{args.results}."
+        )
+    fg_bboxes = pd.read_csv(os.path.join(args.results, "fg_bboxes.csv"))
 
     with progress as pb:
         for i in pb.track(range(len(df))):
@@ -570,7 +585,7 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
                     output_directories["images"],
                     f"{patient['id']}.npy"
                 ),
-                current_preprocessed_example["image"].astype("float32")
+                current_preprocessed_example["image"].astype("float32") # type: ignore
             )
             np.save(
                 os.path.join(
@@ -578,7 +593,7 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
                     output_directories["labels"],
                     f"{patient['id']}.npy"
                 ),
-                current_preprocessed_example["mask"].astype("uint8")
+                current_preprocessed_example["mask"].astype("uint8") # type: ignore
             )
 
             if args.use_dtms:
@@ -588,5 +603,5 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
                         output_directories["dtms"],
                         f"{patient['id']}.npy"
                     ),
-                    current_preprocessed_example["dtm"].astype("float32")
+                    current_preprocessed_example["dtm"].astype("float32") # type: ignore
                 )
