@@ -6,7 +6,7 @@ Medical Imaging Segmentation Toolkit
 ![PyPI - Downloads](https://img.shields.io/pypi/dm/mist-medical?style=flat&logo=PyPI&label=pypi%20downloads)
 ![Static Badge](https://img.shields.io/badge/paper-PocketNet-blue?logo=ieee&link=https%3A%2F%2Fieeexplore.ieee.org%2Fdocument%2F9964128)
 ![Static Badge](https://img.shields.io/badge/paper-FMG_%26_WNet-blue?logo=adobeacrobatreader&link=https%3A%2F%2Fresearch.latinxinai.org%2Fpapers%2Fneurips%2F2023%2Fpdf%2FAdrian_Celaya.pdf)
-![Static Badge](![Static Badge](https://img.shields.io/badge/paper-BraTS%202024-blue?style=flat&logo=adobeacrobatreader&link=https%3A%2F%2Fwww.arxiv.org%2Fabs%2F2407.21343))
+![Static Badge](https://img.shields.io/badge/paper-BraTS%202024-blue?style=flat&logo=adobeacrobatreader&link=https%3A%2F%2Fwww.arxiv.org%2Fabs%2F2407.21343)
 ![GitHub Repo stars](https://img.shields.io/github/stars/mist-medical/MIST?style=flat)
 
 ## About
@@ -26,6 +26,7 @@ Please cite the following papers if you use this code for your work:
 Please see our Read the Docs page [**here**](https://mist-medical.readthedocs.io/).
 
 ## What's New
+* October 2024 - MIST takes 3rd place at BraTS 2024 adult glioma challenge!
 * August 2024 - Added clDice as an available loss function.
 * April 2024 - The Read the Docs page is up!
 * March 2024 - Simplify and decouple postprocessing from main MIST pipeline.
