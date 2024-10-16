@@ -1,15 +1,7 @@
 import torch
 import torch.nn as nn
-from torch.nn.functional import softmax, one_hot
-
-
-def get_one_hot(y_true, n_classes):
-    y_true = y_true.to(torch.int64)
-    y_true = one_hot(y_true, num_classes=n_classes)
-    y_true = torch.transpose(y_true, dim0=5, dim1=1)
-    y_true = torch.squeeze(y_true, dim=5)
-    y_true = y_true.to(torch.int8)
-    return y_true
+from torch.nn.functional import softmax
+from mist.runtime.loss_utils import get_one_hot, SoftSkeletonize
 
 
 class DiceLoss(nn.Module):
@@ -30,7 +22,7 @@ class DiceLoss(nn.Module):
         loss = torch.mean(num / den, axis=1)
         loss = torch.mean(loss)
         return loss
-
+    
 
 class DiceCELoss(nn.Module):
     def __init__(self):
@@ -43,12 +35,52 @@ class DiceCELoss(nn.Module):
         loss_dice = self.dice_loss(y_true, y_pred)
 
         # Prepare inputs
-        y_true = get_one_hot(y_true, y_pred.shape[1]).to(torch.float32)
+        y_true = get_one_hot(y_true, y_pred.shape[1]).to(torch.float)
 
         # Cross entropy loss
         loss_ce = self.cross_entropy(y_pred, y_true)
 
         return 0.5*(loss_ce + loss_dice)
+
+
+class SoftCLDice(nn.Module):
+    def __init__(self, iterations=3, smooth=1., exclude_background=False):
+        super(SoftCLDice, self).__init__()
+        self.iterations = iterations
+        self.smooth = smooth
+        self.soft_skeletonize = SoftSkeletonize(num_iter=10)
+        self.exclude_background = exclude_background
+
+    def forward(self, y_true, y_pred):
+        # Prepare inputs
+        y_true = get_one_hot(y_true, y_pred.shape[1]).to(torch.float)
+        y_pred = softmax(y_pred, dim=1)
+
+        if self.exclude_background:
+            y_true = y_true[:, 1:, :, :]
+            y_pred = y_pred[:, 1:, :, :]
+            
+        skel_pred = self.soft_skeletonize(y_pred)
+        skel_true = self.soft_skeletonize(y_true)
+        tprec = (torch.sum(torch.multiply(skel_pred, y_true)) + self.smooth) / (torch.sum(skel_pred) + self.smooth)
+        tsens = (torch.sum(torch.multiply(skel_true, y_pred)) + self.smooth) / (torch.sum(skel_true) + self.smooth)
+        cl_dice = 1. - 2.0 * (tprec * tsens) / (tprec + tsens)
+        return cl_dice
+
+
+class SoftDiceCLDice(nn.Module):
+    def __init__(self, iterations=3, smooth=1., exclude_background=False):
+        super(SoftDiceCLDice, self).__init__()
+        self.iterations = iterations
+        self.smooth = smooth
+        self.region_loss = DiceCELoss()
+        self.exclude_background = exclude_background
+        self.cldice_loss = SoftCLDice(self.iterations, self.smooth, self.exclude_background)
+
+    def forward(self, y_true, y_pred, alpha):
+        region_loss = self.region_loss(y_true, y_pred)
+        cldice = self.cldice_loss(y_true, y_pred)
+        return alpha * region_loss + (1. - alpha) * cldice
 
 
 class WeightedDiceLoss(nn.Module):
@@ -232,5 +264,7 @@ def get_loss(args, **kwargs):
         return HDOneSidedLoss()
     elif args.loss == "gsl":
         return GenSurfLoss(class_weights=kwargs["class_weights"])
+    elif args.loss == "cldice":
+        return SoftDiceCLDice()
     else:
         raise ValueError("Invalid loss function")

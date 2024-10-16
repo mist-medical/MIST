@@ -312,12 +312,16 @@ def compute_average_surface_distance(surface_distances):
   distances_pred_to_gt = surface_distances["distances_pred_to_gt"]
   surfel_areas_gt = surface_distances["surfel_areas_gt"]
   surfel_areas_pred = surface_distances["surfel_areas_pred"]
-  average_distance_gt_to_pred = (
-      np.sum(distances_gt_to_pred * surfel_areas_gt) / np.sum(surfel_areas_gt))
-  average_distance_pred_to_gt = (
-      np.sum(distances_pred_to_gt * surfel_areas_pred) /
-      np.sum(surfel_areas_pred))
-  return (average_distance_gt_to_pred, average_distance_pred_to_gt)
+  # average_distance_gt_to_pred = (
+  #     np.sum(distances_gt_to_pred * surfel_areas_gt) / np.sum(surfel_areas_gt))
+  # average_distance_pred_to_gt = (
+  #     np.sum(distances_pred_to_gt * surfel_areas_pred) /
+  #     np.sum(surfel_areas_pred))
+  average_surface_distance = (
+    np.sum(distances_gt_to_pred * surfel_areas_gt) +
+    np.sum(distances_pred_to_gt * surfel_areas_pred)
+  ) / (np.sum(surfel_areas_gt) + np.sum(surfel_areas_pred))
+  return average_surface_distance
 
 
 def compute_robust_hausdorff(surface_distances, percent):

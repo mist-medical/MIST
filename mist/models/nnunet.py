@@ -341,7 +341,7 @@ class DynUNet(nn.Module):
 
     def get_upsamples_vae(self):
         inp, out = self.filters[1:][::-1], self.filters[:-1][::-1]
-        inp[0] = 1
+        inp[0] = self.in_channels
         strides, kernel_size = self.strides[1:][::-1], self.kernel_size[1:][::-1]
         upsample_kernel_size = self.upsample_kernel_size[::-1]
         return self.get_module_list(

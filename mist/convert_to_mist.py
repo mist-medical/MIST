@@ -28,7 +28,7 @@ def main(args):
     if args.format == "msd":
         convert_msd(args.msd_source, args.dest)
     elif args.format == "csv":
-        convert_csv(args.train_csv, args.test_csv, args.dest)
+        convert_csv(args.train_csv, args.dest, args.test_csv)
     else:
         print("Enter valid format type!")
 

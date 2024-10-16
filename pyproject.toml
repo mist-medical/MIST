@@ -1,6 +1,6 @@
 [project]
 name = "mist-medical"
-version = "0.4.10-alpha"
+version = "0.0.3-beta"
 requires-python = ">= 3.8"
 description = "MIST is a simple, fully automated framework for 3D medical imaging segmentation."
 readme = "README.md"
@@ -9,14 +9,11 @@ authors = [
     {name = "Adrian Celaya", email = "aecelaya@rice.edu"},
     {name = "David Fuentes", email = "dtfuentes@mdanderson.org"},
     {name = "Beatrice Riviere", email = "riviere@rice.edu"},
-    {name = "Evan Lim", email = "EMLim@mdanderson.org"},
-    {name = "Rachel Glenn", email = "rglenn1@mdanderson.org"},
-    {name = "Alex Balsells", email = "atb8@rice.edu"},
     {name = "Rice University"},
     {name = "The University of Texas MD Anderson Cancer Center"}
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: Apache Software License",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
@@ -44,17 +41,17 @@ dependencies = [
     "numpy",
     "pandas",
     "rich",
-    "tqdm",
     "scipy",
     "scikit-learn",
     "scikit-image",
     "nvidia-dali-cuda110",
-    "tensorboard"
+    "tensorboard",
+    "einops",
 ]
 
 [project.urls]
-homepage = "https://github.com/aecelaya/MIST"
-repository = "https://github.com/aecelaya/MIST"
+homepage = "https://github.com/mist-medical/MIST"
+repository = "https://github.com/mist-medical/MIST"
 
 [project.scripts]
 mist_run_all = "mist.scripts.run_all_entrypoint:run_all_entry"
