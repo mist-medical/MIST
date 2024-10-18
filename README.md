@@ -26,7 +26,7 @@ Please cite the following papers if you use this code for your work:
 Please see our Read the Docs page [**here**](https://mist-medical.readthedocs.io/).
 
 ## What's New
-* October 2024 - MIST takes 3rd place at BraTS 2024 adult glioma challenge!
+* October 2024 - MIST takes 3rd place in BraTS 2024 adult glioma challenge @ MICCAI 2024!
 * August 2024 - Added clDice as an available loss function.
 * April 2024 - The Read the Docs page is up!
 * March 2024 - Simplify and decouple postprocessing from main MIST pipeline.
