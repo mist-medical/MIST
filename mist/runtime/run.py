@@ -423,7 +423,7 @@ class Trainer:
             # underflow. Gradients must be unscaled before the optimizer updates
             # the parameters to ensure the learning rate is unaffected.
             if self.mist_arguments.amp:
-                amp_gradient_scaler = torch.amp.GradScaler("cuda")
+                amp_gradient_scaler = torch.amp.GradScaler("cuda") # pylint: disable=no-member
 
             # Only log metrics on first process (i.e., rank 0).
             if rank == 0:
@@ -474,22 +474,22 @@ class Trainer:
                         loss: Loss value for the batch.
                     """
                     # Make predictions for the batch.
-                    output = model(image)
+                    output = model(image) # pylint: disable=cell-var-from-loop
 
                     # Compute loss for the batch. The inputs to the loss
                     # function depend on the loss function being used.
                     if self.mist_arguments.use_dtms:
                         # Use distance transform maps for boundary-based loss
                         # functions.
-                        loss = loss_fn(label, output["prediction"], dtm, alpha)
+                        loss = loss_fn(label, output["prediction"], dtm, alpha) # pylint: disable=cell-var-from-loop
                     elif self.mist_arguments.loss in ["cldice"]:
                         # Use the alpha parameter to weight the cldice and
                         # dice with cross entropy loss functions.
-                        loss = loss_fn(label, output["prediction"], alpha)
+                        loss = loss_fn(label, output["prediction"], alpha) # pylint: disable=cell-var-from-loop
                     else:
                         # Use only the image and label for other loss functions
                         # like dice with cross entropy.
-                        loss = loss_fn(label, output["prediction"])
+                        loss = loss_fn(label, output["prediction"]) # pylint: disable=cell-var-from-loop
 
                     # If deep supervision is enabled, compute the additional
                     # losses from the deep supervision heads. Deep supervision
@@ -519,18 +519,18 @@ class Trainer:
                             # configuration. If distance transform maps
                             # are used, pass them to the loss function.
                             if self.mist_arguments.use_dtms:
-                                loss += 0.5 ** (k + 1) * loss_fn(
+                                loss += 0.5 ** (k + 1) * loss_fn( # pylint: disable=cell-var-from-loop
                                     label, p, dtm, alpha
                                 )
                             # If cldice loss is used, pass alpha to the loss
                             # function.
                             elif self.mist_arguments.loss in ["cldice"]:
-                                loss += 0.5 ** (k + 1) * loss_fn(
+                                loss += 0.5 ** (k + 1) * loss_fn( # pylint: disable=cell-var-from-loop
                                     label, p, alpha
                                 )
                             # Otherwise, compute the loss normally.
                             else:
-                                loss += 0.5 ** (k + 1) * loss_fn(label, p)
+                                loss += 0.5 ** (k + 1) * loss_fn(label, p) # pylint: disable=cell-var-from-loop
 
                         # Normalize the total loss from deep supervision heads
                         # using a correction factor to prevent it from
@@ -565,7 +565,7 @@ class Trainer:
                     # loss based on the L2 norm of the model's parameters.
                     if self.mist_arguments.l2_reg:
                         l2_norm_of_model_parameters = 0.0
-                        for param in model.parameters():
+                        for param in model.parameters(): # pylint: disable=cell-var-from-loop
                             l2_norm_of_model_parameters += (
                                 torch.norm(param, p=2)
                             )
@@ -581,7 +581,7 @@ class Trainer:
                     # loss based on the L1 norm of the model's parameters.
                     if self.mist_arguments.l1_reg:
                         l1_norm_of_model_parameters = 0.0
-                        for param in model.parameters():
+                        for param in model.parameters(): # pylint: disable=cell-var-from-loop
                             l1_norm_of_model_parameters += (
                                 torch.norm(param, p=1)
                             )
@@ -598,7 +598,7 @@ class Trainer:
                 # Gradients accumulate by default in PyTorch, so it's important
                 # to reset them at the start of each training iteration to avoid
                 # interference from prior batches.
-                optimizer.zero_grad()
+                optimizer.zero_grad() # pylint: disable=cell-var-from-loop
 
                 # Check if automatic mixed precision (AMP) is enabled for this
                 # training step.
@@ -626,7 +626,7 @@ class Trainer:
                     # (become zero) during training. The scaler multiplies the
                     # loss by a large factor before computing the gradients to
                     # mitigate underflow.
-                    amp_gradient_scaler.scale(loss).backward()
+                    amp_gradient_scaler.scale(loss).backward() # pylint: disable=cell-var-from-loop
 
                     # If gradient clipping is enabled, apply it after unscaling
                     # the gradients. Gradient clipping prevents exploding
@@ -635,25 +635,25 @@ class Trainer:
                     if self.mist_arguments.clip_norm:
                         # Unscale the gradients before clipping, as they were
                         # previously scaled.
-                        amp_gradient_scaler.unscale_(optimizer)
+                        amp_gradient_scaler.unscale_(optimizer) # pylint: disable=cell-var-from-loop
 
                         # Clip gradients to the maximum norm (clip_norm_max) to
                         # stabilize training.
                         torch.nn.utils.clip_grad_norm_(
-                            model.parameters(),
+                            model.parameters(), # pylint: disable=cell-var-from-loop
                             self.mist_arguments.clip_norm_max
                         )
 
                     # Perform the optimizer step to update the model parameters.
                     # This step adjusts the model's weights based on the
                     # computed gradients.
-                    amp_gradient_scaler.step(optimizer)
+                    amp_gradient_scaler.step(optimizer) # pylint: disable=cell-var-from-loop
 
                     # Update the scaler after each iteration. This adjusts the
                     # scale factor used to prevent underflows or overflows in
                     # the future. The scaler increases or decreases the scaling
                     # factor dynamically based on whether gradients overflow.
-                    amp_gradient_scaler.update()
+                    amp_gradient_scaler.update() # pylint: disable=cell-var-from-loop
                 else:
                     # If AMP is not enabled, perform the forward pass and
                     # compute the loss using float32 precision.
@@ -665,12 +665,12 @@ class Trainer:
                     # Apply gradient clipping if enabled.
                     if self.mist_arguments.clip_norm:
                         torch.nn.utils.clip_grad_norm_(
-                            model.parameters(),
+                            model.parameters(), # pylint: disable=cell-var-from-loop
                             self.mist_arguments.clip_norm_max
                         )
 
                     # Perform the optimizer step to update the model parameters.
-                    optimizer.step()
+                    optimizer.step() # pylint: disable=cell-var-from-loop
                 return loss
 
             def val_step(
@@ -695,7 +695,7 @@ class Trainer:
                     ),
                     overlap=self.mist_arguments.val_sw_overlap,
                     sw_batch_size=1,
-                    predictor=model,
+                    predictor=model, # pylint: disable=cell-var-from-loop
                     device=torch.device("cuda")
                 )
 
