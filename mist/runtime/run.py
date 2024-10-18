@@ -901,9 +901,13 @@ class Trainer:
         """
         # Train model
         world_size = torch.cuda.device_count()
-        mp.spawn(
-            self.train,
-            args=(world_size,),
-            nprocs=world_size,
-            join=True,
-        )
+        if world_size > 1:
+            mp.spawn(
+                self.train,
+                args=(world_size,),
+                nprocs=world_size,
+                join=True,
+            )
+        # To enable pdb do not spawn multiprocessing for world_size = 1 
+        else:
+            self.train(0,world_size)
