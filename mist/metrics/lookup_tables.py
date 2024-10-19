@@ -3,7 +3,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from typing import List
+from typing import Tuple
 
 import math
 import numpy as np
@@ -283,8 +283,8 @@ _NEIGHBOUR_CODE_TO_NORMALS = [
 # pylint: enable=line-too-long
 
 def create_table_neighbour_code_to_surface_area(
-        spacing_mm: List[float],
-) -> npt.ArrayLike[float]:
+        spacing_mm: Tuple[float, float, float],
+) -> npt.NDArray[np.float64]:
     """Returns an array mapping neighbourhood code to the surface elements area.
 
   	Note that the normals encode the initial surface area. This function computes
@@ -294,7 +294,7 @@ def create_table_neighbour_code_to_surface_area(
     	spacing_mm: 3-element list-like structure. Voxel spacing in x0, x1 and
       	x2 direction.
   	"""
-    # Compute the area for all 256 possible surface elements given a 2x2x2 
+    # Compute the area for all 256 possible surface elements given a 2x2x2
     # neighbourhood) according to the spacing_mm.
     neighbour_code_to_surface_area = np.zeros([256])
     for code in range(256):
@@ -313,8 +313,8 @@ def create_table_neighbour_code_to_surface_area(
 
 
 def create_table_neighbour_code_to_contour_length(
-        spacing_mm: List[float],
-) -> npt.ArrayLike[float]:
+        spacing_mm: Tuple[float, float],
+) -> npt.NDArray[np.float64]:
     """Returns an array mapping neighbourhood code to the contour length.
     For the list of possible cases and their figures, see page 38 from:
     https://nccastaff.bournemouth.ac.uk/jmacey/MastersProjects/MSc14/06/thesis.pdf
