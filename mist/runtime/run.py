@@ -11,8 +11,8 @@ import torch.multiprocessing as mp
 from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.tensorboard import SummaryWriter
-from monai.inferers import sliding_window_inference
+from torch.utils.tensorboard import SummaryWriter # type: ignore
+from monai.inferers import sliding_window_inference # type: ignore
 
 # Import MIST modules.
 from mist.data_loading import dali_loader
@@ -246,7 +246,7 @@ class Trainer:
 
         # Display the start of training message.
         if rank == 0:
-            text = rich.text.Text("\nStarting training\n")
+            text = rich.text.Text("\nStarting training\n") # type: ignore
             text.stylize("bold")
             console.print(text)
 
@@ -423,7 +423,7 @@ class Trainer:
             # underflow. Gradients must be unscaled before the optimizer updates
             # the parameters to ensure the learning rate is unaffected.
             if self.mist_arguments.amp:
-                amp_gradient_scaler = torch.amp.GradScaler("cuda") # pylint: disable=no-member
+                amp_gradient_scaler = torch.amp.GradScaler("cuda") # type: ignore
 
             # Only log metrics on first process (i.e., rank 0).
             if rank == 0:
@@ -432,7 +432,7 @@ class Trainer:
                 running_loss_validation = utils.RunningMean()
 
                 # Initialize best validation loss to infinity.
-                best_validation_loss = np.Inf
+                best_validation_loss = np.Inf # type: ignore
 
                 # Set up tensorboard summary writer.
                 writer = SummaryWriter(
@@ -821,8 +821,8 @@ class Trainer:
 
                         # Check if validation loss is lower than the current
                         # best validation loss. If so, save the model.
-                        if running_val_loss < best_validation_loss:
-                            text = rich.text.Text(
+                        if running_val_loss < best_validation_loss: # type: ignore
+                            text = rich.text.Text( # type: ignore
                                 "Validation loss IMPROVED from "
                                 f"{best_validation_loss:.4} "
                                 f"to {running_val_loss:.4}\n"
@@ -839,7 +839,7 @@ class Trainer:
                             # Otherwise, log that the validation loss did not
                             # improve and display the best validation loss.
                             # Continue training with the current model.
-                            text = rich.text.Text(
+                            text = rich.text.Text( # type: ignore
                                 "Validation loss did NOT improve from "
                                 f"{best_validation_loss:.4}\n"
                             )
@@ -902,12 +902,12 @@ class Trainer:
         # Train model
         world_size = torch.cuda.device_count()
         if world_size > 1:
-            mp.spawn(
+            mp.spawn( # type: ignore
                 self.train,
                 args=(world_size,),
                 nprocs=world_size,
                 join=True,
             )
-        # To enable pdb do not spawn multiprocessing for world_size = 1 
+        # To enable pdb do not spawn multiprocessing for world_size = 1
         else:
-            self.train(0,world_size)
+            self.train(0, world_size)
