@@ -2,13 +2,15 @@
 from typing import List, Optional, Tuple
 import numpy as np
 
-import nvidia.dali.fn as fn
-import nvidia.dali.math as math
-import nvidia.dali.ops as ops
-import nvidia.dali.types as types
-from nvidia.dali.tensors import TensorCPU, TensorGPU
-from nvidia.dali.pipeline import Pipeline
-from nvidia.dali.plugin.pytorch import DALIGenericIterator
+# pylint: disable=import-error
+from nvidia.dali import fn # type: ignore
+from nvidia.dali import math # type: ignore
+from nvidia.dali import ops # type: ignore
+from nvidia.dali import types # type: ignore
+from nvidia.dali.tensors import TensorCPU, TensorGPU # type: ignore
+from nvidia.dali.pipeline import Pipeline # type: ignore
+from nvidia.dali.plugin.pytorch import DALIGenericIterator # type: ignore
+# pylint: enable=import-error
 
 from mist.data_loading import data_loading_constants as constants
 
