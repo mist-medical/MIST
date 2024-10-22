@@ -220,7 +220,7 @@ def has_test_data(dataset_json_path: str) -> bool:
     """
     dataset_information = read_json_file(dataset_json_path)
     if "test-data" in dataset_information.keys():
-        if dataset_information["test_data"] is not None:
+        if dataset_information["test-data"] is not None:
             return True
     return False
 
