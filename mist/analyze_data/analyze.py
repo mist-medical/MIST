@@ -469,9 +469,10 @@ class Analyzer:
             "All examples were excluded from training. Please check your data."
         )
 
-        # Drop bad data from paths dataframe.
+        # Drop bad data from paths dataframe and reset index.
         rows_to_drop = self.paths_dataframe.index[bad_data]
         self.paths_dataframe.drop(rows_to_drop, inplace=True)
+        self.paths_dataframe.reset_index(drop=True, inplace=True)
 
     def run(self):
         """Run the analyzer to get configuration file."""
