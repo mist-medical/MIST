@@ -147,7 +147,7 @@ def evaluate_single_example(
         patient_id: str,
         config: Dict[str, Any],
         list_of_metrics: List[str],
-        use_native_spacing: bool,
+        use_unit_spacing: bool,
         surf_dice_tol: float,
 ) -> Dict[str, Union[str, float]]:
     """Evaluate a single example.
@@ -165,8 +165,8 @@ def evaluate_single_example(
             "surf_dice", and "avg_surf", or the Dice, 95th percentile Hausdorff
             distance, surface Dice coefficient, and average surface distance,
             respectively.
-        use_native_spacing: Whether to use the native spacing of the truth mask.
-            Otherwise, the spacing is set to (1, 1, 1).
+        use_unit_spacing: Whether to use unit spacing for computing distances
+            instead of the native spacing of the masks.
         surf_dice_tol: The tolerance for the surface Dice coefficient.
 
     Returns:
@@ -183,7 +183,7 @@ def evaluate_single_example(
 
     # Load the ground truth mask, get the spacing, and convert to numpy array.
     truth = ants.image_read(path_to_truth)
-    spacing = truth.spacing if use_native_spacing else (1, 1, 1)
+    spacing = (1, 1, 1) if use_unit_spacing else truth.spacing
     truth = truth.numpy()
 
     # Evaluate metrics for each class in the config.
@@ -210,7 +210,7 @@ def evaluate(
         source_dir: str,
         output_csv: str,
         list_of_metrics: List[str],
-        use_native_spacing: bool,
+        use_unit_spacing: bool,
         surf_dice_tol: float,
 ) -> None:
     """Evaluate a set of predictions against ground truth masks.
@@ -229,8 +229,8 @@ def evaluate(
             "surf_dice", and "avg_surf", or the Dice, 95th percentile Hausdorff
             distance, surface Dice coefficient, and average surface distance,
             respectively.
-        use_native_spacing: Whether to use the native spacing of the truth mask.
-            Otherwise, the spacing is set to (1, 1, 1).
+        use_unit_spacing: Whether to use unit spacing for computing distances
+            instead of the native spacing of the masks.
         surf_dice_tol: The tolerance for the surface Dice coefficient.
 
     Returns:
@@ -302,7 +302,7 @@ def evaluate(
                     patient_id=patient_id,
                     config=config,
                     list_of_metrics=list_of_metrics,
-                    use_native_spacing=use_native_spacing,
+                    use_unit_spacing=use_unit_spacing,
                     surf_dice_tol=surf_dice_tol,
                 )
             except ValueError as e:
