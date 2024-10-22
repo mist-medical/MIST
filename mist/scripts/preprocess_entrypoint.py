@@ -1,17 +1,15 @@
+"""Entrypoint for preprocessing pipeline."""
 from mist.main import main
-from mist.runtime.utils import set_warning_levels
-from mist.runtime.args import get_main_args
+from mist.runtime import utils
+from mist.runtime import args
 
 
 def preprocess_entry():
-    set_warning_levels()
-    args = get_main_args()
-    args.exec_mode = "preprocess"
-
-    if args.loss in ["bl", "hdl", "gsl"]:
-        args.use_dtm = True
-
-    main(args)
+    """Entrypoint for preprocessing pipeline."""
+    utils.set_warning_levels()
+    mist_arguments = args.get_main_args()
+    mist_arguments.exec_mode = "preprocess"
+    main(mist_arguments)
 
 
 if __name__ == "__main__":
