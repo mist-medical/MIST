@@ -411,7 +411,6 @@ class HDOneSidedLoss(nn.Module):
         self.region_loss = DiceCELoss(
             exclude_background=self.exclude_background
         )
-        self.axes = (2, 3, 4)
 
     def forward(
             self,
@@ -457,12 +456,11 @@ class HDOneSidedLoss(nn.Module):
 
         # Compute the one-sided Hausdorff distance loss.
         one_sided_hd_loss = torch.mean(
-            torch.square(y_true - y_pred) * torch.square(dtm), dim=self.axes
+            torch.square(y_true - y_pred) * torch.square(dtm)
         )
-        one_sided_hd_loss = torch.mean(one_sided_hd_loss)
 
         # Return the weighted sum of the region and one-sided Hausdorff distance
-        # Loss.
+        # loss.
         return alpha * region_loss + (1. - alpha) * one_sided_hd_loss
 
 
@@ -647,7 +645,7 @@ def get_loss(args: argparse.Namespace) -> nn.Module:
     if args.loss == "hdl":
         return HDOneSidedLoss(exclude_background=args.exclude_background)
     if args.loss == "gsl":
-        return GenSurfLoss(exclude_background=args.exclude_background,)
+        return GenSurfLoss(exclude_background=args.exclude_background)
     if args.loss == "cldice":
         return SoftDiceCLDice(exclude_background=args.exclude_background)
 
