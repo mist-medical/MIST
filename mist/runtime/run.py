@@ -21,6 +21,7 @@ from mist.runtime import exceptions
 from mist.runtime import loss_functions
 from mist.runtime import progress_bar
 from mist.runtime import utils
+from mist.runtime.runtime_constants import RuntimeConstants as constants
 
 
 # Define console for rich.
@@ -36,7 +37,6 @@ class Trainer:
             model configuration file.
         data_structures: Data structures like dataset description and
             configuration data.
-        class_weights: Class weights for weighted loss functions.
         boundary_loss_weighting_schedule: Weighting schedule for boundary loss
             functions.
         fixed_loss_functions: Loss functions for validation and VAE loss.
@@ -65,24 +65,9 @@ class Trainer:
         # parameters to build the model during training and for inference.
         self._create_model_configuration()
 
-        # Set class weights.
-        self.class_weights = (
-            self.data_structures["mist_configuration"]["class_weights"]
-            if self.mist_arguments.use_config_class_weights else None
-        )
-
-        # Initialize boundary loss weighting schedule.
-        self.boundary_loss_weighting_schedule = utils.AlphaSchedule(
-            n_epochs=self.mist_arguments.epochs,
-            schedule=self.mist_arguments.boundary_loss_schedule,
-            constant=self.mist_arguments.loss_schedule_constant,
-            init_pause=self.mist_arguments.linear_schedule_pause,
-            step_length=self.mist_arguments.step_schedule_step_length
-        )
-
         # Initialize fixed loss functions.
         self.fixed_loss_functions = {
-            "validation": loss_functions.DiceCELoss(),
+            "validation": loss_functions.DiceLoss(exclude_background=True),
             "vae": loss_functions.VAELoss(),
         }
 
@@ -260,6 +245,14 @@ class Trainer:
                 ]["id"]
             )
 
+            # Get test ids from dataframe.
+            test_ids = list(
+                self.data_structures["training_paths_dataframe"].loc[
+                    self.data_structures["training_paths_dataframe"]["fold"]
+                    == fold
+                ]["id"]
+            )
+
             # Get list of training images and labels.
             train_images = utils.get_numpy_file_paths_list(
                 base_dir=self.mist_arguments.numpy,
@@ -271,37 +264,55 @@ class Trainer:
                 folder="labels",
                 patient_ids=train_ids,
             )
+
+            # Get list of validation images and labels.
+            val_images = utils.get_numpy_file_paths_list(
+                base_dir=self.mist_arguments.numpy,
+                folder="images",
+                patient_ids=test_ids,
+            )
+            val_labels = utils.get_numpy_file_paths_list(
+                base_dir=self.mist_arguments.numpy,
+                folder="labels",
+                patient_ids=test_ids,
+            )
+
+            # If we are using distance transform maps, get the list of training
+            # distance transform maps.
             if self.mist_arguments.use_dtms:
-                # Get list of training distance transform maps.
                 train_dtms = utils.get_numpy_file_paths_list(
                     base_dir=self.mist_arguments.numpy,
                     folder="dtms",
                     patient_ids=train_ids,
                 )
+            else:
+                train_dtms = None
 
-                # Split into training and validation sets with distance
-                # transform maps.
-                train_images, val_images, train_labels_dtms, val_labels_dtms = train_test_split(
+            # Split training data into training and validation sets if the
+            # validation percentage is greater than zero. The idea here is to
+            # leave the original validation set as an unseen test set and use
+            # the smaller partition of the training dataset as the validation
+            # set to pick the best model.
+            if self.mist_arguments.val_percent > 0:
+                (
                     train_images,
-                    list(zip(train_labels, train_dtms)),
+                    val_images,
+                    train_labels,
+                    val_labels,
+                ) = train_test_split(
+                    train_images,
+                    train_labels,
                     test_size=self.mist_arguments.val_percent,
                     random_state=self.mist_arguments.seed_val,
                 )
 
-                # Unpack labels and distance transform maps.
-                train_labels, train_dtms = zip(*train_labels_dtms)
-                val_labels, _ = zip(*val_labels_dtms)
-            else:
-                # Split data into training and validation sets without DTMs
-                train_images, val_images, train_labels, val_labels = train_test_split(
-                    train_images,
-                    train_labels,
-                    test_size=self.mist_arguments.val_percent,
-                    random_state=self.mist_arguments.seed_val
-                )
-
-                # No DTMs in this case.
-                train_dtms = None
+                # If we are using distance transform maps, split them as well.
+                if self.mist_arguments.use_dtms:
+                    train_dtms, _ = train_test_split(
+                        train_dtms,
+                        test_size=self.mist_arguments.val_percent,
+                        random_state=self.mist_arguments.seed_val,
+                    )
 
             # The number of validation images must be greater than or equal to
             # the number of GPUs used for training.
@@ -340,7 +351,7 @@ class Trainer:
                 world_size=world_size
             )
 
-            # Get steps per epoch if not given by user
+            # Get steps per epoch if not given by user.
             if self.mist_arguments.steps_per_epoch is None:
                 self.mist_arguments.steps_per_epoch = (
                     len(train_images) // self.mist_arguments.batch_size
@@ -350,10 +361,35 @@ class Trainer:
                     self.mist_arguments.steps_per_epoch
                 )
 
-            # Get loss function
-            loss_fn = loss_functions.get_loss(
-                self.mist_arguments, class_weights=self.class_weights
+            # Get default number of epochs per fold. This is defined as
+            # 250000 / steps_per_epoch.
+            if self.mist_arguments.epochs is None:
+                self.mist_arguments.epochs = (
+                    constants.TOTAL_OPTIMIZATION_STEPS //
+                    self.mist_arguments.steps_per_epoch
+                )
+
+            # Get number of epochs between each validation. We validate every
+            # 250 steps by default.
+            validate_every_n_epochs = (
+                constants.VALIDATE_EVERY_N_STEPS //
+                self.mist_arguments.steps_per_epoch
             )
+
+            # Ensure that we validate at most once per epoch.
+            validate_every_n_epochs = max(1, validate_every_n_epochs)
+
+            # Initialize boundary loss weighting schedule.
+            boundary_loss_weighting_schedule = utils.AlphaSchedule(
+                n_epochs=self.mist_arguments.epochs,
+                schedule=self.mist_arguments.boundary_loss_schedule,
+                constant=self.mist_arguments.loss_schedule_constant,
+                init_pause=self.mist_arguments.linear_schedule_pause,
+                step_length=self.mist_arguments.step_schedule_step_length,
+            )
+
+            # Get loss function based on user arguments.
+            loss_fn = loss_functions.get_loss(self.mist_arguments)
 
             # Make sure we are using/have DTMs for boundary-based loss
             # functions.
@@ -364,7 +400,7 @@ class Trainer:
                         "--use-dtms flag must be enabled."
                     )
 
-                if isinstance(train_dtms, list):
+                if train_dtms:
                     # Check if the number of training images, labels, and
                     # distance transforms match. If not, raise an error.
                     if not(
@@ -707,6 +743,10 @@ class Trainer:
                 # training data.
                 model.train(True)
 
+                # Compute alpha for boundary loss functions. The alpha parameter
+                # is used to weight the boundary loss function with a region-
+                # based loss function like dice or cross entropy.
+                alpha = boundary_loss_weighting_schedule(epoch)
                 # Only log metrics on first process (i.e., rank 0).
                 if rank == 0:
                     with progress_bar.TrainProgressBar(
@@ -719,11 +759,6 @@ class Trainer:
                             # Get data from training loader.
                             data = train_loader.next()[0]
 
-                            # Compute alpha for boundary loss functions. The
-                            # alpha parameter is used to weight the boundary
-                            # loss function with a region-based loss function
-                            # like dice or cross entropy.
-                            alpha = self.boundary_loss_weighting_schedule(epoch)
                             if self.mist_arguments.use_dtms:
                                 # Use distance transform maps for boundary-based
                                 # loss functions. In this case, we pass them
@@ -766,7 +801,7 @@ class Trainer:
                     for _ in range(self.mist_arguments.steps_per_epoch):
                         # Get data from training loader.
                         data = train_loader.next()[0]
-                        alpha = self.boundary_loss_weighting_schedule(epoch)
+
                         if self.mist_arguments.use_dtms:
                             image, label, dtm = (
                                 data["image"], data["label"], data["dtm"]
@@ -789,13 +824,74 @@ class Trainer:
                 dist.barrier()
 
                 # Start validation. We don't need gradients on to do reporting.
-                model.eval()
-                with torch.no_grad():
-                    # Only log metrics on first process (i.e., rank 0).
-                    if rank == 0:
-                        with progress_bar.ValidationProgressBar(
-                            val_steps
-                        ) as pb:
+                # Only validate every validate_every_n_epochs epochs.
+                if (
+                    epoch % validate_every_n_epochs == 0 or
+                    epoch == self.mist_arguments.epochs - 1
+                ):
+                    model.eval()
+                    with torch.no_grad():
+                        # Only log metrics on first process (i.e., rank 0).
+                        if rank == 0:
+                            with progress_bar.ValidationProgressBar(
+                                val_steps
+                            ) as pb:
+                                for _ in range(val_steps):
+                                    # Get data from validation loader.
+                                    data = validation_loader.next()[0]
+                                    image, label = data["image"], data["label"]
+
+                                    # Compute loss for single validation step.
+                                    val_loss = val_step(image, label)
+
+                                    # Send all validation losses to device 0 to
+                                    # add them.
+                                    dist.reduce(val_loss, dst=0)
+
+                                    # Average the loss across all GPUs.
+                                    current_val_loss = (
+                                        val_loss.item() /
+                                        world_size
+                                    )
+
+                                    # Update the running loss for the progress
+                                    # bar.
+                                    running_val_loss = running_loss_validation(
+                                        current_val_loss
+                                    )
+
+                                    # Update the progress bar with the running
+                                    # loss.
+                                    pb.update(loss=running_val_loss)
+
+                            # Check if validation loss is lower than the current
+                            # best validation loss. If so, save the model.
+                            if running_val_loss < best_validation_loss: # type: ignore
+                                text = rich.text.Text( # type: ignore
+                                    "Validation loss IMPROVED from "
+                                    f"{best_validation_loss:.4} "
+                                    f"to {running_val_loss:.4}\n"
+                                )
+                                text.stylize("bold")
+                                console.print(text)
+
+                                # Update the current best validation loss.
+                                best_validation_loss = running_val_loss
+
+                                # Save the model with the best validation loss.
+                                torch.save(model.state_dict(), best_model_name)
+                            else:
+                                # Otherwise, log that the validation loss did
+                                # not improve and display the best validation
+                                # loss. Continue training with current model.
+                                text = rich.text.Text( # type: ignore
+                                    "Validation loss did NOT improve from "
+                                    f"{best_validation_loss:.4}\n"
+                                )
+                                console.print(text)
+                        else:
+                            # Repeat the validation steps for the other GPUs. Do
+                            # not display the progress bar for these GPUs.
                             for _ in range(val_steps):
                                 # Get data from validation loader.
                                 data = validation_loader.next()[0]
@@ -804,63 +900,12 @@ class Trainer:
                                 # Compute loss for single validation step.
                                 val_loss = val_step(image, label)
 
-                                # Send all validation losses to device 0 to add
-                                # them.
+                                # Send the loss on the current GPU to device 0.
                                 dist.reduce(val_loss, dst=0)
 
-                                # Average the loss across all GPUs.
-                                current_val_loss = val_loss.item() / world_size
-
-                                # Update the running loss for the progress bar.
-                                running_val_loss = running_loss_validation(
-                                    current_val_loss
-                                )
-
-                                # Update the progress bar with the running loss.
-                                pb.update(loss=running_val_loss)
-
-                        # Check if validation loss is lower than the current
-                        # best validation loss. If so, save the model.
-                        if running_val_loss < best_validation_loss: # type: ignore
-                            text = rich.text.Text( # type: ignore
-                                "Validation loss IMPROVED from "
-                                f"{best_validation_loss:.4} "
-                                f"to {running_val_loss:.4}\n"
-                            )
-                            text.stylize("bold")
-                            console.print(text)
-
-                            # Update the current best validation loss.
-                            best_validation_loss = running_val_loss
-
-                            # Save the model with the best validation loss.
-                            torch.save(model.state_dict(), best_model_name)
-                        else:
-                            # Otherwise, log that the validation loss did not
-                            # improve and display the best validation loss.
-                            # Continue training with the current model.
-                            text = rich.text.Text( # type: ignore
-                                "Validation loss did NOT improve from "
-                                f"{best_validation_loss:.4}\n"
-                            )
-                            console.print(text)
-                    else:
-                        # Repeat the validation steps for the other GPUs. Do
-                        # not display the progress bar for these GPUs.
-                        for _ in range(val_steps):
-                            # Get data from validation loader.
-                            data = validation_loader.next()[0]
-                            image, label = data["image"], data["label"]
-
-                            # Compute loss for single validation step.
-                            val_loss = val_step(image, label)
-
-                            # Send the loss on the current GPU to device 0.
-                            dist.reduce(val_loss, dst=0)
-
-                # Reset training and validation loaders after each epoch.
-                train_loader.reset()
+                # Reset training and validation loader after each epoch.
                 validation_loader.reset()
+                train_loader.reset()
 
                 # Log the running loss for training and validation after each
                 # epoch. Only log metrics on first process (i.e., rank 0).
@@ -899,7 +944,7 @@ class Trainer:
         It uses the `torch.multiprocessing.spawn` function to create multiple
         instances of the training function, each on a separate GPU.
         """
-        # Train model
+        # Train model.
         world_size = torch.cuda.device_count()
         if world_size > 1:
             mp.spawn( # type: ignore
@@ -908,6 +953,6 @@ class Trainer:
                 nprocs=world_size,
                 join=True,
             )
-        # To enable pdb do not spawn multiprocessing for world_size = 1
+        # To enable pdb do not spawn multiprocessing for world_size = 1.
         else:
             self.train(0, world_size)

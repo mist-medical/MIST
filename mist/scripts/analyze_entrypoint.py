@@ -1,13 +1,15 @@
+"""Entrypoint for the analyze command."""
 from mist.main import main
-from mist.runtime.utils import set_warning_levels
-from mist.runtime.args import get_main_args
+from mist.runtime import utils
+from mist.runtime import args
 
 
 def analyze_entry():
-    set_warning_levels()
-    args = get_main_args()
-    args.exec_mode = "analyze"
-    main(args)
+    """Entrypoint for the analyze command."""
+    utils.set_warning_levels()
+    mist_arguments = args.get_main_args()
+    mist_arguments.exec_mode = "analyze"
+    main(mist_arguments)
 
 
 if __name__ == "__main__":

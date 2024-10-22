@@ -96,20 +96,15 @@ Cross Entropy loss function. The following loss functions are available:
 |-------------------------------|---------------|
 | Dice w/ Cross Entropy         | ```dice_ce``` |
 | Dice                          | ```dice```    |
-| Generalized Dice Loss (GDL)   | ```gdl```     |
-| GDL w/ Weighted Cross Entropy | ```gdl_ce```  |
 | Hausdorff Loss                | ```hdl```     |
 | Boundary Loss                 | ```bl```      |
 | Generalized Surface Loss      | ```gsl```     |
+| clDice                        | ```cldice```  |
 
 !!! warning
     To use boundary-based loss functions like the ```hdl```, ```bl```, or ```gsl```, you must use the ```--use-dtms```
     flag with ```mist_run_all``` or ```mist_preprocess``` and ```mist_train```. This will tell the MIST pipeline to 
     compute the distance transform maps (DTMs) of the ground truth masks during preprocessing and use them during training. 
-
-!!! note
-    While not required, we recommend using precomputed class weights (found during analysis) with the ```gdl```, ```gdl_ce```, and ```gsl``` loss
-    functions. You turn on the use of these precomputed weights with ```--use-config-class-weights```.
 
 ## Misc. Topics
 
@@ -151,11 +146,17 @@ mist_run_all --max-patch-size 256 256 128 --patch-size 128 128 128 --<other argu
 ```
 
 ### Validation Split Size/Patch Overlap
-MIST computes a validation loss after each epoch on a fixed validation set, which is, by default, a random 10% sample from
-the training set. This validation step can add considerable time to training if you are dealing with a large dataset. 
-To address this, we include the ```--val-percent``` (default: 0.1) and ```--val-sw-overlap``` (default: 0.25) flags to control the size (as a percent of the training set)
-of the validation set and the overlap between patches during validation, respectively. Both of these flags 
-take values that are between zero and one. 
+MIST computes the validation loss every 250 optimization steps. By default, MIST
+will use a five-fold cross-validation and use the 20% hold out for validation.
+However, if you want to partition the training set into a train and validation
+set and use the 20% hold out as an independent test set, then set the
+```--val-percent``` argument to something in the interval (0, 1). If you are
+dealing with a large dataset, validation can add a considerable amount of time
+to training. To speed up validation, you can adjust the amount of overlap
+between patches using the ```--val-sw-overlap``` (default: 0.5) to a smaller
+amount (i.e., 0.25) to speed up validation. For test time inference, MIST
+uses the value stored in the ```--sw-overlap``` flag to control the amount of
+overlap between patches.
 
 ### Kubernetes
 For MD Anderson users, you can run MIST on the Kubernetes/HPC cluster. Here is an example of a job submission file:
@@ -176,15 +177,14 @@ spec:
     spec:
       nodeSelector:
         "nvidia.com/gpu.present": "true"
-        "gpu-type": "A100"
-        # "gpu-type": "H100"
+        "gpu-type": "A100" # Change this "gpu-type": "H100" for H100s.
       securityContext:
         runAsUser: <get this from your k8s-templates folder>
         runAsGroup: <get this from your k8s-templates folder>
         fsGroup: <get this from your k8s-templates folder>
       containers:
         - name: main
-          image: mistmedical/mist:0.4.6a0
+          image: mistmedical/mist:latest # Check https://hub.docker.com/r/mistmedical/mist for latest version.
           command: ["/bin/bash", "-c"]
           args: ["mist_run_all 
           --data $HOME/path/to/your/dataset.json 
@@ -201,7 +201,7 @@ spec:
               mountPath: <get this from your k8s-templates folder>
           resources:
             limits:
-              nvidia.com/gpu: "1" # change this to increase number of GPUs, max of 8
+              nvidia.com/gpu: "1" # Change this to increase number of GPUs, max of 8.
           imagePullPolicy: IfNotPresent
       volumes:
         - name: shm

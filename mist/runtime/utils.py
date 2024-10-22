@@ -219,7 +219,11 @@ def has_test_data(dataset_json_path: str) -> bool:
         True if test data is present in the dataset json file.
     """
     dataset_information = read_json_file(dataset_json_path)
-    return "test-data" in dataset_information.keys()
+    if "test-data" in dataset_information.keys():
+        return True
+    if dataset_information["test_data"] is not None:
+        return True
+    return False
 
 
 def get_numpy_file_paths_list(
