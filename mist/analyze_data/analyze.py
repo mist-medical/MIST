@@ -224,8 +224,8 @@ class Analyzer:
                         "bytes. Consider coarsening or removing this example.\n"
                     )
 
-            # Collect the new resampled dimensions.
-            resampled_dims[i, :] = new_dims
+                # Collect the new resampled dimensions.
+                resampled_dims[i, :] = new_dims
 
         if len(messages) > 0:
             text = rich.text.Text(messages) # type: ignore
