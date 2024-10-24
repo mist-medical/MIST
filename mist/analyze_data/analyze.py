@@ -218,10 +218,10 @@ class Analyzer:
                 ):
                     print_patient_id = patient["id"]
                     messages += (
-                        f"In {print_patient_id}: Resampled example is larger "
-                        " than the recommended memory size of "
-                        f"{analyzer_constants.AnalyzeConstants.MAX_RECOMMENDED_MEMORY_SIZE} "
-                        "bytes. Consider coarsening or removing this example.\n"
+                        f"[Warning] In {print_patient_id}: Resampled example "
+                        "is larger than the recommended memory size of "
+                        f"{analyzer_constants.AnalyzeConstants.MAX_RECOMMENDED_MEMORY_SIZE/1e9} "
+                        "GB. Consider coarsening or removing this example.\n"
                     )
 
                 # Collect the new resampled dimensions.
