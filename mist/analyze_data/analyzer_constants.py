@@ -10,13 +10,9 @@ class AnalyzeConstants:
     # RAI orientation direction for ANTs.
     RAI_ANTS_DIRECTION = np.eye(3)
 
-    # Maximum memory in bytes for each image and mask pair.
-    MAX_MEMORY_PER_IMAGE_MASK_PAIR_BYTES = 2e9
-
-    # The amount that we multiply each component of the target spacing
-    # vector if an image mask pair exceeds the
-    # MAX_MEMORY_PER_IMAGE_MASK_PAIR_BYTES value.
-    COARSEN_TARGET_SPACING_FACTOR = 1.25
+    # Maximum recommended memory in bytes for each example. We want to keep
+    # the memory usage below this value to improve computational efficiency.
+    MAX_RECOMMENDED_MEMORY_SIZE = 2e9
 
     # Minimum average volume reduction expressed as a fraction after cropping
     # each image to its foreground.
