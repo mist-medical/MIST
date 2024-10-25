@@ -177,9 +177,8 @@ class Analyzer:
     def check_resampled_dims(self, cropped_dims):
         """Determine dimensions of resampled data."""
 
-        # If an example exceeds the maximum allowed memory size, then update the
-        # target spacing to coarser resolution until all examples are within the
-        # memory limit.
+        # Check the resampled dimensions of the data. If an image/mask pair
+        # is larger than the recommended memory size, then warn the user.
         resampled_dims = np.zeros((len(self.paths_dataframe), 3))
 
         progress = utils.get_progress_bar("Checking resampled dimensions")
@@ -210,42 +209,22 @@ class Analyzer:
                     len(self.dataset_information["labels"])
                 )
 
-                # If data exceeds maximum allowed memory size, then resample
-                # to coarser resolution.
-                while (
+                # If image memory size is larger than the max recommended size
+                # set in MAX_RECOMMENDED_MEMORY_SIZE, then warn the user and
+                # print to console.
+                if (
                     image_memory_size >
-                    analyzer_constants.AnalyzeConstants.MAX_MEMORY_PER_IMAGE_MASK_PAIR_BYTES
+                    analyzer_constants.AnalyzeConstants.MAX_RECOMMENDED_MEMORY_SIZE
                 ):
-                    self.config["target_spacing"] = (
-                        analyzer_constants.AnalyzeConstants.COARSEN_TARGET_SPACING_FACTOR *
-                        np.array(self.config["target_spacing"])
-                    ).tolist()
-
-                    # Get new dimensions and memory size with coarsened
-                    # target spacing.
-                    new_dims = utils.get_resampled_image_dimensions(
-                        current_dims,
-                        current_spacing,
-                        self.config["target_spacing"]
-                    )
-
-                    image_memory_size = utils.get_float32_example_memory_size(
-                        new_dims,
-                        len(image_list),
-                        len(self.dataset_information["labels"])
-                    )
-
                     print_patient_id = patient["id"]
-                    print_target_spacing = np.round(
-                        self.config["target_spacing"],
-                        analyzer_constants.AnalyzeConstants.PRINT_FLOATING_POINT_PRECISION
-                    )
                     messages += (
-                        f"In {print_patient_id}: Images are too large, "
-                        f"coarsening target spacing to {print_target_spacing}\n"
+                        f"[Warning] In {print_patient_id}: Resampled example "
+                        "is larger than the recommended memory size of "
+                        f"{analyzer_constants.AnalyzeConstants.MAX_RECOMMENDED_MEMORY_SIZE/1e9} "
+                        "GB. Consider coarsening or removing this example.\n"
                     )
 
-                # Update resampled dimensions for this example.
+                # Collect the new resampled dimensions.
                 resampled_dims[i, :] = new_dims
 
         if len(messages) > 0:

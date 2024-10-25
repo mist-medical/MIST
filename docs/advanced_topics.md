@@ -202,7 +202,7 @@ spec:
           resources:
             limits:
               nvidia.com/gpu: "1" # Change this to increase number of GPUs, max of 8.
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
       volumes:
         - name: shm
           emptyDir:
