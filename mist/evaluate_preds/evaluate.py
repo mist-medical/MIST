@@ -138,6 +138,12 @@ def calculate_metrics(
             metrics_dict[metric] = best_or_worst_case
         else:
             metrics_dict[metric] = metric_functions[metric]()
+            # If the metric is NaN or infinite, set it to the worst case value.
+            if (
+                np.isnan(metrics_dict[metric]) or
+                np.isinf(metrics_dict[metric])
+            ):
+                metrics_dict[metric] = best_and_worst_cases[metric][1]
     return metrics_dict
 
 
