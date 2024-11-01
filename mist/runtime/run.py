@@ -332,6 +332,7 @@ class Trainer:
                 dtms=train_dtms,
                 batch_size=self.mist_arguments.batch_size // world_size,
                 oversampling=self.mist_arguments.oversampling,
+                labels=self.data_structures["mist_configuration"]["labels"][1:],
                 patch_size=(
                     self.data_structures["mist_configuration"]["patch_size"]
                 ),
