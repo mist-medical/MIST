@@ -545,10 +545,12 @@ class Trainer:
                     # After summing the losses from all deep supervision heads,
                     # we normalize the total loss using a correction factor
                     # (c_norm). This factor is derived from the sum of the
-                    # geometric series (1 / (2 - 2 ** -(n+1))), where n is the
+                    # geometric series (1 / (2 - 2 ** -n)), where n is the
                     # number of deep supervision heads. The normalization
                     # ensures that the total loss isn't biased or dominated by
-                    # the deep supervision losses.
+                    # the deep supervision losses by making the loss a
+                    # convex combination of the losses from all heads, including
+                    # the main loss.
                     if self.mist_arguments.deep_supervision:
                         for k, p in enumerate(output["deep_supervision"]):
                             # Apply the loss function based on the model's
@@ -572,7 +574,7 @@ class Trainer:
                         # using a correction factor to prevent it from
                         # dominating the main loss.
                         c_norm = 1 / (2 - 2 ** -(
-                            len(output["deep_supervision"]) + 1
+                                len(output["deep_supervision"])
                             )
                         )
                         loss *= c_norm
