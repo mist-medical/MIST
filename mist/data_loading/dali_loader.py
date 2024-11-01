@@ -271,6 +271,10 @@ class TrainPipeline(GenericPipeline):
     """Training pipeline for loading images and labels using DALI.
 
     Attributes:
+        labels: List of labels in the dataset.
+        label_weights: Weighting for each label. This is a list with entries
+            1/len(labels) for each label. We can explore tuning this parameter
+            later.
         oversampling: The oversampling factor for the training data.
         patch_size: The size of the patches used for training
         crop_shape: The shape of the cropped image data.
@@ -280,6 +284,7 @@ class TrainPipeline(GenericPipeline):
             self,
             imgs,
             lbls,
+            labels,
             oversampling,
             patch_size,
             **kwargs
@@ -290,6 +295,10 @@ class TrainPipeline(GenericPipeline):
             shuffle_input=True,
             **kwargs
         )
+        self.labels = labels
+        self.label_weights = [
+            1./len(self.labels) for _ in range(len(self.labels))
+        ]
         self.oversampling = oversampling
         self.patch_size = patch_size
 
@@ -343,7 +352,9 @@ class TrainPipeline(GenericPipeline):
             lbl,
             format="start_end",  # ROI format as (start, end) coordinates.
             background=0,        # Background pixel value to ignore.
-            foreground_prob=self.oversampling,  # Probability of foreground.
+            classes=self.labels, # List of labels in the dataset.
+            class_weights=self.label_weights, # Class weights.
+            foreground_prob=self.oversampling, # Probability of foreground.
             device="cpu",        # Perform the operation on the CPU.
             cache_objects=True,  # Cache object locations for efficiency.
         )
@@ -525,6 +536,10 @@ class TrainPipelineDTM(GenericPipeline):
     label. These include noise, blur, brightness, and contrast.
 
     Attributes:
+        labels: List of labels in the dataset.
+        label_weights: Weighting for each label. This is a list with entries
+            1/len(labels) for each label. We can explore tuning this parameter
+            later.
         oversampling: The oversampling factor for the training data.
         patch_size: The size of the patches used for training.
         crop_shape: The shape of the cropped image data.
@@ -535,6 +550,7 @@ class TrainPipelineDTM(GenericPipeline):
             imgs,
             lbls,
             dtms,
+            labels,
             oversampling,
             patch_size,
             **kwargs,
@@ -546,6 +562,10 @@ class TrainPipelineDTM(GenericPipeline):
             shuffle_input=True,
             **kwargs
         )
+        self.labels = labels
+        self.label_weights = [
+            1./len(self.labels) for _ in range(len(self.labels))
+        ]
         self.oversampling = oversampling
         self.patch_size = patch_size
 
@@ -605,7 +625,9 @@ class TrainPipelineDTM(GenericPipeline):
             lbl,
             format="start_end",  # ROI format as (start, end) coordinates.
             background=0,        # Background pixel value to ignore.
-            foreground_prob=self.oversampling,  # Probability of foreground.
+            classes=self.labels, # List of labels in the dataset.
+            class_weights=self.label_weights, # Class weights.
+            foreground_prob=self.oversampling, # Probability of foreground.
             device="cpu",        # Perform the operation on the CPU.
             cache_objects=True,  # Cache object locations for efficiency.
         )
@@ -832,6 +854,7 @@ def get_training_dataset(
         lbls: List[str],
         dtms: Optional[List[str]],
         batch_size: int,
+        labels: List[int],
         oversampling: float,
         patch_size: Tuple[int, int, int],
         seed: int,
@@ -853,6 +876,7 @@ def get_training_dataset(
         lbls: List of file paths to the label data.
         dtms: List of file paths to the DTM data.
         batch_size: The batch size for training.
+        labels: List of labels in the dataset.
         oversampling: The oversampling factor for the training data.
         patch_size: The size of the patches used for training.
         seed: Random seed for shuffling or any other randomness in the reader.
@@ -881,12 +905,12 @@ def get_training_dataset(
 
     if dtms is None:
         pipeline = TrainPipeline(
-            imgs, lbls, oversampling, patch_size, **pipe_kwargs
+            imgs, lbls, labels, oversampling, patch_size, **pipe_kwargs
         )
         dali_iter = DALIGenericIterator(pipeline, ["image", "label"])
     else:
         pipeline = TrainPipelineDTM(
-            imgs, lbls, dtms, oversampling, patch_size, **pipe_kwargs
+            imgs, lbls, dtms, labels, oversampling, patch_size, **pipe_kwargs
         )
         dali_iter = DALIGenericIterator(pipeline, ["image", "label", "dtm"])
     return dali_iter

@@ -105,7 +105,7 @@ def calculate_metrics(
     )
 
     # Compute the worst case Hausdorff distance for the mask. This is the
-    # maximum possible distance between two points in the mask (i.e., the 
+    # maximum possible distance between two points in the mask (i.e., the
     # diagonal distance of the mask).
     worst_case_hausdorff = get_worst_case_hausdorff(truth_mask, spacing)
 
