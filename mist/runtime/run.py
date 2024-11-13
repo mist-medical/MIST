@@ -326,13 +326,20 @@ class Trainer:
             val_steps = len(val_images) // world_size
 
             # Get training data loader.
+            # The training labels are different from what's specified in the
+            # dataset description. The preprocessed masks have labels 0,1,...,N.
+            # We exclude the background label (0) from the training labels and
+            # pass the rest in as the labels for the training data loader.
+            training_labels = list(range(len(
+                self.data_structures["mist_configuration"]["labels"]
+            )))[1:]
             train_loader = dali_loader.get_training_dataset(
                 imgs=train_images,
                 lbls=train_labels,
                 dtms=train_dtms,
                 batch_size=self.mist_arguments.batch_size // world_size,
                 oversampling=self.mist_arguments.oversampling,
-                labels=self.data_structures["mist_configuration"]["labels"][1:],
+                labels=training_labels,
                 patch_size=(
                     self.data_structures["mist_configuration"]["patch_size"]
                 ),

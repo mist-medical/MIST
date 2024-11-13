@@ -281,11 +281,15 @@ def get_main_args():
         default="nnunet",
         choices=[
             "nnunet",
+            "mednext-v1-small",
+            "mednext-v1-base",
+            "mednext-v1-medium",
+            "mednext-v1-large",
             "unet",
             "fmgnet",
             "wnet",
-            "attn_unet",
-            "unetr",
+            "attn-unet",
+            "swin-unetr",
             "pretrained"
         ],
         help="Pick which network architecture to use"
