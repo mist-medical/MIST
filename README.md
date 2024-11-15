@@ -28,7 +28,6 @@ Please see our Read the Docs page [**here**](https://mist-medical.readthedocs.io
 ## What's New
 * November 2024 - MedNeXt models (small, base, medium, and large) added to MIST.
 These models can be called with ```--model mednext-v1-<small, base, medium, large>```.
-We're still working on getting deep supervision to work with MedNeXt.
 * October 2024 - MIST takes 3rd place in BraTS 2024 adult glioma challenge @ MICCAI 2024!
 * August 2024 - Added clDice as an available loss function.
 * April 2024 - The Read the Docs page is up!
