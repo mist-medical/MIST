@@ -1,6 +1,7 @@
 """MIST-compatible MedNeXt model."""
 from typing import List, Union, Optional
 import torch.nn as nn
+import torch.nn.functional as F
 
 from mist.models.mednext_v1 import blocks
 
@@ -15,6 +16,7 @@ class MedNeXt(nn.Module):
         enc_kernel_size: Optional[int]=None,
         dec_kernel_size: Optional[int]=None,
         deep_supervision: bool=False,
+        pocket: bool=False,
         do_res: bool=False,
         do_res_up_down: bool=False,
         block_counts: list=[2,2,2,2,2,2,2,2,2],
@@ -57,7 +59,7 @@ class MedNeXt(nn.Module):
 
         self.down_0 = blocks.MedNeXtDownBlock(
             in_channels=n_channels,
-            out_channels=2*n_channels,
+            out_channels=n_channels if pocket else 2*n_channels,
             exp_r=exp_r[1],
             kernel_size=enc_kernel_size,
             do_res=do_res_up_down,
@@ -67,8 +69,8 @@ class MedNeXt(nn.Module):
     
         self.enc_block_1 = nn.Sequential(*[
             blocks.MedNeXtBlock(
-                in_channels=n_channels*2,
-                out_channels=n_channels*2,
+                in_channels=n_channels if pocket else n_channels*2,
+                out_channels=n_channels if pocket else n_channels*2,
                 exp_r=exp_r[1],
                 kernel_size=enc_kernel_size,
                 do_res=do_res,
@@ -80,8 +82,8 @@ class MedNeXt(nn.Module):
         )
 
         self.down_1 = blocks.MedNeXtDownBlock(
-            in_channels=2*n_channels,
-            out_channels=4*n_channels,
+            in_channels=n_channels if pocket else 2*n_channels,
+            out_channels=n_channels if pocket else 4*n_channels,
             exp_r=exp_r[2],
             kernel_size=enc_kernel_size,
             do_res=do_res_up_down,
@@ -92,8 +94,8 @@ class MedNeXt(nn.Module):
 
         self.enc_block_2 = nn.Sequential(*[
             blocks.MedNeXtBlock(
-                in_channels=n_channels*4,
-                out_channels=n_channels*4,
+                in_channels=n_channels if pocket else n_channels*4,
+                out_channels=n_channels if pocket else n_channels*4,
                 exp_r=exp_r[2],
                 kernel_size=enc_kernel_size,
                 do_res=do_res,
@@ -105,8 +107,8 @@ class MedNeXt(nn.Module):
         )
 
         self.down_2 = blocks.MedNeXtDownBlock(
-            in_channels=4*n_channels,
-            out_channels=8*n_channels,
+            in_channels=n_channels if pocket else 4*n_channels,
+            out_channels=n_channels if pocket else 8*n_channels,
             exp_r=exp_r[3],
             kernel_size=enc_kernel_size,
             do_res=do_res_up_down,
@@ -117,8 +119,8 @@ class MedNeXt(nn.Module):
         
         self.enc_block_3 = nn.Sequential(*[
             blocks.MedNeXtBlock(
-                in_channels=n_channels*8,
-                out_channels=n_channels*8,
+                in_channels=n_channels if pocket else n_channels*8,
+                out_channels=n_channels if pocket else n_channels*8,
                 exp_r=exp_r[3],
                 kernel_size=enc_kernel_size,
                 do_res=do_res,
@@ -130,8 +132,8 @@ class MedNeXt(nn.Module):
         )
         
         self.down_3 = blocks.MedNeXtDownBlock(
-            in_channels=8*n_channels,
-            out_channels=16*n_channels,
+            in_channels=n_channels if pocket else 8*n_channels,
+            out_channels=n_channels if pocket else 16*n_channels,
             exp_r=exp_r[4],
             kernel_size=enc_kernel_size,
             do_res=do_res_up_down,
@@ -142,8 +144,8 @@ class MedNeXt(nn.Module):
 
         self.bottleneck = nn.Sequential(*[
             blocks.MedNeXtBlock(
-                in_channels=n_channels*16,
-                out_channels=n_channels*16,
+                in_channels=n_channels if pocket else n_channels*16,
+                out_channels=n_channels if pocket else n_channels*16,
                 exp_r=exp_r[4],
                 kernel_size=dec_kernel_size,
                 do_res=do_res,
@@ -155,8 +157,8 @@ class MedNeXt(nn.Module):
         )
 
         self.up_3 = blocks.MedNeXtUpBlock(
-            in_channels=16*n_channels,
-            out_channels=8*n_channels,
+            in_channels=n_channels if pocket else 16*n_channels,
+            out_channels=n_channels if pocket else 8*n_channels,
             exp_r=exp_r[5],
             kernel_size=dec_kernel_size,
             do_res=do_res_up_down,
@@ -167,8 +169,8 @@ class MedNeXt(nn.Module):
 
         self.dec_block_3 = nn.Sequential(*[
             blocks.MedNeXtBlock(
-                in_channels=n_channels*8,
-                out_channels=n_channels*8,
+                in_channels=n_channels if pocket else n_channels*8,
+                out_channels=n_channels if pocket else n_channels*8,
                 exp_r=exp_r[5],
                 kernel_size=dec_kernel_size,
                 do_res=do_res,
@@ -180,8 +182,8 @@ class MedNeXt(nn.Module):
         )
 
         self.up_2 = blocks.MedNeXtUpBlock(
-            in_channels=8*n_channels,
-            out_channels=4*n_channels,
+            in_channels=n_channels if pocket else 8*n_channels,
+            out_channels=n_channels if pocket else 4*n_channels,
             exp_r=exp_r[6],
             kernel_size=dec_kernel_size,
             do_res=do_res_up_down,
@@ -192,8 +194,8 @@ class MedNeXt(nn.Module):
 
         self.dec_block_2 = nn.Sequential(*[
             blocks.MedNeXtBlock(
-                in_channels=n_channels*4,
-                out_channels=n_channels*4,
+                in_channels=n_channels if pocket else n_channels*4,
+                out_channels=n_channels if pocket else n_channels*4,
                 exp_r=exp_r[6],
                 kernel_size=dec_kernel_size,
                 do_res=do_res,
@@ -205,8 +207,8 @@ class MedNeXt(nn.Module):
         )
 
         self.up_1 = blocks.MedNeXtUpBlock(
-            in_channels=4*n_channels,
-            out_channels=2*n_channels,
+            in_channels=n_channels if pocket else 4*n_channels,
+            out_channels=n_channels if pocket else 2*n_channels,
             exp_r=exp_r[7],
             kernel_size=dec_kernel_size,
             do_res=do_res_up_down,
@@ -217,8 +219,8 @@ class MedNeXt(nn.Module):
 
         self.dec_block_1 = nn.Sequential(*[
             blocks.MedNeXtBlock(
-                in_channels=n_channels*2,
-                out_channels=n_channels*2,
+                in_channels=n_channels if pocket else n_channels*2,
+                out_channels=n_channels if pocket else n_channels*2,
                 exp_r=exp_r[7],
                 kernel_size=dec_kernel_size,
                 do_res=do_res,
@@ -230,7 +232,7 @@ class MedNeXt(nn.Module):
         )
 
         self.up_0 = blocks.MedNeXtUpBlock(
-            in_channels=2*n_channels,
+            in_channels=n_channels if pocket else 2*n_channels,
             out_channels=n_channels,
             exp_r=exp_r[8],
             kernel_size=dec_kernel_size,
@@ -257,10 +259,10 @@ class MedNeXt(nn.Module):
         self.out_0 = blocks.OutBlock(in_channels=n_channels, n_classes=n_classes, dim=dim)
 
         if deep_supervision:
-            self.out_1 = blocks.OutBlock(in_channels=n_channels*2, n_classes=n_classes, dim=dim)
-            self.out_2 = blocks.OutBlock(in_channels=n_channels*4, n_classes=n_classes, dim=dim)
-            self.out_3 = blocks.OutBlock(in_channels=n_channels*8, n_classes=n_classes, dim=dim)
-            self.out_4 = blocks.OutBlock(in_channels=n_channels*16, n_classes=n_classes, dim=dim)
+            self.out_1 = blocks.OutBlock(in_channels=n_channels if pocket else n_channels*2, n_classes=n_classes, dim=dim)
+            self.out_2 = blocks.OutBlock(in_channels=n_channels if pocket else n_channels*4, n_classes=n_classes, dim=dim)
+            self.out_3 = blocks.OutBlock(in_channels=n_channels if pocket else n_channels*8, n_classes=n_classes, dim=dim)
+            self.out_4 = blocks.OutBlock(in_channels=n_channels if pocket else n_channels*16, n_classes=n_classes, dim=dim)
 
         self.block_counts = block_counts
 
@@ -315,7 +317,12 @@ class MedNeXt(nn.Module):
             output["prediction"] = x
 
             if self.do_ds:
-                output["deep_supervision"] = [x_ds_1, x_ds_2, x_ds_3, x_ds_4]
+                patch_size = x.shape[2:]
+                x_ds_1 = F.interpolate(x_ds_1, size=patch_size)
+                x_ds_2 = F.interpolate(x_ds_2, size=patch_size)
+                x_ds_3 = F.interpolate(x_ds_3, size=patch_size)
+                x_ds_4 = F.interpolate(x_ds_4, size=patch_size)
+                output["deep_supervision"] = (x_ds_1, x_ds_2, x_ds_3, x_ds_4)
         else:
             output = x
 
