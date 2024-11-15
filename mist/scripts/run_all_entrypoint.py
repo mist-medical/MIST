@@ -44,7 +44,7 @@ def run_all_entry():
     # Check if the number of folds is compatible with the number of folds
     # specified.
     if (
-        np.max(mist_arguments.folds) + 1 < mist_arguments.nfolds or
+        np.max(mist_arguments.folds) + 1 > mist_arguments.nfolds or
         len(mist_arguments.folds) > mist_arguments.nfolds
     ):
         raise AssertionError(
