@@ -1,6 +1,7 @@
 """MIST-compatible MedNeXt model."""
 from typing import List, Union, Optional
 import torch.nn as nn
+import torch.nn.functional as F
 
 from mist.models.mednext_v1 import blocks
 
@@ -315,7 +316,12 @@ class MedNeXt(nn.Module):
             output["prediction"] = x
 
             if self.do_ds:
-                output["deep_supervision"] = [x_ds_1, x_ds_2, x_ds_3, x_ds_4]
+                patch_size = x.shape[2:]
+                x_ds_1 = F.interpolate(x_ds_1, size=patch_size)
+                x_ds_2 = F.interpolate(x_ds_2, size=patch_size)
+                x_ds_3 = F.interpolate(x_ds_3, size=patch_size)
+                x_ds_4 = F.interpolate(x_ds_4, size=patch_size)
+                output["deep_supervision"] = (x_ds_1, x_ds_2, x_ds_3, x_ds_4)
         else:
             output = x
 
