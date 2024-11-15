@@ -34,24 +34,28 @@ def get_model(**kwargs):
             kwargs["n_channels"],
             kwargs["n_classes"],
             kwargs["deep_supervision"],
+            kwargs["pocket"],
         )
     if kwargs["model_name"] == "mednext-v1-base":
         return create_mednext_v1.create_mednext_v1_base(
             kwargs["n_channels"],
             kwargs["n_classes"],
             kwargs["deep_supervision"],
+            kwargs["pocket"],
         )
     if kwargs["model_name"] == "mednext-v1-medium":
         return create_mednext_v1.create_mednext_v1_medium(
             kwargs["n_channels"],
             kwargs["n_classes"],
             kwargs["deep_supervision"],
+            kwargs["pocket"],
         )
     if kwargs["model_name"] == "mednext-v1-large":
         return create_mednext_v1.create_mednext_v1_large(
             kwargs["n_channels"],
             kwargs["n_classes"],
             kwargs["deep_supervision"],
+            kwargs["pocket"],
         )
     if kwargs["model_name"] == "unet":
         return UNet(

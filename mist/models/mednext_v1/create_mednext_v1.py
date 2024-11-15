@@ -6,6 +6,7 @@ def create_mednext_v1_small(
         num_input_channels: int,
         num_classes: int,
         deep_supervision: bool=False,
+        pocket: bool=False,
         kernel_size: int=3,
 ) -> MedNeXt:
     """Creates the small-sized version of the MedNeXt V1 model.
@@ -26,6 +27,7 @@ def create_mednext_v1_small(
         exp_r=2,
         kernel_size=kernel_size,
         deep_supervision=deep_supervision,
+        pocket=pocket,
         do_res=True,
         do_res_up_down=True,
         block_counts=[2,2,2,2,2,2,2,2,2],
@@ -36,6 +38,7 @@ def create_mednext_v1_base(
         num_input_channels: int,
         num_classes: int,
         deep_supervision: bool=False,
+        pocket: bool=False,
         kernel_size: int=3,
 ) -> MedNeXt:
     """Creates the baseline version of the MedNeXt V1 model.
@@ -56,6 +59,7 @@ def create_mednext_v1_base(
         exp_r=[2,3,4,4,4,4,4,3,2],
         kernel_size=kernel_size,
         deep_supervision=deep_supervision,
+        pocket=pocket,
         do_res=True,
         do_res_up_down = True,
         block_counts = [2,2,2,2,2,2,2,2,2],
@@ -66,6 +70,7 @@ def create_mednext_v1_medium(
         num_input_channels: int,
         num_classes: int,
         deep_supervision: bool=False,
+        pocket: bool=False,
         kernel_size: int=3,
 ) -> MedNeXt:
     """Creates the medium-sized version of the MedNeXt V1 model.
@@ -86,6 +91,7 @@ def create_mednext_v1_medium(
         exp_r=[2,3,4,4,4,4,4,3,2],
         kernel_size=kernel_size,
         deep_supervision=deep_supervision,
+        pocket=pocket,
         do_res=True,
         do_res_up_down = True,
         block_counts = [3,4,4,4,4,4,4,4,3],
@@ -96,6 +102,7 @@ def create_mednext_v1_large(
         num_input_channels: int,
         num_classes: int,
         deep_supervision: bool=False,
+        pocket: bool=False,
         kernel_size: int=3,
 ) -> MedNeXt:
     """Creates the large-sized version of the MedNeXt V1 model.
@@ -116,6 +123,7 @@ def create_mednext_v1_large(
         exp_r=[3,4,8,8,8,8,8,4,3],
         kernel_size=kernel_size,
         deep_supervision=deep_supervision,
+        pocket=pocket,
         do_res=True,
         do_res_up_down = True,
         block_counts = [3,4,8,8,8,8,8,4,3],
