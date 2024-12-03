@@ -1,0 +1,15 @@
+--extra-index-url https://pypi.nvidia.com/
+
+torch
+monai
+antspyx
+simpleitk
+numpy
+pandas
+rich
+scipy
+scikit-learn
+scikit-image
+nvidia-dali-cuda120
+tensorboard
+einops

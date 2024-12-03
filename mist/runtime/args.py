@@ -209,6 +209,17 @@ def get_main_args():
         help="Height, width, and depth of patch size"
     )
     parser.arg(
+        "--validate-every-n-epochs",
+        type=positive_int,
+        help="Validate every n epochs"
+    )
+    parser.arg(
+        "--validate-after-n-epochs",
+        type=int,
+        default=1,
+        help="Start validation after n epochs. If -1, validate only on the last epoch"
+    )
+    parser.arg(
         "--max-patch-size",
         default=[256, 256, 256],
         nargs="+",
@@ -228,12 +239,6 @@ def get_main_args():
         help="Learning rate"
     )
     parser.arg(
-        "--exp_decay",
-        type=positive_float,
-        default=0.9999,
-        help="Exponential decay factor"
-    )
-    parser.arg(
         "--lr-scheduler",
         type=str,
         default="constant",
@@ -241,16 +246,9 @@ def get_main_args():
             "constant",
             "polynomial",
             "cosine",
-            "cosine_warm_restarts",
-            "exponential"
+            "cosine-warm-restarts",
         ],
         help="Learning rate scheduler"
-    )
-    parser.arg(
-        "--cosine-first-steps",
-        type=positive_int,
-        default=500,
-        help="Length of a cosine decay cycle in steps, only with cosine_annealing scheduler"
     )
 
     # Optimizer parameters.
@@ -380,9 +378,9 @@ def get_main_args():
     parser.arg(
         "--loss",
         type=str,
-        default="dice_ce",
+        default="dice-ce",
         choices=[
-            "dice_ce",
+            "dice-ce",
             "dice",
             "bl",
             "hdl",
