@@ -140,6 +140,7 @@ def set_warning_levels() -> None:
     warnings.simplefilter(action="ignore", category=FutureWarning)
     warnings.simplefilter(action="ignore", category=RuntimeWarning)
     warnings.simplefilter(action="ignore", category=UserWarning)
+    warnings.simplefilter(action="ignore", category=DeprecationWarning)
 
 
 def create_empty_dir(path: str) -> None:
@@ -413,13 +414,15 @@ def convert_dict_to_df(patients: Dict[str, Dict[str, str]]) -> pd.DataFrame:
 
 def get_lr_schedule(
         mist_arguments: argparse.Namespace,
-        optimizer: torch.optim.Optimizer # type: ignore
+        optimizer: torch.optim.Optimizer, # type: ignore
+        epochs: int,
     ) -> torch.optim.lr_scheduler.LRScheduler:
     """Get learning rate schedule based on user input.
 
     Args:
         mist_arguments: Command line arguments.
         optimizer: Optimizer for which the learning rate schedule is created.
+        epochs: Number of epochs for training.
 
     Returns:
         lr_scheduler: Learning rate scheduler.
@@ -434,23 +437,19 @@ def get_lr_schedule(
     if mist_arguments.lr_scheduler == "polynomial":
         return torch.optim.lr_scheduler.PolynomialLR(
             optimizer,
-            total_iters=mist_arguments.steps_per_epoch * mist_arguments.epochs,
+            total_iters=epochs,
             power=0.9
         )
-    if mist_arguments.lr_scheduler == "cosine_warm_restarts":
+    if mist_arguments.lr_scheduler == "cosine-warm-restarts":
         return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
             optimizer,
-            T_0=mist_arguments.cosine_first_steps,
+            T_0=int(np.ceil(0.1 * epochs)),
             T_mult=2
         )
     if mist_arguments.lr_scheduler == "cosine":
         return torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer,
-            T_max=mist_arguments.steps_per_epoch * mist_arguments.epochs
-        )
-    if mist_arguments.lr_scheduler == "exponential":
-        return torch.optim.lr_scheduler.ExponentialLR(
-            optimizer, gamma=mist_arguments.exp_decay
+            T_max=epochs
         )
     raise ValueError(
         "Received invalid learning rate scheduler type "
@@ -476,6 +475,8 @@ def get_optimizer(
         optimizer, add a new if statement and add the corresponding
         optimizer name to runtime/args.py.
     """
+    # Increase epsilon for AMP to avoid NaNs.
+    eps = 1e-4 if mist_arguments.amp else 1e-8
     if mist_arguments.optimizer == "sgd":
         return torch.optim.SGD( # type: ignore
             params=model.parameters(),
@@ -484,11 +485,15 @@ def get_optimizer(
     )
     if mist_arguments.optimizer == "adam":
         return torch.optim.Adam( # type: ignore
-            params=model.parameters(), lr=mist_arguments.learning_rate
+            params=model.parameters(),
+            lr=mist_arguments.learning_rate,
+            eps=eps,
         )
     if mist_arguments.optimizer == "adamw":
         return torch.optim.AdamW( # type: ignore
-            params=model.parameters(), lr=mist_arguments.learning_rate
+            params=model.parameters(),
+            lr=mist_arguments.learning_rate,
+            eps=eps,
         )
     raise ValueError(
         f"Received invalid optimizer type {mist_arguments.optimizer}."
@@ -1309,3 +1314,80 @@ class AlphaSchedule:
         if self.schedule == "cosine":
             return float(self.cosine(epoch))
         raise ValueError(f"Received invalid schedule type {self.schedule}.")
+
+
+def get_epochs_and_validation_params(
+        mist_arguments: argparse.Namespace,
+        num_train_examples: int,
+        num_optimization_steps: int,
+        validate_every_n_steps: int,
+) -> Dict[str, int]:
+    """Get number of epochs and validation parameters based on user input.
+
+    Args:
+        mist_arguments: Command line arguments.
+        num_train_examples: Number of training examples.
+        num_optimization_steps: Number of optimization steps.
+        validate_every_n_steps: Number of steps between each validation.
+
+    Returns:
+        Dictionary containing the following key-value pairs:
+            steps_per_epoch: Number of steps per epoch.
+            epochs: Number of epochs.
+            validate_every_n_epochs: Number of epochs between each validation.
+            validate_after_n_epochs: Number of epochs before starting
+                validation.
+
+    Raises:
+        ValueError: If validate_after_n_epochs is greater than epochs or a
+            negative value other than -1.
+    """
+    # Get steps per epoch if not given by user.
+    if mist_arguments.steps_per_epoch is None:
+        steps_per_epoch = num_train_examples // mist_arguments.batch_size
+    else:
+        steps_per_epoch = mist_arguments.steps_per_epoch
+
+    # Get default number of epochs per fold. This is defined as
+    # 250000 / steps_per_epoch.
+    if mist_arguments.epochs is None:
+        epochs = num_optimization_steps // steps_per_epoch
+    else:
+        epochs = mist_arguments.epochs
+
+    # Get number of epochs between each validation. We validate every
+    # 250 steps by default.
+    if mist_arguments.validate_every_n_epochs is None:
+        validate_every_n_epochs = validate_every_n_steps // steps_per_epoch
+
+        # Ensure that we validate at most once per epoch.
+        validate_every_n_epochs = max(1, validate_every_n_epochs)
+    else:
+        validate_every_n_epochs = mist_arguments.validate_every_n_epochs
+
+    # Get number of epochs before starting validation. By default, we start
+    # validation after the first epoch. Otherwise, we start validation after
+    # some user-specified number of epochs.
+    validate_after_n_epochs = mist_arguments.validate_after_n_epochs
+    if validate_after_n_epochs > epochs:
+        raise ValueError(
+            "validate_after_n_epochs must be less than or equal to epochs. Got "
+            f"validate_after_n_epochs = {validate_after_n_epochs} and epochs = "
+            f"{epochs}."
+        )
+
+    if validate_after_n_epochs < 0:
+        if validate_after_n_epochs != -1:
+            raise ValueError(
+                "The only valid negative value for validate_after_n_epochs is "
+                f"-1. Got {validate_after_n_epochs}."
+            )
+        validate_after_n_epochs = epochs
+
+    # Format output as dictionary.
+    return {
+        "steps_per_epoch": steps_per_epoch,
+        "epochs": epochs,
+        "validate_every_n_epochs": validate_every_n_epochs,
+        "validate_after_n_epochs": validate_after_n_epochs,
+    }
