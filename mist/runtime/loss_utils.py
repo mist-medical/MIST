@@ -127,4 +127,3 @@ class SoftSkeletonize(nn.Module):
             The soft skeleton of the input tensor.
         """
         return self.soft_skeletonize(img)
-
