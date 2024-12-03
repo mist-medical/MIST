@@ -37,7 +37,7 @@ the ```--model``` flag.
 |---------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | U-Net               | ```unet```                                                                                                                                                    |
 | Attention U-Net     | ```attn_unet```                                                                                                                                               |
-| UNETR               | ```unetr```                                                                                                                                                   |
+| Swin UNETR               | ```swin-unetr```                                                                                                                                                   |
 | FMG-Net             | ```fmgnet```                                                                                                                                                  |
 | W-Net               | ```wnet```                                                                                                                                                    |
 | nnUNet              | ```nnunet```                                                                                                                                                  |
@@ -80,10 +80,7 @@ will change the optimizer, learning rate, learning rate schedule, or apply gradi
 * ```--optimizer```: (default: ```adam```) Sets optimizer for training. Other options are ```sgd``` and ```adamw```
 * ```--learning-rate```: (default: 0.0003) Initial learning rate for training
   * ```--lr-scheduler```: (default: ```constant```) Sets the learning rate scheduler for training. Other options are 
-  ```cosine_warm_restarts```, ```cosine```, ```polynomial```, and ```exponential```, which are updated every training step (not epoch). Optional parameters
-  for each of these schedulers are:
-      - ```--cosine-first-steps```: (default: 500) Length (in training steps) of a cosine decay cycle, only with ```cosine_warm_restarts``` scheduler
-      - ```--exp_decay```: (default: 0.9999) Exponential decay factor
+  ```cosine-warm-restarts```, ```cosine```, and ```polynomial```.
 * ```--clip-norm```: (default: False) Use gradient clipping (global)
     - ```--clip-norm-max``` (default: 1)  Max threshold for global norm clipping
 * ```--sgd-momentum```: (default: 0) Momentum for SGD optimizer
@@ -157,6 +154,16 @@ between patches using the ```--val-sw-overlap``` (default: 0.5) to a smaller
 amount (i.e., 0.25) to speed up validation. For test time inference, MIST
 uses the value stored in the ```--sw-overlap``` flag to control the amount of
 overlap between patches.
+
+In addition to these features, users can also set validation to happen
+periodically after a certain number of epochs with the ```--validate-every-n-epochs```
+and ```--validate-after-n-epochs``` arguments. For example, if you want to
+validate every five epochs after 100 epochs, then use something like the following
+command
+
+```console
+mist_run_all --validate-every-n-epochs 5 --validate-after-n-epochs 100 --<other arguments>
+```
 
 ### Kubernetes
 For MD Anderson users, you can run MIST on the Kubernetes/HPC cluster. Here is an example of a job submission file:

@@ -184,8 +184,6 @@ The ```mist_evaluate``` command and its arguments are described below:
 	- ```--output-csv```: (required) Path to CSV file where evaluation results will be saved
     - ```--metrics```: (required, default: ["dice", "haus95"]) List of metrics to compute. The default metrics are the Dice coefficient (```dice```) and 95th percentile Hausdorff distance (```haus95```)
   						other metrics which can be included in this list are the average surface distance (```avg_surf```) and surface Dice (```surf_dice```) 
-    - ```--normalize-hd```: (optional, default: False) Turn this on to normalize Hausdorff distances
-    - ```--use-native-spacing```: (optional, default: False) Use native image spacing for computing Hausdorff distances
   
 ## Converting CSV and MSD Data
 Several popular formats exist for different datasets, like the Medical Segmentation Decathlon (MSD) or simple CSV files 
