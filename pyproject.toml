@@ -1,8 +1,8 @@
 [project]
 name = "mist-medical"
-version = "0.1.5-beta"
+version = "0.1.6-beta"
 requires-python = ">= 3.8"
-description = "MIST is a simple, fully automated framework for 3D medical imaging segmentation."
+description = "MIST is a simple and scalable end-to-end framework for medical imaging segmentation."
 readme = "README.md"
 license = {file = "LICENSE"}
 authors = [
@@ -25,33 +25,17 @@ keywords = [
     "semantic segmentation",
     "medical image analysis",
     "medical image segmentation",
-    "nnU-Net",
-    "nnunet",
+    "nnUNet",
     "U-Net",
-    "unet",
     "vision transformers",
-    "UNETR",
-    "unetr"
+    "Swin UNETR"
 ]
-dependencies = [
-    "torch>=2.0.1",
-    "monai>=1.3.0",
-    "antspyx>=0.3.8",
-    "simpleitk>=2.2.1",
-    "numpy",
-    "pandas",
-    "rich",
-    "scipy",
-    "scikit-learn",
-    "scikit-image",
-    "nvidia-dali-cuda110",
-    "tensorboard",
-    "einops",
-]
+dynamic = ["dependencies"]
 
 [project.urls]
 homepage = "https://github.com/mist-medical/MIST"
 repository = "https://github.com/mist-medical/MIST"
+documentation = "https://mist-medical.readthedocs.io/"
 
 [project.scripts]
 mist_run_all = "mist.scripts.run_all_entrypoint:run_all_entry"
@@ -65,3 +49,13 @@ mist_convert_dataset = "mist.convert_to_mist:convert_to_mist_entry"
 
 [tool.codespell]
 skip = ".git"
+
+[build-system]
+requires = ["setuptools", "wheel", "pip"]
+build-backend = "setuptools.build_meta"
+
+[tool.dependencies-dev]
+pytest = "^7.0"
+flake8 = "^6.0"
+black = "^23.0"
+mypy = "^1.0"
