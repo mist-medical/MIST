@@ -359,37 +359,28 @@ class Trainer:
                 world_size=world_size
             )
 
-            # Get steps per epoch if not given by user.
-            if self.mist_arguments.steps_per_epoch is None:
-                self.mist_arguments.steps_per_epoch = (
-                    len(train_images) // self.mist_arguments.batch_size
+            # Get steps per epoch, number of epochs, and validation parameters
+            # like validate after n epochs and validate every n epochs.
+            epochs_and_validation_params = (
+                utils.get_epochs_and_validation_params(
+                    mist_arguments=self.mist_arguments,
+                    num_train_examples=len(train_images),
+                    num_optimization_steps=constants.TOTAL_OPTIMIZATION_STEPS,
+                    validate_every_n_steps=constants.VALIDATE_EVERY_N_STEPS,
                 )
-            else:
-                self.mist_arguments.steps_per_epoch = (
-                    self.mist_arguments.steps_per_epoch
-                )
-
-            # Get default number of epochs per fold. This is defined as
-            # 250000 / steps_per_epoch.
-            if self.mist_arguments.epochs is None:
-                self.mist_arguments.epochs = (
-                    constants.TOTAL_OPTIMIZATION_STEPS //
-                    self.mist_arguments.steps_per_epoch
-                )
-
-            # Get number of epochs between each validation. We validate every
-            # 250 steps by default.
-            validate_every_n_epochs = (
-                constants.VALIDATE_EVERY_N_STEPS //
-                self.mist_arguments.steps_per_epoch
             )
-
-            # Ensure that we validate at most once per epoch.
-            validate_every_n_epochs = max(1, validate_every_n_epochs)
+            steps_per_epoch = epochs_and_validation_params["steps_per_epoch"]
+            epochs = epochs_and_validation_params["epochs"]
+            validate_every_n_epochs = (
+                epochs_and_validation_params["validate_every_n_epochs"]
+            )
+            validate_after_n_epochs = (
+                epochs_and_validation_params["validate_after_n_epochs"]
+            )
 
             # Initialize boundary loss weighting schedule.
             boundary_loss_weighting_schedule = utils.AlphaSchedule(
-                n_epochs=self.mist_arguments.epochs,
+                n_epochs=epochs,
                 schedule=self.mist_arguments.boundary_loss_schedule,
                 constant=self.mist_arguments.loss_schedule_constant,
                 init_pause=self.mist_arguments.linear_schedule_pause,
@@ -398,6 +389,9 @@ class Trainer:
 
             # Get loss function based on user arguments.
             loss_fn = loss_functions.get_loss(self.mist_arguments)
+            loss_fn_with_deep_supervision = (
+                loss_functions.DeepSupervisionLoss(loss_fn)
+            )
 
             # Make sure we are using/have DTMs for boundary-based loss
             # functions.
@@ -456,7 +450,7 @@ class Trainer:
             # Get optimizer and lr scheduler
             optimizer = utils.get_optimizer(self.mist_arguments, model)
             learning_rate_scheduler = utils.get_lr_schedule(
-                self.mist_arguments, optimizer
+                self.mist_arguments, optimizer, epochs
             )
 
             # Float16 inputs during the forward pass produce float16 gradients
@@ -482,8 +476,8 @@ class Trainer:
                 writer = SummaryWriter(
                     os.path.join(
                         self.mist_arguments.results, "logs", f"fold_{fold}"
-                        )
                     )
+                )
 
                 # Path and name for best model for this fold.
                 best_model_name = os.path.join(
@@ -520,72 +514,20 @@ class Trainer:
                     # Make predictions for the batch.
                     output = model(image) # pylint: disable=cell-var-from-loop
 
-                    # Compute loss for the batch. The inputs to the loss
-                    # function depend on the loss function being used.
-                    if self.mist_arguments.use_dtms:
-                        # Use distance transform maps for boundary-based loss
-                        # functions.
-                        loss = loss_fn(label, output["prediction"], dtm, alpha) # pylint: disable=cell-var-from-loop
-                    elif self.mist_arguments.loss in ["cldice"]:
-                        # Use the alpha parameter to weight the cldice and
-                        # dice with cross entropy loss functions.
-                        loss = loss_fn(label, output["prediction"], alpha) # pylint: disable=cell-var-from-loop
-                    else:
-                        # Use only the image and label for other loss functions
-                        # like dice with cross entropy.
-                        loss = loss_fn(label, output["prediction"]) # pylint: disable=cell-var-from-loop
-
-                    # If deep supervision is enabled, compute the additional
-                    # losses from the deep supervision heads. Deep supervision
-                    # provides additional output layers that guide the model
-                    # during training by supplying intermediate supervision
-                    # signals at various stages of the model.
-
-                    # We scale the loss from each deep supervision head by a
-                    # factor of (0.5 ** (k + 1)), where k is the index of the
-                    # deep supervision head. This creates a geometric series
-                    # that gives decreasing weight to deeper (later) supervision
-                    # heads. The idea is to ensure that the loss from earlier
-                    # heads (closer to the final output) contributes more to the
-                    # total loss, while still incorporating the information from
-                    # later heads.
-
-                    # After summing the losses from all deep supervision heads,
-                    # we normalize the total loss using a correction factor
-                    # (c_norm). This factor is derived from the sum of the
-                    # geometric series (1 / (2 - 2 ** -n)), where n is the
-                    # number of deep supervision heads. The normalization
-                    # ensures that the total loss isn't biased or dominated by
-                    # the deep supervision losses by making the loss a
-                    # convex combination of the losses from all heads, including
-                    # the main loss.
-                    if self.mist_arguments.deep_supervision:
-                        for k, p in enumerate(output["deep_supervision"]):
-                            # Apply the loss function based on the model's
-                            # configuration. If distance transform maps
-                            # are used, pass them to the loss function.
-                            if self.mist_arguments.use_dtms:
-                                loss += 0.5 ** (k + 1) * loss_fn( # pylint: disable=cell-var-from-loop
-                                    label, p, dtm, alpha
-                                )
-                            # If cldice loss is used, pass alpha to the loss
-                            # function.
-                            elif self.mist_arguments.loss in ["cldice"]:
-                                loss += 0.5 ** (k + 1) * loss_fn( # pylint: disable=cell-var-from-loop
-                                    label, p, alpha
-                                )
-                            # Otherwise, compute the loss normally.
-                            else:
-                                loss += 0.5 ** (k + 1) * loss_fn(label, p) # pylint: disable=cell-var-from-loop
-
-                        # Normalize the total loss from deep supervision heads
-                        # using a correction factor to prevent it from
-                        # dominating the main loss.
-                        c_norm = 1 / (2 - 2 ** -(
-                                len(output["deep_supervision"])
-                            )
-                        )
-                        loss *= c_norm
+                    # Compute loss based on the output and ground truth label.
+                    # Apply deep supervision if enabled.
+                    y_supervision = (
+                        output["deep_supervision"]
+                        if self.mist_arguments.deep_supervision
+                        else None
+                    )
+                    loss = loss_fn_with_deep_supervision( # pylint: disable=cell-var-from-loop
+                        y_true=label,
+                        y_pred=output["prediction"],
+                        y_supervision=y_supervision,
+                        alpha=alpha,
+                        dtm=dtm,
+                    )
 
                     # Check if Variational Autoencoder (VAE) regularization
                     # is enabled. VAE regularization encourages the model to
@@ -748,7 +690,7 @@ class Trainer:
                 return self.fixed_loss_functions["validation"](label, pred)
 
             # Train the model for the specified number of epochs.
-            for epoch in range(self.mist_arguments.epochs):
+            for epoch in range(epochs):
                 # Make sure gradient tracking is on, and do a pass over the
                 # training data.
                 model.train(True)
@@ -762,10 +704,10 @@ class Trainer:
                     with progress_bar.TrainProgressBar(
                         epoch + 1,
                         fold,
-                        self.mist_arguments.epochs,
-                        self.mist_arguments.steps_per_epoch
+                        epochs,
+                        steps_per_epoch,
                     ) as pb:
-                        for _ in range(self.mist_arguments.steps_per_epoch):
+                        for _ in range(steps_per_epoch):
                             # Get data from training loader.
                             data = train_loader.next()[0]
 
@@ -791,9 +733,6 @@ class Trainer:
                                 else:
                                     loss = train_step(image, label, None, None)
 
-                            # Update update the learning rate scheduler.
-                            learning_rate_scheduler.step()
-
                             # Send all training losses to device 0 to add them.
                             dist.reduce(loss, dst=0)
 
@@ -803,12 +742,16 @@ class Trainer:
                             # Update the running loss for the progress bar.
                             running_loss = running_loss_train(current_loss)
 
-                            # Update the progress bar with the running loss.
-                            pb.update(loss=running_loss)
+                            # Update the progress bar with the running loss and
+                            # learning rate.
+                            pb.update(
+                                loss=running_loss,
+                                lr=optimizer.param_groups[0]["lr"]
+                            )
                 else:
                     # For all other processes, do not display the progress bar.
                     # Repeat the training steps shown above for the other GPUs.
-                    for _ in range(self.mist_arguments.steps_per_epoch):
+                    for _ in range(steps_per_epoch):
                         # Get data from training loader.
                         data = train_loader.next()[0]
 
@@ -830,22 +773,30 @@ class Trainer:
                         # Send the loss on the current GPU to device 0.
                         dist.reduce(loss, dst=0)
 
+                # Update the learning rate scheduler.
+                learning_rate_scheduler.step()
+
                 # Wait for all processes to finish the epoch.
                 dist.barrier()
 
                 # Start validation. We don't need gradients on to do reporting.
-                # Only validate every validate_every_n_epochs epochs.
-                if (
-                    epoch % validate_every_n_epochs == 0 or
-                    epoch == self.mist_arguments.epochs - 1
-                ):
+                # Only validate on the first and last epochs or periodically
+                # after validate_after_n_epochs.
+                validate = (
+                    epoch == 0 or epoch == epochs - 1 or
+                    (
+                        epoch >= validate_after_n_epochs and
+                        epoch % validate_every_n_epochs == 0
+                    )
+                )
+                if validate:
                     model.eval()
                     with torch.no_grad():
                         # Only log metrics on first process (i.e., rank 0).
                         if rank == 0:
                             with progress_bar.ValidationProgressBar(
                                 val_steps
-                            ) as pb:
+                            ) as val_pb:
                                 for _ in range(val_steps):
                                     # Get data from validation loader.
                                     data = validation_loader.next()[0]
@@ -860,8 +811,7 @@ class Trainer:
 
                                     # Average the loss across all GPUs.
                                     current_val_loss = (
-                                        val_loss.item() /
-                                        world_size
+                                        val_loss.item() / world_size
                                     )
 
                                     # Update the running loss for the progress
@@ -872,7 +822,7 @@ class Trainer:
 
                                     # Update the progress bar with the running
                                     # loss.
-                                    pb.update(loss=running_val_loss)
+                                    val_pb.update(loss=running_val_loss)
 
                             # Check if validation loss is lower than the current
                             # best validation loss. If so, save the model.
