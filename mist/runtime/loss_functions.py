@@ -35,7 +35,7 @@ class DeepSupervisionLoss(nn.Module):
         """Applies the configured loss function with appropriate arguments."""
         if dtm is not None:
             return self.loss_fn(y_true, y_pred, dtm, alpha)
-        elif alpha is not None:
+        if alpha is not None:
             return self.loss_fn(y_true, y_pred, alpha)
         return self.loss_fn(y_true, y_pred)
 
@@ -105,7 +105,7 @@ class DiceLoss(nn.Module):
             loss computation. This defaults to False.
     """
     def __init__(self, exclude_background: bool=False):
-        super(DiceLoss, self).__init__()
+        super().__init__()
         # Smooth constant to prevent division by zero.
         self.smooth = 1e-6
 
@@ -183,7 +183,7 @@ class DiceCELoss(nn.Module):
             computation. This defaults to False.
     """
     def __init__(self, exclude_background: bool=False):
-        super(DiceCELoss, self).__init__()
+        super().__init__()
         # Indicates whether to exclude the background class in the loss
         # computation. By default, we include the background class.
         self.exclude_background = exclude_background
@@ -261,7 +261,7 @@ class SoftCLDice(nn.Module):
             smooth: float=1.,
             exclude_background: bool=False,
     ):
-        super(SoftCLDice, self).__init__()
+        super().__init__()
         # Number of iterations to use in the soft skeletonization operation.
         self.iterations = iterations
 
@@ -348,7 +348,7 @@ class SoftDiceCLDice(nn.Module):
             smooth: float=1.,
             exclude_background: bool=False
     ):
-        super(SoftDiceCLDice, self).__init__()
+        super().__init__()
         # Number of iterations to use in the soft skeletonization operation.
         self.iterations = iterations
 
@@ -412,7 +412,7 @@ class BoundaryLoss(nn.Module):
             computation. This defaults to False.
     """
     def __init__(self, exclude_background=False):
-        super(BoundaryLoss, self).__init__()
+        super().__init__()
         self.exclude_background = exclude_background
         self.region_loss = DiceCELoss(
             exclude_background=self.exclude_background
@@ -484,7 +484,7 @@ class HDOneSidedLoss(nn.Module):
             computation. This defaults to False.
     """
     def __init__(self, exclude_background=False):
-        super(HDOneSidedLoss, self).__init__()
+        super().__init__()
         self.exclude_background = exclude_background
         self.region_loss = DiceCELoss(
             exclude_background=self.exclude_background
@@ -570,7 +570,7 @@ class GenSurfLoss(nn.Module):
         self,
         exclude_background=False
     ):
-        super(GenSurfLoss, self).__init__()
+        super().__init__()
         self.exclude_background = exclude_background
         self.region_loss = DiceCELoss(self.exclude_background)
         self.smooth = 1e-6
@@ -675,7 +675,7 @@ class VAELoss(nn.Module):
         kl_loss: The Kullback-Leibler divergence loss function.
     """
     def __init__(self):
-        super(VAELoss, self).__init__()
+        super().__init__()
         self.reconstruction_loss = nn.MSELoss()
         self.kl_loss = KLDivLoss()
 
