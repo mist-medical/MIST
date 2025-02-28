@@ -8,6 +8,8 @@ from torch.nn import functional as F
 
 from mist.runtime import loss_utils
 
+import pdb
+
 
 class DeepSupervisionLoss(nn.Module):
     """Loss function for deep supervision in segmentation tasks.
@@ -110,8 +112,8 @@ class DiceLoss(nn.Module):
         self.smooth = 1e-6
 
         # The axes along which to compute the Dice loss. The tensors are assumed
-        # to have shape (batch_size, num_classes, height, width, depth). We
-        # compute the Dice loss along the spatial dimensions.
+        # to have shape (batch_size, num_classes, height, width, depth) for 3D
+        # data. The axes are (2, 3, 4) for 3D data.
         self.axes = (2, 3, 4)
 
         # Indicates whether to exclude the background class in the Dice loss
@@ -127,10 +129,10 @@ class DiceLoss(nn.Module):
 
         Args:
             y_true: The ground truth segmentation mask. The tensor has shape
-                (batch_size, height, width, depth). This is not one-hot encoded.
-                We do not one-hot encode the ground truth mask because of the
-                way the data is loaded. We apply one-hot encoding in the forward
-                pass.
+                (batch_size, 1, height, width, depth). This is not one-hot
+                encoded. We do not one-hot encode the ground truth mask because
+                of the way the data is loaded. We apply one-hot encoding in the
+                forward pass.
             y_pred: The predicted segmentation mask. The tensor has shape
                 (batch_size, num_classes, height, width, depth). We assume that
                 the predicted mask is the raw output of a network that has not
@@ -138,8 +140,11 @@ class DiceLoss(nn.Module):
                 function in the forward pass.
 
         Returns:
-            The Dice loss.
+            The Dice loss, which is one minus the Dice coefficient.
         """
+        # Check inputs.
+        loss_utils.check_loss_fn_inputs(y_true, y_pred)
+
         # Prepare inputs.
         # Apply one-hot encoding to the ground truth mask.
         y_true = loss_utils.get_one_hot(y_true, y_pred.shape[1])
