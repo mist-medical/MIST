@@ -8,8 +8,6 @@ from torch.nn import functional as F
 
 from mist.runtime import loss_utils
 
-import pdb
-
 
 class DeepSupervisionLoss(nn.Module):
     """Loss function for deep supervision in segmentation tasks.
@@ -173,45 +171,36 @@ class DiceLoss(nn.Module):
         loss = torch.mean(loss)
         return loss
 
-class DiceCELoss(nn.Module):
+class DiceCELoss(DiceLoss):
     """Dice loss combined with cross entropy loss for segmentation tasks.
 
     This loss is defined as the mean of the Dice loss and the cross entropy loss
     between the predicted and ground truth segmentation masks. The Dice loss is
-    given by the DiceLoss class. The cross entropy loss is computed using the
-    CrossEntropyLoss class from PyTorch.
+    inherited from the DiceLoss class. The cross entropy loss is computed using
+    PyTorch's CrossEntropyLoss.
 
     Attributes:
         cross_entropy: The cross entropy loss function.
-        dice_loss: The Dice loss function.
-        exclude_background: Whether to exclude the background class in the loss
-            computation. This defaults to False.
     """
-    def __init__(self, exclude_background: bool=False):
-        super().__init__()
-        # Indicates whether to exclude the background class in the loss
-        # computation. By default, we include the background class.
-        self.exclude_background = exclude_background
+    def __init__(self, exclude_background: bool = False):
+        super().__init__(exclude_background=exclude_background)
 
         # Cross entropy loss function.
-        self.cross_entropy = torch.nn.CrossEntropyLoss()
-
-        # Dice loss function.
-        self.dice_loss = DiceLoss(exclude_background=self.exclude_background)
+        self.cross_entropy = nn.CrossEntropyLoss()
 
     def forward(
             self,
             y_true: torch.Tensor,
-            y_pred: torch.Tensor,
+            y_pred: torch.Tensor
     ) -> torch.Tensor:
         """Forward pass of the Dice cross entropy loss function.
 
         Args:
             y_true: The ground truth segmentation mask. The tensor has shape
-                (batch_size, height, width, depth). This is not one-hot encoded.
-                We do not one-hot encode the ground truth mask because of the
-                way the data is loaded. We apply one-hot encoding in the forward
-                pass.
+                (batch_size, 1, height, width, depth). This is not one-hot
+                encoded. We do not one-hot encode the ground truth mask because
+                of the way the data is loaded. We apply one-hot encoding in the
+                forward pass.
             y_pred: The predicted segmentation mask. The tensor has shape
                 (batch_size, num_classes, height, width, depth). We assume that
                 the predicted mask is the raw output of a network that has not
@@ -221,8 +210,8 @@ class DiceCELoss(nn.Module):
         Returns:
             The Dice cross entropy loss.
         """
-        # Compute the dice loss.
-        loss_dice = self.dice_loss(y_true, y_pred)
+        # Compute the Dice loss using the inherited logic.
+        loss_dice = super().forward(y_true, y_pred)
 
         # Prepare inputs for the cross entropy loss. PyTorch's cross entropy
         # loss function already applies the softmax function to the prediction.
@@ -234,10 +223,11 @@ class DiceCELoss(nn.Module):
             y_true = y_true[:, 1:, :, :, :]
             y_pred = y_pred[:, 1:, :, :, :]
 
-        # Cross entropy loss
+        # Compute cross entropy loss.
         loss_ce = self.cross_entropy(y_pred, y_true)
 
-        return 0.5*(loss_ce + loss_dice)
+        # Combine Dice and Cross Entropy losses.
+        return 0.5 * (loss_ce + loss_dice)
 
 
 class SoftCLDice(nn.Module):
