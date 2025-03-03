@@ -215,7 +215,7 @@ def get_main_args():
     )
     parser.arg(
         "--validate-after-n-epochs",
-        type=int,
+        type=positive_int,
         default=1,
         help="Start validation after n epochs. If -1, validate only on the last epoch"
     )

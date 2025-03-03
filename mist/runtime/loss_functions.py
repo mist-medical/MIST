@@ -35,7 +35,7 @@ class DeepSupervisionLoss(nn.Module):
         """Applies the configured loss function with appropriate arguments."""
         if dtm is not None:
             return self.loss_fn(y_true, y_pred, dtm, alpha)
-        elif alpha is not None:
+        if alpha is not None:
             return self.loss_fn(y_true, y_pred, alpha)
         return self.loss_fn(y_true, y_pred)
 
@@ -105,13 +105,13 @@ class DiceLoss(nn.Module):
             loss computation. This defaults to False.
     """
     def __init__(self, exclude_background: bool=False):
-        super(DiceLoss, self).__init__()
+        super().__init__()
         # Smooth constant to prevent division by zero.
         self.smooth = 1e-6
 
         # The axes along which to compute the Dice loss. The tensors are assumed
-        # to have shape (batch_size, num_classes, height, width, depth). We
-        # compute the Dice loss along the spatial dimensions.
+        # to have shape (batch_size, num_classes, height, width, depth) for 3D
+        # data. The axes are (2, 3, 4) for 3D data.
         self.axes = (2, 3, 4)
 
         # Indicates whether to exclude the background class in the Dice loss
@@ -127,10 +127,10 @@ class DiceLoss(nn.Module):
 
         Args:
             y_true: The ground truth segmentation mask. The tensor has shape
-                (batch_size, height, width, depth). This is not one-hot encoded.
-                We do not one-hot encode the ground truth mask because of the
-                way the data is loaded. We apply one-hot encoding in the forward
-                pass.
+                (batch_size, 1, height, width, depth). This is not one-hot
+                encoded. We do not one-hot encode the ground truth mask because
+                of the way the data is loaded. We apply one-hot encoding in the
+                forward pass.
             y_pred: The predicted segmentation mask. The tensor has shape
                 (batch_size, num_classes, height, width, depth). We assume that
                 the predicted mask is the raw output of a network that has not
@@ -138,8 +138,11 @@ class DiceLoss(nn.Module):
                 function in the forward pass.
 
         Returns:
-            The Dice loss.
+            The Dice loss, which is one minus the Dice coefficient.
         """
+        # Check inputs.
+        loss_utils.check_loss_fn_inputs(y_true, y_pred)
+
         # Prepare inputs.
         # Apply one-hot encoding to the ground truth mask.
         y_true = loss_utils.get_one_hot(y_true, y_pred.shape[1])
@@ -168,45 +171,36 @@ class DiceLoss(nn.Module):
         loss = torch.mean(loss)
         return loss
 
-class DiceCELoss(nn.Module):
+class DiceCELoss(DiceLoss):
     """Dice loss combined with cross entropy loss for segmentation tasks.
 
     This loss is defined as the mean of the Dice loss and the cross entropy loss
     between the predicted and ground truth segmentation masks. The Dice loss is
-    given by the DiceLoss class. The cross entropy loss is computed using the
-    CrossEntropyLoss class from PyTorch.
+    inherited from the DiceLoss class. The cross entropy loss is computed using
+    PyTorch's CrossEntropyLoss.
 
     Attributes:
         cross_entropy: The cross entropy loss function.
-        dice_loss: The Dice loss function.
-        exclude_background: Whether to exclude the background class in the loss
-            computation. This defaults to False.
     """
-    def __init__(self, exclude_background: bool=False):
-        super(DiceCELoss, self).__init__()
-        # Indicates whether to exclude the background class in the loss
-        # computation. By default, we include the background class.
-        self.exclude_background = exclude_background
+    def __init__(self, exclude_background: bool = False):
+        super().__init__(exclude_background=exclude_background)
 
         # Cross entropy loss function.
-        self.cross_entropy = torch.nn.CrossEntropyLoss()
-
-        # Dice loss function.
-        self.dice_loss = DiceLoss(exclude_background=self.exclude_background)
+        self.cross_entropy = nn.CrossEntropyLoss()
 
     def forward(
             self,
             y_true: torch.Tensor,
-            y_pred: torch.Tensor,
+            y_pred: torch.Tensor
     ) -> torch.Tensor:
         """Forward pass of the Dice cross entropy loss function.
 
         Args:
             y_true: The ground truth segmentation mask. The tensor has shape
-                (batch_size, height, width, depth). This is not one-hot encoded.
-                We do not one-hot encode the ground truth mask because of the
-                way the data is loaded. We apply one-hot encoding in the forward
-                pass.
+                (batch_size, 1, height, width, depth). This is not one-hot
+                encoded. We do not one-hot encode the ground truth mask because
+                of the way the data is loaded. We apply one-hot encoding in the
+                forward pass.
             y_pred: The predicted segmentation mask. The tensor has shape
                 (batch_size, num_classes, height, width, depth). We assume that
                 the predicted mask is the raw output of a network that has not
@@ -216,8 +210,8 @@ class DiceCELoss(nn.Module):
         Returns:
             The Dice cross entropy loss.
         """
-        # Compute the dice loss.
-        loss_dice = self.dice_loss(y_true, y_pred)
+        # Compute the Dice loss using the inherited logic.
+        loss_dice = super().forward(y_true, y_pred)
 
         # Prepare inputs for the cross entropy loss. PyTorch's cross entropy
         # loss function already applies the softmax function to the prediction.
@@ -229,10 +223,11 @@ class DiceCELoss(nn.Module):
             y_true = y_true[:, 1:, :, :, :]
             y_pred = y_pred[:, 1:, :, :, :]
 
-        # Cross entropy loss
+        # Compute cross entropy loss.
         loss_ce = self.cross_entropy(y_pred, y_true)
 
-        return 0.5*(loss_ce + loss_dice)
+        # Combine Dice and Cross Entropy losses.
+        return 0.5 * (loss_ce + loss_dice)
 
 
 class SoftCLDice(nn.Module):
@@ -261,7 +256,7 @@ class SoftCLDice(nn.Module):
             smooth: float=1.,
             exclude_background: bool=False,
     ):
-        super(SoftCLDice, self).__init__()
+        super().__init__()
         # Number of iterations to use in the soft skeletonization operation.
         self.iterations = iterations
 
@@ -348,7 +343,7 @@ class SoftDiceCLDice(nn.Module):
             smooth: float=1.,
             exclude_background: bool=False
     ):
-        super(SoftDiceCLDice, self).__init__()
+        super().__init__()
         # Number of iterations to use in the soft skeletonization operation.
         self.iterations = iterations
 
@@ -412,7 +407,7 @@ class BoundaryLoss(nn.Module):
             computation. This defaults to False.
     """
     def __init__(self, exclude_background=False):
-        super(BoundaryLoss, self).__init__()
+        super().__init__()
         self.exclude_background = exclude_background
         self.region_loss = DiceCELoss(
             exclude_background=self.exclude_background
@@ -484,7 +479,7 @@ class HDOneSidedLoss(nn.Module):
             computation. This defaults to False.
     """
     def __init__(self, exclude_background=False):
-        super(HDOneSidedLoss, self).__init__()
+        super().__init__()
         self.exclude_background = exclude_background
         self.region_loss = DiceCELoss(
             exclude_background=self.exclude_background
@@ -570,7 +565,7 @@ class GenSurfLoss(nn.Module):
         self,
         exclude_background=False
     ):
-        super(GenSurfLoss, self).__init__()
+        super().__init__()
         self.exclude_background = exclude_background
         self.region_loss = DiceCELoss(self.exclude_background)
         self.smooth = 1e-6
@@ -675,7 +670,7 @@ class VAELoss(nn.Module):
         kl_loss: The Kullback-Leibler divergence loss function.
     """
     def __init__(self):
-        super(VAELoss, self).__init__()
+        super().__init__()
         self.reconstruction_loss = nn.MSELoss()
         self.kl_loss = KLDivLoss()
 

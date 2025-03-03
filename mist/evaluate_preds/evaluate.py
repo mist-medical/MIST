@@ -98,12 +98,6 @@ def calculate_metrics(
     # case value for a metric.
     truth_sum, pred_sum = truth_mask.sum(), pred_mask.sum()
 
-    # Compute the distance maps that we need for computing the Hausdorff,
-    # surface Dice, and average surface distance metrics.
-    distances = metrics.compute_surface_distances(
-        truth_mask, pred_mask, spacing
-    )
-
     # Compute the worst case Hausdorff distance for the mask. This is the
     # maximum possible distance between two points in the mask (i.e., the
     # diagonal distance of the mask).
@@ -117,17 +111,41 @@ def calculate_metrics(
         "avg_surf": (0.0, worst_case_hausdorff),
     }
 
-    # Get the functions to compute the metrics.
     metric_functions = {
-        "dice": lambda: metrics.compute_dice_coefficient(truth_mask, pred_mask),
-        "haus95": lambda: metrics.compute_robust_hausdorff(
-            distances, percent=95
-        ),
-        "surf_dice": lambda: metrics.compute_surface_dice_at_tolerance(
-            distances, tolerance_mm=surf_dice_tol
-        ),
-        "avg_surf": lambda: metrics.compute_average_surface_distance(distances),
+        "dice": lambda: metrics.compute_dice_coefficient(truth_mask, pred_mask)
     }
+    if truth_sum == 0 or pred_sum == 0:
+        metric_functions["haus95"] = lambda: check_best_and_worst_cases(
+            truth_sum, pred_sum, *best_and_worst_cases["haus95"]
+        )
+        metric_functions["surf_dice"] = lambda: check_best_and_worst_cases(
+            truth_sum, pred_sum, *best_and_worst_cases["surf_dice"]
+        )
+        metric_functions["avg_surf"] = lambda: check_best_and_worst_cases(
+            truth_sum, pred_sum, *best_and_worst_cases["avg_surf"]
+        )
+    else:
+        # Compute the distance maps that we need for computing the Hausdorff,
+        # surface Dice, and average surface distance metrics.
+        distances = metrics.compute_surface_distances(
+            truth_mask, pred_mask, spacing
+        )
+
+        # Get the functions to compute the metrics.
+        _metric_functions = {
+            "haus95": lambda: metrics.compute_robust_hausdorff(
+                distances, percent=95
+            ),
+            "surf_dice": (
+                lambda: metrics.compute_surface_dice_at_tolerance(
+                    distances, tolerance_mm=surf_dice_tol
+                )
+            ),
+            "avg_surf": lambda: metrics.compute_average_surface_distance(
+                distances
+            ),
+        }
+        metric_functions.update(_metric_functions)
 
     # Iterate through the desired metrics and compute them.
     for metric in list_of_metrics:
