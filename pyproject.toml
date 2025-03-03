@@ -1,6 +1,6 @@
 [project]
 name = "mist-medical"
-version = "0.1.7-beta"
+version = "0.1.8-beta"
 requires-python = ">= 3.8"
 description = "MIST is a simple and scalable end-to-end framework for medical imaging segmentation."
 readme = "README.md"
@@ -43,7 +43,8 @@ dependencies = [
     "scikit-image",
     "nvidia-dali-cuda120==1.43.0",
     "tensorboard",
-    "einops"
+    "einops",
+    "pytest",
 ]
 
 [project.urls]
