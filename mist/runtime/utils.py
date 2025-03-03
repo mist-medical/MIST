@@ -1369,14 +1369,14 @@ def get_epochs_and_validation_params(
     # validation after the first epoch. Otherwise, we start validation after
     # some user-specified number of epochs.
     validate_after_n_epochs = mist_arguments.validate_after_n_epochs
-    if validate_after_n_epochs > epochs:
+    if validate_after_n_epochs > epochs and epochs > 0:
         raise ValueError(
             "validate_after_n_epochs must be less than or equal to epochs. Got "
             f"validate_after_n_epochs = {validate_after_n_epochs} and epochs = "
             f"{epochs}."
         )
 
-    if validate_after_n_epochs < 0:
+    if validate_after_n_epochs < 0 and epochs > 0:
         if validate_after_n_epochs != -1:
             raise ValueError(
                 "The only valid negative value for validate_after_n_epochs is "
