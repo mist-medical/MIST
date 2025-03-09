@@ -5,8 +5,6 @@ import numpy as np
 
 # pylint: disable=import-error
 from nvidia.dali import fn # type: ignore
-from nvidia.dali import math # type: ignore
-from nvidia.dali import ops # type: ignore
 from nvidia.dali import types # type: ignore
 from nvidia.dali.tensors import TensorCPU, TensorGPU # type: ignore
 from nvidia.dali.pipeline import Pipeline # type: ignore
@@ -175,8 +173,7 @@ class TrainPipeline(GenericPipeline):
 
         # Generate a region of interest (ROI) by identifying bounding boxes
         # around the foreground objects in the label. 'foreground_prob' controls
-        # how often the crop focuses on objects rather than the background. The
-        # two largest objects are considered.
+        # how often the crop is centered on objects rather than the background.
         roi_start, roi_end = fn.segmentation.random_object_bbox(
             lbl,
             format="start_end",  # ROI format as (start, end) coordinates.
@@ -203,9 +200,9 @@ class TrainPipeline(GenericPipeline):
         # (keeping only spatial dimensions).
         anchor = fn.slice(anchor, 0, 3, axes=[0])
 
-        # Crop the image and label based on the selected anchor point and the
-        # patch size. The 'out_of_bounds_policy' ensures the crop is padded if
-        # it exceeds the image bounds.
+        # Crop the image, label, and optionally the DTM based on the selected
+        # anchor point and the patch size. The 'out_of_bounds_policy' ensures
+        # the crop is padded if it exceeds the image bounds.
         if self.has_dtms:
             img, lbl, dtm = fn.slice(
                 [img, lbl, dtm],
@@ -216,8 +213,8 @@ class TrainPipeline(GenericPipeline):
                 device="cpu",  # Perform this on the CPU before moving to GPU.
             )
 
-            # Return the cropped image and label, transferred to the GPU for
-            # further processing.
+            # Return the cropped image, label, and dtm transferred to the GPU
+            # for further processing.
             return img.gpu(), lbl.gpu(), dtm.gpu()
         else:
             img, lbl = fn.slice(
@@ -412,40 +409,6 @@ class EvalPipeline(GenericPipeline):
         return img, lbl
 
 
-def validate_inputs(
-        imgs: List[str],
-        lbls: List[str],
-        dtms: Optional[List[str]]=None,
-) -> None:
-    """Validate that the input data is correct.
-
-    Ensures that images, labels, and optional DTM data are provided and that 
-    the lengths of the image, label, and DTM lists match.
-
-    Args:
-        imgs: List of image file paths.
-        lbls: List of label file paths.
-        dtms: Optional list of DTM data file paths. Defaults to None.
-
-    Raises:
-        ValueError: If the number of images, labels, or DTMs are incorrect.
-    """
-    if not imgs:
-        raise ValueError("No images found!")
-
-    if not lbls:
-        raise ValueError("No labels found!")
-
-    if len(imgs) != len(lbls):
-        raise ValueError("Number of images and labels do not match!")
-
-    if dtms:
-        if not dtms:
-            raise ValueError("No DTM data found!")
-        if len(imgs) != len(dtms):
-            raise ValueError("Number of images and DTMs do not match!")
-
-
 def get_training_dataset(
         imgs: List[str],
         lbls: List[str],
@@ -488,7 +451,7 @@ def get_training_dataset(
         AssertionError: If the input data is invalid or missing. 
     """
     # Check that inputs are valid.
-    validate_inputs(imgs, lbls, dtms)
+    utils.validate_train_and_eval_inputs(imgs, lbls, dtms)
 
     # Configure the DALI pipeline based on the input parameters.
     pipe_kwargs = {
@@ -541,7 +504,7 @@ def get_validation_dataset(
         dali_iter: A DALI iterator for validation data loading.
     """
     # Check that inputs are valid.
-    validate_inputs(imgs, lbls)
+    utils.validate_train_and_eval_inputs(imgs, lbls)
 
     # Configure the DALI pipeline based on the input parameters.
     pipe_kwargs = {

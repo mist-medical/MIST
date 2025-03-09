@@ -251,3 +251,37 @@ def flips_fn(
         flipped_dtm = fn.flip(dtm, **kwargs)
         return flipped_img, flipped_lbl, flipped_dtm
     return flipped_img, flipped_lbl
+
+
+def validate_train_and_eval_inputs(
+        imgs: List[str],
+        lbls: List[str],
+        dtms: Optional[List[str]]=None,
+) -> None:
+    """Validate that the input data is correct.
+
+    Ensures that images, labels, and optional DTM data are provided and that 
+    the lengths of the image, label, and DTM lists match.
+
+    Args:
+        imgs: List of image file paths.
+        lbls: List of label file paths.
+        dtms: Optional list of DTM data file paths. Defaults to None.
+
+    Raises:
+        ValueError: If the number of images, labels, or DTMs are incorrect.
+    """
+    if not imgs:
+        raise ValueError("No images found!")
+
+    if not lbls:
+        raise ValueError("No labels found!")
+
+    if len(imgs) != len(lbls):
+        raise ValueError("Number of images and labels do not match!")
+
+    if dtms:
+        if not dtms:
+            raise ValueError("No DTM data found!")
+        if len(imgs) != len(dtms):
+            raise ValueError("Number of images and DTMs do not match!")
