@@ -1,6 +1,7 @@
 """Utility functions for data loading."""
 from collections.abc import Sequence
-from typing import List, Optional
+from typing import List, Optional, Any
+import os
 
 # pylint: disable=import-error
 from nvidia.dali import fn # type: ignore
@@ -285,3 +286,25 @@ def validate_train_and_eval_inputs(
             raise ValueError("No DTM data found!")
         if len(imgs) != len(dtms):
             raise ValueError("Number of images and DTMs do not match!")
+
+
+def is_valid_generic_pipeline_input(input_data: Any) -> bool:
+    """Check if the input data is a valid generic pipeline input.
+
+    Args:
+        input_data: The input data to check.
+
+    Returns:
+        True if the input data is a valid generic pipeline input, False otherwise.
+    """
+    if not isinstance(input_data, Sequence) or isinstance(input_data, str):
+        return False  # Must be a sequence but not a single string.
+
+    if len(input_data) == 0:
+        return False  # Empty lists are not valid.
+
+    return all(
+        isinstance(item, str) and
+        item.endswith(".npy") and 
+        os.path.isfile(item) for item in input_data
+    )

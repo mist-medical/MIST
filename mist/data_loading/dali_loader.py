@@ -40,6 +40,22 @@ class GenericPipeline(Pipeline):
             input_y_files: Optional[List[str]]=None,
             input_dtm_files: Optional[List[str]]=None,
     ):
+        """Initialize the pipeline with the given parameters.
+
+        Args:
+            batch_size: The batch size for data loading.
+            num_threads: The number of threads for data loading.
+            device_id: The ID of the current device (GPU).
+            shard_id: The ID of the current shard, used for distributed data
+                loading.
+            seed: Random seed for shuffling or any other randomness in the
+                reader.
+            num_gpus: Total number of GPUs used for training.
+            shuffle_input: Whether to shuffle the input data.
+            input_x_files: List of file paths to the image data.
+            input_y_files: List of file paths to the label data.
+            input_dtm_files: List of file paths to the DTM data.
+        """
         super().__init__(
             batch_size=batch_size,
             num_threads=num_threads,
@@ -48,7 +64,7 @@ class GenericPipeline(Pipeline):
         )
 
         # Initialize the input readers for images, labels, and DTM data.
-        if input_x_files is not None:
+        if utils.is_valid_generic_pipeline_input(input_x_files):
             self.input_x = utils.get_numpy_reader(
                 files=input_x_files,
                 shard_id=shard_id,
@@ -56,7 +72,11 @@ class GenericPipeline(Pipeline):
                 num_shards=num_gpus,
                 shuffle=shuffle_input,
             )
-        if input_y_files is not None:
+        else:
+            raise ValueError(
+                "Input images are not valid. Please check the input paths."
+            )
+        if utils.is_valid_generic_pipeline_input(input_y_files):
             self.input_y = utils.get_numpy_reader(
                 files=input_y_files,
                 shard_id=shard_id,
@@ -64,13 +84,21 @@ class GenericPipeline(Pipeline):
                 num_shards=num_gpus,
                 shuffle=shuffle_input,
             )
-        if input_dtm_files is not None:
+        else:
+            raise ValueError(
+                "Input labels are not valid. Please check the input paths."
+            )
+        if utils.is_valid_generic_pipeline_input(input_dtm_files):
             self.input_dtm = utils.get_numpy_reader(
                 files=input_dtm_files,
                 shard_id=shard_id,
                 seed=seed,
                 num_shards=num_gpus,
                 shuffle=shuffle_input,
+            )
+        else:
+            raise ValueError(
+                "Input DTMs are not valid. Please check the input paths."
             )
 
 
@@ -87,8 +115,7 @@ class TrainPipeline(GenericPipeline):
     Attributes:
         labels: List of labels in the dataset.
         label_weights: Weighting for each label. This is a list with entries
-            1/len(labels) for each label. We can explore tuning this parameter
-            later.
+            1/len(labels) for each label, giving equal weight to each label.
         oversampling: The oversampling factor for the training data.
         patch_size: The size of the patches used for training.
         crop_shape: The shape of the cropped image data.
@@ -117,7 +144,6 @@ class TrainPipeline(GenericPipeline):
         ]
         self.oversampling = oversampling
         self.patch_size = patch_size
-
         self.crop_shape = types.Constant(
             np.array(self.patch_size), dtype=types.INT64
         )
