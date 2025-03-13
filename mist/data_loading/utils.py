@@ -305,6 +305,6 @@ def is_valid_generic_pipeline_input(input_data: Any) -> bool:
 
     return all(
         isinstance(item, str) and
-        item.endswith(".npy") and 
+        item.endswith(".npy") and
         os.path.isfile(item) for item in input_data
     )

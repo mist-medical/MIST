@@ -23,8 +23,8 @@ class GenericPipeline(Pipeline):
     testing.
 
     Attributes:
-        input_x: DALI Numpy reader operator for reading images.
-        input_y: DALI Numpy reader operator for reading labels.
+        input_image_files: DALI Numpy reader operator for reading images.
+        input_label_files: DALI Numpy reader operator for reading labels.
         input_dtm: DALI Numpy reader operator for reading DTM data.
     """
     def __init__(
@@ -36,8 +36,8 @@ class GenericPipeline(Pipeline):
             seed: int,
             num_gpus: int,
             shuffle_input: bool=True,
-            input_x_files: Optional[List[str]]=None,
-            input_y_files: Optional[List[str]]=None,
+            input_image_files: Optional[List[str]]=None,
+            input_label_files: Optional[List[str]]=None,
             input_dtm_files: Optional[List[str]]=None,
     ):
         """Initialize the pipeline with the given parameters.
@@ -64,42 +64,45 @@ class GenericPipeline(Pipeline):
         )
 
         # Initialize the input readers for images, labels, and DTM data.
-        if utils.is_valid_generic_pipeline_input(input_x_files):
-            self.input_x = utils.get_numpy_reader(
-                files=input_x_files,
-                shard_id=shard_id,
-                seed=seed,
-                num_shards=num_gpus,
-                shuffle=shuffle_input,
-            )
-        else:
-            raise ValueError(
-                "Input images are not valid. Please check the input paths."
-            )
-        if utils.is_valid_generic_pipeline_input(input_y_files):
-            self.input_y = utils.get_numpy_reader(
-                files=input_y_files,
-                shard_id=shard_id,
-                seed=seed,
-                num_shards=num_gpus,
-                shuffle=shuffle_input,
-            )
-        else:
-            raise ValueError(
-                "Input labels are not valid. Please check the input paths."
-            )
-        if utils.is_valid_generic_pipeline_input(input_dtm_files):
-            self.input_dtm = utils.get_numpy_reader(
-                files=input_dtm_files,
-                shard_id=shard_id,
-                seed=seed,
-                num_shards=num_gpus,
-                shuffle=shuffle_input,
-            )
-        else:
-            raise ValueError(
-                "Input DTMs are not valid. Please check the input paths."
-            )
+        if input_image_files:
+            if utils.is_valid_generic_pipeline_input(input_image_files):
+                self.input_images = utils.get_numpy_reader(
+                    files=input_image_files,
+                    shard_id=shard_id,
+                    seed=seed,
+                    num_shards=num_gpus,
+                    shuffle=shuffle_input,
+                )
+            else:
+                raise ValueError(
+                    "Input images are not valid. Please check the input paths."
+                )
+        if input_label_files:
+            if utils.is_valid_generic_pipeline_input(input_label_files):
+                self.input_labels = utils.get_numpy_reader(
+                    files=input_label_files,
+                    shard_id=shard_id,
+                    seed=seed,
+                    num_shards=num_gpus,
+                    shuffle=shuffle_input,
+                )
+            else:
+                raise ValueError(
+                    "Input labels are not valid. Please check the input paths."
+                )
+        if input_dtm_files:
+            if utils.is_valid_generic_pipeline_input(input_dtm_files):
+                self.input_dtms = utils.get_numpy_reader(
+                    files=input_dtm_files,
+                    shard_id=shard_id,
+                    seed=seed,
+                    num_shards=num_gpus,
+                    shuffle=shuffle_input,
+                )
+            else:
+                raise ValueError(
+                    "Input DTMs are not valid. Please check the input paths."
+                )
 
 
 class TrainPipeline(GenericPipeline):
@@ -117,51 +120,118 @@ class TrainPipeline(GenericPipeline):
         label_weights: Weighting for each label. This is a list with entries
             1/len(labels) for each label, giving equal weight to each label.
         oversampling: The oversampling factor for the training data.
-        patch_size: The size of the patches used for training.
+        roi_size: The size of the region of interest (ROI) used for training.
         crop_shape: The shape of the cropped image data.
-        crop_shape_float: The shape of the cropped image data as a float
+        crop_shape_float: The shape of the cropped image data as a float.
+        has_dtms: Whether the pipeline includes DTM data.
+        extract_patches: Whether to extract patches from the input data. If
+            True, the pipeline extracts random patches from the input data for
+            training. If False, the entire image is output for training. In
+            this case, the images are expected to be the same size and the
+            ROI size must be set to the size of the images.
+        use_augmentations: Whether to apply any augmentations to the input data.
+        use_flips: Whether to apply flips to the input data. More fine-grained
+            control over augmentations can be achieved by setting this to True.
+        use_zoom: Whether to apply zoom to the input data during augmentation.
+        use_noise: Whether to apply noise to the input data during augmentation.
+        use_blur: Whether to apply blur to the input data during augmentation.
+        use_brightness: Whether to adjust brightness in the input data
+            during augmentation.
+        use_contrast: Whether to adjust contrast in the input data during
+            augmentation.
+        dimension: Whether to return 2D or 3D data. If 2D, the pipeline returns
+            DHWC data. If 3D, the pipeline returns CDHW data.
     """
     def __init__(
             self,
-            imgs: List[str],
-            lbls: List[str],
-            dtms: Optional[List[str]],
-            labels: List[int],
-            oversampling: float,
-            patch_size: Tuple[int, int, int],
+            image_paths: List[str],
+            label_paths: List[str],
+            dtm_paths: Optional[List[str]],
+            roi_size: Tuple[int, int, int],
+            labels: Optional[List[int]],
+            oversampling: Optional[float],
+            extract_patches: bool=True,
+            use_augmentation: bool=True,
+            use_flips: bool=True,
+            use_zoom: bool=True,
+            use_noise: bool=True,
+            use_blur: bool=True,
+            use_brightness: bool=True,
+            use_contrast: bool=True,
+            dimension: int=3,
             **kwargs,
     ):
         super().__init__(
-            input_x_files=imgs,
-            input_y_files=lbls,
-            input_dtm_files=dtms,
+            input_image_files=image_paths,
+            input_label_files=label_paths,
+            input_dtm_files=dtm_paths,
             shuffle_input=True,
             **kwargs
         )
-        self.labels = labels
-        self.label_weights = [
-            1./len(self.labels) for _ in range(len(self.labels))
-        ]
-        self.oversampling = oversampling
-        self.patch_size = patch_size
-        self.crop_shape = types.Constant(
-            np.array(self.patch_size), dtype=types.INT64
-        )
-        self.crop_shape_float = types.Constant(
-            np.array(self.patch_size), dtype=types.FLOAT
-        )
-        self.has_dtms = dtms is not None
+        self.has_dtms = dtm_paths is not None
+
+        # If we are not extracting patches, then the entire image is output for
+        # training. This is useful for models that do not require patch-based
+        # training.
+        self.extract_patches = extract_patches
+
+        # Set ROI size. If we are not extracting patches, the ROI size should
+        # match the image size. Otherwise, it should match the patch size.
+        self.roi_size = roi_size
+
+        # If we are extracting patches, we need to define the labels, label
+        # weights, oversampling factor, and patch size. These are used for
+        # biased cropping to extract patches from the input data and labels.
+        if self.extract_patches:
+            if labels:
+                self.labels = labels
+                self.label_weights = [
+                    1./len(self.labels) for _ in range(len(self.labels))
+                ]
+            self.oversampling = oversampling
+            self.crop_shape = types.Constant(
+                np.array(self.roi_size), dtype=types.INT64
+            )
+            self.crop_shape_float = types.Constant(
+                np.array(self.roi_size), dtype=types.FLOAT
+            )
+
+        # Define the augmentations to apply to the input data. If we are not
+        # applying any augmentations, then the input data is returned
+        # unmodified. Otherwise, we can control the augmentations applied using
+        # the input flags.
+        self.use_augmentation = use_augmentation
+        if not self.use_augmentation:
+            self.use_flips = False
+            self.use_zoom = False
+            self.use_noise = False
+            self.use_blur = False
+            self.use_brightness = False
+            self.use_contrast = False
+        else:
+            self.use_flips = use_flips
+            self.use_zoom = use_zoom
+            self.use_noise = use_noise
+            self.use_blur = use_blur
+            self.use_brightness = use_brightness
+            self.use_contrast = use_contrast
+
+        # Define the dimension of the output data. If 2D, the pipeline returns
+        # DHWC data. If 3D, the pipeline returns CDHW data.
+        if dimension not in [2, 3]:
+            raise ValueError("Dimension must be either 2 or 3.")
+        self.dimension = dimension
 
     def load_data(self):
         """Load the image, label, and DTM data from the input readers."""
-        img = self.input_x(name="ReaderX")
+        img = self.input_images(name="image_reader")
         img = fn.reshape(img, layout="DHWC")
 
-        lbl = self.input_y(name="ReaderY")
+        lbl = self.input_labels(name="label_reader")
         lbl = fn.reshape(lbl, layout="DHWC")
 
         if self.has_dtms:
-            dtm = self.input_dtm(name="ReaderDTM")
+            dtm = self.input_dtms(name="dtm_reader")
             dtm = fn.reshape(dtm, layout="DHWC")
             return img, lbl, dtm
 
@@ -192,10 +262,10 @@ class TrainPipeline(GenericPipeline):
         """
         # Pad the data to ensure their dimensions are at least the size of the
         # patch.
-        img = fn.pad(img, axes=(0, 1, 2), shape=self.patch_size)
-        lbl = fn.pad(lbl, axes=(0, 1, 2), shape=self.patch_size)
+        img = fn.pad(img, axes=(0, 1, 2), shape=self.roi_size)
+        lbl = fn.pad(lbl, axes=(0, 1, 2), shape=self.roi_size)
         if self.has_dtms:
-            dtm = fn.pad(dtm, axes=(0, 1, 2), shape=self.patch_size)
+            dtm = fn.pad(dtm, axes=(0, 1, 2), shape=self.roi_size)
 
         # Generate a region of interest (ROI) by identifying bounding boxes
         # around the foreground objects in the label. 'foreground_prob' controls
@@ -219,7 +289,7 @@ class TrainPipeline(GenericPipeline):
             lbl,
             roi_start=roi_start,
             roi_end=roi_end,
-            crop_shape=[*self.patch_size, 1],
+            crop_shape=[*self.roi_size, 1],
         )
 
         # Slice the anchor to drop the channel dimension
@@ -242,19 +312,67 @@ class TrainPipeline(GenericPipeline):
             # Return the cropped image, label, and dtm transferred to the GPU
             # for further processing.
             return img.gpu(), lbl.gpu(), dtm.gpu()
-        else:
-            img, lbl = fn.slice(
-                [img, lbl],
-                anchor,
-                self.crop_shape,  # Crop size matches the desired patch size.
-                axis_names="DHW",  # Perform cropping along DWH axes.
-                out_of_bounds_policy="pad",  # Pad out-of-bounds regions.
-                device="cpu",  # Perform this on the CPU before moving to GPU.
-            )
 
-            # Return the cropped image and label, transferred to the GPU for
-            # further processing.
-            return img.gpu(), lbl.gpu()
+        # If no DTM data is provided, only crop the image and label.
+        img, lbl = fn.slice(
+            [img, lbl],
+            anchor,
+            self.crop_shape,  # Crop size matches the desired patch size.
+            axis_names="DHW",  # Perform cropping along DWH axes.
+            out_of_bounds_policy="pad",  # Pad out-of-bounds regions.
+            device="cpu",  # Perform this on the CPU before moving to GPU.
+        )
+
+        # Return the cropped image and label, transferred to the GPU for
+        # further processing.
+        return img.gpu(), lbl.gpu()
+
+    def flips_fn(
+        self,
+        img: TensorGPU,
+        lbl: TensorGPU,
+        dtm: Optional[TensorGPU]=None,
+    ) -> Sequence[TensorGPU]:
+        """Apply random flips to the input image, labels, and DTMs.
+
+        Apply random flips to the input data. The flips can be applied
+        horizontally, vertically, or depthwise with a 0.5 probability.
+
+        Args:
+            img: The input image data to apply flips to.
+            lbl: The input label data to apply the same flips as the image.
+            dtm: The input DTM data to apply the same flips as the image.
+
+        Returns:
+            The flipped image, label, and DTM data.
+        """
+        # Define the flip options for horizontal, vertical, and depthwise flips.
+        kwargs = {
+            "horizontal": (
+                fn.random.coin_flip(
+                    probability=constants.DataLoadingConstants.HORIZONTAL_FLIP_PROBABILITY
+                )
+            ),
+            "vertical": (
+                fn.random.coin_flip(
+                    probability=constants.DataLoadingConstants.VERTICAL_FLIP_PROBABILITY
+                )
+            ),
+            "depthwise": (
+                fn.random.coin_flip(
+                    probability=constants.DataLoadingConstants.DEPTH_FLIP_PROBABILITY
+                )
+            ),
+        }
+
+        # Apply the flips to the image, label, and DTM data and return the
+        # results.
+        flipped_img = fn.flip(img, **kwargs)
+        flipped_lbl = fn.flip(lbl, **kwargs)
+        if self.has_dtms:
+            flipped_dtm = fn.flip(dtm, **kwargs)
+            return flipped_img, flipped_lbl, flipped_dtm
+        return flipped_img, flipped_lbl
 
     def zoom_fn(
             self,
@@ -293,7 +411,7 @@ class TrainPipeline(GenericPipeline):
 
         # Compute the new dimensions (depth, height, width) based on the scaling
         # factor.
-        d, h, w = [scale * x for x in self.patch_size]
+        d, h, w = [scale * x for x in self.roi_size]
 
         # Crop both the image and label using the new scaled dimensions.
         img = fn.crop(img, crop_h=h, crop_w=w, crop_d=d)
@@ -329,30 +447,38 @@ class TrainPipeline(GenericPipeline):
         and changing contrast. The final image, label, and DTM data are then
         transposed to CDHW format for PyTorch compatibility. 
         """
-        # Load the image, label, and DTM data from the input readers.
+        # Load images, labels, and possibly DTMs. Apply biased cropping to the
+        # image, label, and DTM data. Transfer the cropped patches to the GPU.
+        # Apply flips and zooming for additional augmentation.
         if self.has_dtms:
             img, lbl, dtm = self.load_data()
+            if self.extract_patches:
+                img, lbl, dtm = self.biased_crop_fn(img, lbl, dtm)
+
+            if self.use_augmentation and self.use_flips:
+                img, lbl, dtm = self.flips_fn(img, lbl, dtm)
         else:
             img, lbl = self.load_data()
+            if self.extract_patches:
+                img, lbl = self.biased_crop_fn(img, lbl)
 
-        # Apply biased cropping to the image, label, and DTM data. Transfer the
-        # cropped patches to the GPU.
-        if self.has_dtms:
-            img, lbl, dtm = self.biased_crop_fn(img, lbl, dtm)
-        else:
-            img, lbl = self.biased_crop_fn(img, lbl)
+            if self.use_augmentation:
+                if self.use_zoom:
+                    img, lbl = self.zoom_fn(img, lbl)
 
-        if self.has_dtms:
-            img, lbl = self.zoom_fn(img, lbl)
-            img, lbl = utils.flips_fn(img, lbl)
-        else:
-            img, lbl, dtm = utils.flips_fn(img, lbl, dtm)
+                if self.use_flips:
+                    img, lbl = self.flips_fn(img, lbl)
 
-        # Apply random augmentations to the data.
-        img = utils.noise_fn(img)
-        img = utils.blur_fn(img)
-        img = utils.brightness_fn(img)
-        img = utils.contrast_fn(img)
+        # Apply random augmentations to the image data only.
+        if self.use_augmentation:
+            if self.use_noise:
+                img = utils.noise_fn(img)
+            if self.use_blur:
+                img = utils.blur_fn(img)
+            if self.use_brightness:
+                img = utils.brightness_fn(img)
+            if self.use_contrast:
+                img = utils.contrast_fn(img)
 
         # Change format to CDWH for pytorch compatibility.
         img = fn.transpose(img, perm=[3, 0, 1, 2])
@@ -373,12 +499,12 @@ class TestPipeline(GenericPipeline):
     """
     def __init__(
             self,
-            imgs,
+            image_paths: List[str],
             **kwargs
     ):
         super().__init__(
-            input_x_files=imgs,
-            input_y_files=None,
+            input_image_files=image_paths,
+            input_label_files=None,
             shuffle_input=False, # Do not shuffle the input data.
             **kwargs
         )
@@ -386,7 +512,7 @@ class TestPipeline(GenericPipeline):
     def define_graph(self):
         """Define the test pipeline graph for data loading."""
         # Load the image data from the input reader and transfer it to the GPU.
-        img = self.input_x(name="ReaderX").gpu()
+        img = self.input_images(name="image_reader").gpu()
 
         # Reshape the image data to DHWC format.
         img = fn.reshape(img, layout="DHWC")
@@ -407,13 +533,13 @@ class EvalPipeline(GenericPipeline):
     """
     def __init__(
             self,
-            imgs,
-            lbls,
+            image_paths: List[str],
+            label_paths: List[str],
             **kwargs
     ):
         super().__init__(
-            input_x_files=imgs,
-            input_y_files=lbls,
+            input_image_files=image_paths,
+            input_label_files=label_paths,
             shuffle_input=False,
             **kwargs
         )
@@ -422,10 +548,10 @@ class EvalPipeline(GenericPipeline):
         """Define the evaluation pipeline graph for data loading."""
         # Load the image and label data from the input readers and transfer them
         # to the GPU.
-        img = self.input_x(name="ReaderX").gpu()
+        img = self.input_images(name="image_reader").gpu()
         img = fn.reshape(img, layout="DHWC")
 
-        lbl = self.input_y(name="ReaderY").gpu()
+        lbl = self.input_labels(name="label_reader").gpu()
         lbl = fn.reshape(lbl, layout="DHWC")
 
         # Change format to CDHW for pytorch compatibility.
@@ -436,17 +562,25 @@ class EvalPipeline(GenericPipeline):
 
 
 def get_training_dataset(
-        imgs: List[str],
-        lbls: List[str],
-        dtms: Optional[List[str]],
+        image_paths: List[str],
+        label_paths: List[str],
+        dtm_paths: Optional[List[str]],
         batch_size: int,
-        labels: List[int],
-        oversampling: float,
-        patch_size: Tuple[int, int, int],
+        roi_size: Tuple[int, int, int],
+        labels: Optional[List[int]],
+        oversampling: Optional[float],
         seed: int,
         num_workers: int,
         rank: int,
         world_size: int,
+        extract_patches: bool=True,
+        use_augmentation: bool=True,
+        use_flips: bool=True,
+        use_zoom: bool=True,
+        use_noise: bool=True,
+        use_blur: bool=True,
+        use_brightness: bool=True,
+        use_contrast: bool=True,
 ) -> DALIGenericIterator:
     """Retrieve the appropriate training pipeline based on the input data.
 
@@ -458,13 +592,29 @@ def get_training_dataset(
     current rank and total number of GPUs.
 
     Args:
-        imgs: List of file paths to the image data.
-        lbls: List of file paths to the label data.
-        dtms: List of file paths to the DTM data.
+        image_paths: List of file paths to the image data.
+        label_paths: List of file paths to the label data.
+        dtm_paths: List of file paths to the DTM data.
         batch_size: The batch size for training.
+        roi_size: The size of the region of interest (ROI) used for training.
+        extract_patches: Whether to extract patches from the input data. If
+            True, the pipeline extracts random patches from the input data for
+            training. If False, the entire image is output for training. In this
+            case, the images are expected to be the same size and the ROI size
+            must be set to the size of the images.
         labels: List of labels in the dataset.
-        oversampling: The oversampling factor for the training data.
-        patch_size: The size of the patches used for training.
+        oversampling: The oversampling factor for the training data when
+            extracting patches.
+        use_augmentations: Whether to apply any augmentations to the input data.
+        use_flips: Whether to apply flips to the input data. More fine-grained
+            control over augmentations can be achieved by setting this to True.
+        use_zoom: Whether to apply zoom to the input data during augmentation.
+        use_noise: Whether to apply noise to the input data during augmentation.
+        use_blur: Whether to apply blur to the input data during augmentation.
+        use_brightness: Whether to adjust brightness in the input data during
+            augmentation.
+        use_contrast: Whether to adjust contrast in the input data during
+            augmentation.
         seed: Random seed for shuffling or any other randomness in the reader.
         num_workers: The number of workers for data loading.
         rank: The rank of the current process (GPU).
@@ -477,7 +627,7 @@ def get_training_dataset(
         AssertionError: If the input data is invalid or missing. 
     """
     # Check that inputs are valid.
-    utils.validate_train_and_eval_inputs(imgs, lbls, dtms)
+    utils.validate_train_and_eval_inputs(image_paths, label_paths, dtm_paths)
 
     # Configure the DALI pipeline based on the input parameters.
     pipe_kwargs = {
@@ -486,24 +636,39 @@ def get_training_dataset(
         "batch_size": batch_size,
         "num_threads": num_workers,
         "device_id": rank,
-        "shard_id": rank
+        "shard_id": rank,
     }
 
     # Create the training pipeline with the specified parameters.
     pipeline = TrainPipeline(
-        imgs, lbls, dtms, labels, oversampling, patch_size, **pipe_kwargs
+        image_paths=image_paths,
+        label_paths=label_paths,
+        dtm_paths=dtm_paths,
+        roi_size=roi_size,
+        labels=labels,
+        oversampling=oversampling,
+        extract_patches=extract_patches,
+        use_augmentation=use_augmentation,
+        use_flips=use_flips if use_augmentation else False,
+        use_zoom=use_zoom if use_augmentation else False,
+        use_noise=use_noise if use_augmentation else False,
+        use_blur=use_blur if use_augmentation else False,
+        use_brightness=use_brightness if use_augmentation else False,
+        use_contrast=use_contrast if use_augmentation else False,
+        dimension=3,
+        **pipe_kwargs
     )
 
     # Return a DALI iterator for the training data. If DTM data is provided,
     # include it in the iterator. Otherwise, return an iterator without DTMs.
-    if dtms:
+    if dtm_paths:
         return DALIGenericIterator(pipeline, ["image", "label", "dtm"])
     return DALIGenericIterator(pipeline, ["image", "label"])
 
 
 def get_validation_dataset(
-        imgs: List[str],
-        lbls: List[str],
+        image_paths: List[str],
+        label_paths: List[str],
         seed: int,
         num_workers: int,
         rank: int,
@@ -519,8 +684,8 @@ def get_validation_dataset(
     of workers, and the current rank and total number of GPUs.
 
     Args:
-        imgs: List of file paths to the image data.
-        lbls: List of file paths to the label data.
+        image_paths: List of file paths to the image data.
+        label_paths: List of file paths to the label data.
         seed: Random seed for shuffling or any other randomness in the reader.
         num_workers: The number of workers for data loading.
         rank: The rank of the current process (GPU).
@@ -530,7 +695,7 @@ def get_validation_dataset(
         dali_iter: A DALI iterator for validation data loading.
     """
     # Check that inputs are valid.
-    utils.validate_train_and_eval_inputs(imgs, lbls)
+    utils.validate_train_and_eval_inputs(image_paths, label_paths)
 
     # Configure the DALI pipeline based on the input parameters.
     pipe_kwargs = {
@@ -542,13 +707,13 @@ def get_validation_dataset(
         "shard_id": rank
     }
 
-    pipeline = EvalPipeline(imgs, lbls, **pipe_kwargs)
+    pipeline = EvalPipeline(image_paths, label_paths, **pipe_kwargs)
     dali_iter = DALIGenericIterator(pipeline, ["image", "label"])
     return dali_iter
 
 
 def get_test_dataset(
-        imgs: List[str],
+        image_paths: List[str],
         seed: int,
         num_workers: int,
         rank: int=0,
@@ -565,7 +730,7 @@ def get_test_dataset(
     and world size values are set to 0 and 1, respectively.
 
     Args:
-        imgs: List of file paths to the image data.
+        image_paths: List of file paths to the image data.
         seed: Random seed for shuffling or any other randomness in the reader.
         num_workers: The number of workers for data loading.
         rank: The rank of the current process (GPU). Defaults to 0.
@@ -577,7 +742,7 @@ def get_test_dataset(
         ValueError: If no images are found in the input data.
     """
     # Check that inputs are valid.
-    if len(imgs) == 0:
+    if len(image_paths) == 0:
         raise ValueError("No images found!")
 
     # Configure the DALI pipeline based on the input parameters.
@@ -590,6 +755,6 @@ def get_test_dataset(
         "shard_id": rank
     }
 
-    pipeline = TestPipeline(imgs, **pipe_kwargs)
+    pipeline = TestPipeline(image_paths, **pipe_kwargs)
     dali_iter = DALIGenericIterator(pipeline, ["image"])
     return dali_iter
