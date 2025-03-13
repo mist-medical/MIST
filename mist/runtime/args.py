@@ -251,6 +251,43 @@ def get_main_args():
         help="Learning rate scheduler"
     )
 
+    # Augmentation parameters.
+    parser.boolean_flag(
+        "--no-augmentation",
+        default=False,
+        help="Turn off data augmentation"
+    )
+    parser.boolean_flag(
+        "--augmentation-no-flips",
+        default=False,
+        help="Turn off flips during augmentation"
+    )
+    parser.boolean_flag(
+        "--augmentation-no-blur",
+        default=False,
+        help="Turn off blur during augmentation"
+    )
+    parser.boolean_flag(
+        "--augmentation-no-noise",
+        default=False,
+        help="Turn off noise during augmentation"
+    )
+    parser.boolean_flag(
+        "--augmentation-no-zoom",
+        default=False,
+        help="Turn off zoom during augmentation"
+    )
+    parser.boolean_flag(
+        "--augmentation-no-brightness",
+        default=False,
+        help="Turn off brightness during augmentation"
+    )
+    parser.boolean_flag(
+        "--augmentation-no-contrast",
+        default=False,
+        help="Turn off contrast during augmentation"
+    )
+
     # Optimizer parameters.
     parser.arg(
         "--optimizer",
