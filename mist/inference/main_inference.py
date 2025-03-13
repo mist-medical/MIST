@@ -400,7 +400,7 @@ def test_on_fold(
 
     # Get DALI loader for streaming preprocessed numpy files.
     test_dali_loader = dali_loader.get_test_dataset(
-        imgs=test_images,
+        image_paths=test_images,
         seed=args.seed_val,
         num_workers=args.num_workers,
         rank=0,

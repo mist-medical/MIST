@@ -334,25 +334,35 @@ class Trainer:
                 self.data_structures["mist_configuration"]["labels"]
             )))[1:]
             train_loader = dali_loader.get_training_dataset(
-                imgs=train_images,
-                lbls=train_labels,
-                dtms=train_dtms,
+                image_paths=train_images,
+                label_paths=train_labels,
+                dtm_paths=train_dtms,
                 batch_size=self.mist_arguments.batch_size // world_size,
                 oversampling=self.mist_arguments.oversampling,
                 labels=training_labels,
-                patch_size=(
+                roi_size=(
                     self.data_structures["mist_configuration"]["patch_size"]
                 ),
                 seed=self.mist_arguments.seed_val,
                 num_workers=self.mist_arguments.num_workers,
                 rank=rank,
                 world_size=world_size,
+                extract_patches=True, # TODO: Change this to user option.
+                use_augmentation=not self.mist_arguments.no_augmentation,
+                use_flips=not self.mist_arguments.augmentation_no_flips,
+                use_blur=not self.mist_arguments.augmentation_no_blur,
+                use_noise=not self.mist_arguments.augmentation_no_noise,
+                use_brightness=(
+                    not self.mist_arguments.augmentation_no_brightness
+                ),
+                use_contrast=not self.mist_arguments.augmentation_no_contrast,
+                use_zoom=not self.mist_arguments.augmentation_no_zoom,
             )
 
             # Get validation data loader.
             validation_loader = dali_loader.get_validation_dataset(
-                imgs=val_images,
-                lbls=val_labels,
+                image_paths=val_images,
+                label_paths=val_labels,
                 seed=self.mist_arguments.seed_val,
                 num_workers=self.mist_arguments.num_workers,
                 rank=rank,
