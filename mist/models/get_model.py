@@ -8,26 +8,24 @@ from collections import OrderedDict
 from monai.networks.blocks.dynunet_block import UnetOutBlock
 from mist.models.layers import ConvLayer
 
-from mist.models.unet import UNet
 from mist.models.mgnets import MGNet
-from mist.models.nnunet import NNUnet
-from mist.models.attn_unet import MONAIAttnUNet
+from mist.models.nnunet.mist_nnunet import NNUNet
 from mist.models.swin_unetr import MONAISwinUNETR
 from mist.models.mednext_v1 import create_mednext_v1
 
 
 def get_model(**kwargs):
     if kwargs["model_name"] == "nnunet":
-        return NNUnet(
-            kwargs["n_channels"],
-            kwargs["n_classes"],
-            kwargs["pocket"],
-            kwargs["deep_supervision"],
-            kwargs["deep_supervision_heads"],
-            kwargs["vae_reg"],
-            kwargs["patch_size"],
-            kwargs["target_spacing"],
-            kwargs["use_res_block"]
+        return NNUNet(
+            in_channels=kwargs["n_channels"],
+            out_channels=kwargs["n_classes"],
+            roi_size=kwargs["patch_size"],
+            image_spacing=kwargs["target_spacing"],
+            use_residual_blocks=kwargs["use_res_block"],
+            use_deep_supervision=kwargs["deep_supervision"],
+            num_deep_supervision_heads=kwargs["deep_supervision_heads"],
+            use_pocket_model=kwargs["pocket"],
+            spatial_dims=3,
         )
     if kwargs["model_name"] == "mednext-v1-small":
         return create_mednext_v1.create_mednext_v1_small(
@@ -57,17 +55,6 @@ def get_model(**kwargs):
             kwargs["deep_supervision"],
             kwargs["pocket"],
         )
-    if kwargs["model_name"] == "unet":
-        return UNet(
-            kwargs["n_channels"],
-            kwargs["n_classes"],
-            kwargs["patch_size"],
-            kwargs["use_res_block"],
-            kwargs["pocket"],
-            kwargs["deep_supervision"],
-            kwargs["deep_supervision_heads"],
-            kwargs["vae_reg"]
-        )
     if kwargs["model_name"] == "fmgnet":
         return MGNet(
             "fmgnet",
@@ -77,7 +64,6 @@ def get_model(**kwargs):
             kwargs["use_res_block"],
             kwargs["deep_supervision"],
             kwargs["deep_supervision_heads"],
-            kwargs["vae_reg"]
         )
     if kwargs["model_name"] == "wnet":
         return MGNet(
@@ -88,14 +74,6 @@ def get_model(**kwargs):
             kwargs["use_res_block"],
             kwargs["deep_supervision"],
             kwargs["deep_supervision_heads"],
-            kwargs["vae_reg"]
-        )
-    if kwargs["model_name"] == "attn-unet":
-        return MONAIAttnUNet(
-            kwargs["n_classes"],
-            kwargs["n_channels"],
-            kwargs["pocket"],
-            kwargs["patch_size"]
         )
     if kwargs["model_name"] == "swin-unetr":
         return MONAISwinUNETR(
@@ -133,7 +111,7 @@ def configure_pretrained_model(pretrained_model_path, n_channels, n_classes):
     model_config_path = os.path.join(pretrained_model_path, "model_config.json")
     models = [load_model_from_config(model, model_config_path) for model in model_list]
     state_dicts = [model.state_dict() for model in models]
-    
+
     # Get model configuration
     with open(model_config_path, "r") as file:
         model_config = json.load(file)
@@ -154,35 +132,10 @@ def configure_pretrained_model(pretrained_model_path, n_channels, n_classes):
     model.load_state_dict(avg_state_dict)
 
     # Modify model to match new input and output channels
-    if model_name == "unet":
-        if model.first_conv.in_channels != n_channels:
-            model.first_conv = ConvLayer(n_channels, model.init_filters, **model.conv_kwargs)
-
-            if model.vae_reg:
-                model.vae_out = nn.Conv3d(in_channels=model.channels[-1][0],
-                                          out_channels=n_channels,
-                                          kernel_size=1)
-
-        if model.out.out_channels != n_classes:
-            model.out = nn.Conv3d(in_channels=model.init_filters,
-                                  out_channels=n_classes,
-                                  kernel_size=1)
-
-            if model.deep_supervision:
-                model.heads = nn.ModuleList()
-                for channel_pair in model.channels[-(model.deep_supervision_heads + 1):-1]:
-                    head = nn.Conv3d(in_channels=channel_pair[0],
-                                     out_channels=n_classes,
-                                     kernel_size=1)
-                    model.heads.append(head)
-    elif model_name == "fmgnet" or model_name == "wnet":
+    if model_name == "fmgnet" or model_name == "wnet":
         if model.first_conv.in_channels != n_channels:
             model.first_conv = ConvLayer(n_channels, model.out_channels, **model.conv_kwargs)
 
-            if model.vae_reg:
-                model.vae_out = nn.Conv3d(in_channels=model.out_channels,
-                                          out_channels=n_channels,
-                                          kernel_size=1)
         if model.out.out_channels != n_channels:
             model.out = nn.Conv3d(in_channels=model.out_channels,
                                   out_channels=n_classes,
@@ -204,12 +157,6 @@ def configure_pretrained_model(pretrained_model_path, n_channels, n_classes):
                                                           padding=model.unet.input_block.conv1.conv.padding,
                                                           bias=False)
 
-            if model.vae_reg:
-                model.unet.vae_out = nn.Conv3d(in_channels=model.unet.vae_out.in_channels,
-                                               out_channels=n_channels,
-                                               kernel_size=model.unet.vae_out.kernel_size,
-                                               stride=model.unet.vae_out.stride)
-
         if model.unet.output_block.conv.conv.out_channels != n_classes:
             model.unet.output_block.conv.conv = nn.Conv3d(in_channels=model.unet.output_block.conv.conv.in_channels,
                                                           out_channels=n_classes,
@@ -228,12 +175,6 @@ def configure_pretrained_model(pretrained_model_path, n_channels, n_classes):
 
         if model.model.out.conv.conv.out_channels != n_classes:
             model.model.out.conv.conv = nn.Conv3d(24, n_classes, kernel_size=(1, 1, 1), stride=(1, 1, 1))
-    elif model_name == "attn_unet":
-        if model.model.model[0].conv[0].conv.in_channels != n_channels:
-            model.model.model[0].conv[0].conv = nn.Conv3d(n_channels, 32, kernel_size=3)
-
-        if model.model.model[-1].conv.out_channels != n_classes:
-            model.model.model[-1].conv = nn.Conv3d(32, n_classes, kernel_size=1)
     else:
         raise ValueError("Invalid model name for pretrained model. Check your model config file.")
 

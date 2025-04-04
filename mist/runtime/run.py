@@ -39,7 +39,8 @@ class Trainer:
             configuration data.
         boundary_loss_weighting_schedule: Weighting schedule for boundary loss
             functions.
-        fixed_loss_functions: Loss functions for validation and VAE loss.
+        fixed_loss_functions: Loss function for validation and possibly others
+            in the future.
     """
 
     def __init__(self, mist_arguments):
@@ -61,14 +62,13 @@ class Trainer:
         # Set up model configuration. The model configuration saves parameters
         # like the model name, number of channels, number of classes, deep
         # supervision, deep supervision heads, pocket, patch size, target
-        # spacing, VAE regularization, and use of residual blocks. We use these
-        # parameters to build the model during training and for inference.
+        # spacing, and use of residual blocks. We use these parameters to build
+        # the model during training and for inference.
         self._create_model_configuration()
 
         # Initialize fixed loss functions.
         self.fixed_loss_functions = {
             "validation": loss_functions.DiceLoss(exclude_background=True),
-            "vae": loss_functions.VAELoss(),
         }
 
     def _initialize_file_paths(self):
@@ -155,7 +155,6 @@ class Trainer:
                 "target_spacing": (
                     self.data_structures["mist_configuration"]["target_spacing"]
                 ),
-                "vae_reg": self.mist_arguments.vae_reg,
                 "use_res_block": self.mist_arguments.use_res_block,
             }
         else:
@@ -538,26 +537,6 @@ class Trainer:
                         alpha=alpha,
                         dtm=dtm,
                     )
-
-                    # Check if Variational Autoencoder (VAE) regularization
-                    # is enabled. VAE regularization encourages the model to
-                    # learn a latent space that follows a normal
-                    # distribution, which helps the model generalize better.
-                    # This term adds a penalty to the loss, based on how much
-                    # the learned latent space deviates from the expected
-                    # distribution (usually Gaussian). We then sample from this
-                    # latent space to reconstruct the input image. The total VAE
-                    # loss is the sum of the Kullback-Leibler (KL) divergence
-                    # and the reconstruction loss.
-                    if self.mist_arguments.vae_reg:
-                        vae_loss = self.fixed_loss_functions["vae"](
-                            image, output["vae_reg"]
-                        )
-                        # Multiply the computed VAE loss by a scaling
-                        # factor, vae_penalty, which controls the strength of
-                        # the regularization.
-                        loss += self.mist_arguments.vae_penalty * vae_loss
-
 
                     # L2 regularization term. This term adds a penalty to the
                     # loss based on the L2 norm of the model's parameters.
