@@ -1,6 +1,5 @@
 """Loss function implementations for training segmentation models."""
 from typing import Tuple, Optional, Callable
-
 import argparse
 import torch
 from torch import nn
@@ -627,73 +626,6 @@ class GenSurfLoss(nn.Module):
 
         # Return the weighted sum of the region and boundary loss.
         return alpha * region_loss + (1. - alpha) * boundary_loss
-
-
-class KLDivLoss(nn.Module):
-    """Kullback-Leibler divergence loss function for VAE regularization."""
-    def forward(
-            self,
-            z_mean: torch.Tensor,
-            z_log_var: torch.Tensor,
-    ) -> torch.Tensor:
-        """Forward pass of the Kullback-Leibler divergence loss function.
-
-        This computes the Kullback-Leibler divergence loss for a variational
-        autoencoder (VAE) model. The loss is given by:
-
-            L(x, y) = -0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-
-        Here we are trying to minimize the divergence between the latent space
-        and a standard normal distribution.
-
-        Args:
-            z_mean: The mean of the latent space.
-            z_log_var: The log variance of the latent space.
-        """
-        loss = (
-            -0.5 *
-            (1. + z_log_var - torch.square(z_mean) - torch.exp(z_log_var))
-        )
-        return torch.mean(loss)
-
-
-class VAELoss(nn.Module):
-    """Variational autoencoder loss function for segmentation tasks.
-
-    The VAE loss is defined as the sum of the reconstruction loss and the
-    Kullback-Leibler divergence loss. The reconstruction loss is computed using
-    the mean squared error loss function. The Kullback-Leibler divergence loss
-    is computed using the KLDivLoss class.
-
-    Attributes:
-        reconstruction_loss: The mean squared error loss function.
-        kl_loss: The Kullback-Leibler divergence loss function.
-    """
-    def __init__(self):
-        super().__init__()
-        self.reconstruction_loss = nn.MSELoss()
-        self.kl_loss = KLDivLoss()
-
-    def forward(
-            self,
-            y_true: torch.Tensor,
-            y_pred: Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
-    ) -> torch.Tensor:
-        """Forward pass of the VAE loss function.
-
-        Args:
-            y_true: The input image patch to the network. This is what we are
-                trying to reconstruct.
-            y_pred: Tuple containing the reconstructed image patch, the mean of
-                the latent space, and the log variance of the latent space. The
-                reconstructed image patch is used in the reconstruction loss.
-                The mean and log variance are used in the Kullback-Leibler
-                divergence loss.
-        """
-        return (
-            self.reconstruction_loss(y_true, y_pred[0]) +
-            self.kl_loss(y_pred[1], y_pred[2])
-        )
 
 
 def get_loss(args: argparse.Namespace) -> nn.Module:

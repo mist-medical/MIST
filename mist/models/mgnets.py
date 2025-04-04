@@ -7,7 +7,6 @@ from torch.nn.functional import interpolate
 from mist.models.layers import (
     get_downsample,
     get_upsample,
-    VAEDecoderBlock,
     Bottleneck,
     ConvLayer,
     GlobalMaxPooling3D,
@@ -165,8 +164,7 @@ class MGNet(nn.Module):
                  patch_size,
                  use_res_block,
                  deep_supervision,
-                 deep_supervision_heads,
-                 vae_reg):
+                 deep_supervision_heads):
         super(MGNet, self).__init__()
 
         # In channels and out classes
@@ -179,7 +177,6 @@ class MGNet(nn.Module):
         self.previous_peaks = dict()
         self.deep_supervision = deep_supervision
         self.deep_supervision_heads = deep_supervision_heads
-        self.vae_reg = vae_reg
         self.global_maxpool = GlobalMaxPooling3D()
 
         self.conv_kwargs = {"norm": "instance",
@@ -195,9 +192,6 @@ class MGNet(nn.Module):
 
         # Get network depth based on patch size, max depth is five
         self.depth = np.min([int(np.ceil(np.log(np.min(self.patch_size) / 4) / np.log(2))), 5])
-
-        # Get latent dimension for vae regularization
-        self.latent_dim = int(np.prod(np.array(self.patch_size) // 2 ** self.depth)) * self.n_channels
 
         # Get in channels for decoders
         if self.mg_net == "wnet":
@@ -246,31 +240,6 @@ class MGNet(nn.Module):
                                         previous_peak_height=previous_height,
                                         **self.conv_kwargs))
 
-        # VAE regularization
-        if self.vae_reg:
-            self.normal_dist = torch.distributions.Normal(0, 1)
-            self.normal_dist.loc = self.normal_dist.loc.cuda()
-            self.normal_dist.scale = self.normal_dist.scale.cuda()
-
-            self.mu = nn.Linear(self.out_channels * (len(self.spikes) + 1), self.latent_dim)
-            self.sigma = nn.Linear(self.out_channels * (len(self.spikes) + 1), self.latent_dim)
-
-            self.vae_decoder = nn.ModuleList()
-            for i in range(len(self.in_decoder_channels[-1])):
-                if i == 0:
-                    in_channels = self.n_channels
-                else:
-                    in_channels = self.out_channels
-
-                self.vae_decoder.append(VAEDecoderBlock(in_channels=in_channels,
-                                                        out_channels=self.out_channels,
-                                                        block=block,
-                                                        **self.conv_kwargs))
-
-            self.vae_out = nn.Conv3d(in_channels=self.out_channels,
-                                     out_channels=self.n_channels,
-                                     kernel_size=1)
-
         # Main decoder branch
         self.decoder = nn.ModuleList()
         for channels in self.in_decoder_channels[-1]:
@@ -316,9 +285,6 @@ class MGNet(nn.Module):
         # First bottleneck
         x = self.bottleneck(x)
 
-        if self.vae_reg:
-            x_vae = self.global_maxpool(x)
-
         # Spikes
         # Use max spike history and previous height rules to update feature for previous peaks
         peak_history = list()
@@ -326,10 +292,6 @@ class MGNet(nn.Module):
             x, new_skips, next_peak = spike(x,
                                             self.previous_skips,
                                             self.previous_peaks)
-
-            if self.vae_reg:
-                x_global_maxpool = self.global_maxpool(x)
-                x_vae = torch.cat([x_vae, x_global_maxpool], dim=1)
 
             # Update skip connections
             for key in new_skips.keys():
@@ -343,24 +305,6 @@ class MGNet(nn.Module):
                     peak_history = peak_history[1:]
 
                 self.previous_peaks[key] = next_peak[key]
-
-        # VAE regularization
-        if self.vae_reg and self.training:
-            mu = self.mu(x_vae)
-            log_var = self.sigma(x_vae)
-
-            # Sample from distribution
-            x_vae = mu + torch.exp(0.5 * log_var) * self.normal_dist.sample(mu.shape)
-
-            # Reshape for decoder
-            x_vae = torch.reshape(x_vae, (x.shape[0], self.n_channels, x.shape[2], x.shape[3], x.shape[4]))
-
-            # Start VAE decoder
-            for decoder in self.vae_decoder:
-                x_vae = decoder(x_vae)
-
-            x_vae = self.vae_out(x_vae)
-            output_vae = (x_vae, mu, log_var)
 
         # Main decoder branch
         current_depth = self.depth - 1
@@ -393,10 +337,6 @@ class MGNet(nn.Module):
             if self.deep_supervision:
                 output_deep_supervision.reverse()
                 output["deep_supervision"] = tuple(output_deep_supervision)
-
-            if self.vae_reg:
-                output["vae_reg"] = output_vae
-
         else:
             output = self.out(x)
 

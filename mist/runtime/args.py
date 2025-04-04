@@ -355,17 +355,6 @@ def get_main_args():
         default=2,
         help="Number of deep supervision heads to use"
     )
-    parser.boolean_flag(
-        "--vae-reg",
-        default=False,
-        help="Use VAE regularization for nnUNet, UNet, FMG-Net, or W-Net"
-    )
-    parser.arg(
-        "--vae-penalty",
-        type=positive_float,
-        default=0.01,
-        help="VAE regularization penalty"
-    )
 
     # Regularization parameters.
     parser.boolean_flag("--l2-reg", default=False, help="Use L2 regularization")
@@ -394,11 +383,6 @@ def get_main_args():
     # Preprocessing parameters.
     parser.boolean_flag(
         "--no-preprocess", default=False, help="Turn off preprocessing"
-    )
-    parser.boolean_flag(
-        "--use-n4-bias-correction",
-        default=False,
-        help="Use N4 bias field correction (only for MR images)"
     )
     parser.boolean_flag(
         "--use-dtms",

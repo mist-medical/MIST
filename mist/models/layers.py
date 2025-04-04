@@ -133,20 +133,6 @@ class DecoderBlock(nn.Module):
         return x
 
 
-class VAEDecoderBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, block, **kwargs):
-        super(VAEDecoderBlock, self).__init__()
-        self.block = block(in_channels, out_channels, **kwargs)
-        self.upsample = get_upsample(kwargs["up_type"],
-                                     in_channels=out_channels,
-                                     out_channels=out_channels)
-
-    def forward(self, x):
-        x = self.block(x)
-        x = self.upsample(x)
-        return x
-
-
 class UNetBlock(nn.Module):
     def __init__(self, in_channels, out_channels, **kwargs):
         super(UNetBlock, self).__init__()

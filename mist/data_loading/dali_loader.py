@@ -11,7 +11,7 @@ from nvidia.dali.pipeline import Pipeline # type: ignore
 from nvidia.dali.plugin.pytorch import DALIGenericIterator # type: ignore
 # pylint: enable=import-error
 
-from mist.data_loading import data_loading_constants as constants
+from mist.data_loading.data_loading_constants import DataLoadingConstants as constants
 from mist.data_loading import utils
 
 
@@ -224,23 +224,23 @@ class TrainPipeline(GenericPipeline):
 
     def load_data(self):
         """Load the image, label, and DTM data from the input readers."""
-        img = self.input_images(name="image_reader")
-        img = fn.reshape(img, layout="DHWC")
+        image = self.input_images(name="image_reader")
+        image = fn.reshape(image, layout="DHWC")
 
-        lbl = self.input_labels(name="label_reader")
-        lbl = fn.reshape(lbl, layout="DHWC")
+        label = self.input_labels(name="label_reader")
+        label = fn.reshape(label, layout="DHWC")
 
         if self.has_dtms:
             dtm = self.input_dtms(name="dtm_reader")
             dtm = fn.reshape(dtm, layout="DHWC")
-            return img, lbl, dtm
+            return image, label, dtm
 
-        return img, lbl
+        return image, label
 
     def biased_crop_fn(
             self,
-            img: TensorCPU,
-            lbl: TensorCPU,
+            image: TensorCPU,
+            label: TensorCPU,
             dtm: Optional[TensorCPU]=None,
     ) -> Sequence[TensorGPU]:
         """Extract a random patch from the image, label, and DTM.
@@ -251,8 +251,8 @@ class TrainPipeline(GenericPipeline):
         of interest in the label data, typically objects in a segmentation task.
 
         Args:
-            img: The input image data to be cropped.
-            lbl: The input label data to be cropped, typically corresponding to
+            image: The input image data to be cropped.
+            label: The input label data to be cropped, typically corresponding to
                 segmentation masks.
             dtm: The input DTM data to be cropped.
 
@@ -262,8 +262,8 @@ class TrainPipeline(GenericPipeline):
         """
         # Pad the data to ensure their dimensions are at least the size of the
         # patch.
-        img = fn.pad(img, axes=(0, 1, 2), shape=self.roi_size)
-        lbl = fn.pad(lbl, axes=(0, 1, 2), shape=self.roi_size)
+        image = fn.pad(image, axes=(0, 1, 2), shape=self.roi_size)
+        label = fn.pad(label, axes=(0, 1, 2), shape=self.roi_size)
         if self.has_dtms:
             dtm = fn.pad(dtm, axes=(0, 1, 2), shape=self.roi_size)
 
@@ -271,7 +271,7 @@ class TrainPipeline(GenericPipeline):
         # around the foreground objects in the label. 'foreground_prob' controls
         # how often the crop is centered on objects rather than the background.
         roi_start, roi_end = fn.segmentation.random_object_bbox(
-            lbl,
+            label,
             format="start_end",  # ROI format as (start, end) coordinates.
             background=0,        # Background pixel value to ignore.
             classes=self.labels, # List of labels in the dataset.
@@ -286,7 +286,7 @@ class TrainPipeline(GenericPipeline):
         # the image and label are still in DHWC format. We will change this
         # later to CDHW for PyTorch compatibility.
         anchor = fn.roi_random_crop(
-            lbl,
+            label,
             roi_start=roi_start,
             roi_end=roi_end,
             crop_shape=[*self.roi_size, 1],
@@ -300,8 +300,8 @@ class TrainPipeline(GenericPipeline):
         # anchor point and the patch size. The 'out_of_bounds_policy' ensures
         # the crop is padded if it exceeds the image bounds.
         if self.has_dtms:
-            img, lbl, dtm = fn.slice(
-                [img, lbl, dtm],
+            image, label, dtm = fn.slice(
+                [image, label, dtm],
                 anchor,
                 self.crop_shape,  # Crop size matches the desired patch size.
                 axis_names="DHW",  # Perform cropping along DWH axes.
@@ -311,11 +311,11 @@ class TrainPipeline(GenericPipeline):
 
             # Return the cropped image, label, and dtm transferred to the GPU
             # for further processing.
-            return img.gpu(), lbl.gpu(), dtm.gpu()
+            return image.gpu(), label.gpu(), dtm.gpu()
 
         # If no DTM data is provided, only crop the image and label.
-        img, lbl = fn.slice(
-            [img, lbl],
+        image, label = fn.slice(
+            [image, label],
             anchor,
             self.crop_shape,  # Crop size matches the desired patch size.
             axis_names="DHW",  # Perform cropping along DWH axes.
@@ -325,12 +325,12 @@ class TrainPipeline(GenericPipeline):
 
         # Return the cropped image and label, transferred to the GPU for
         # further processing.
-        return img.gpu(), lbl.gpu()
+        return image.gpu(), label.gpu()
 
     def flips_fn(
         self,
-        img: TensorGPU,
-        lbl: TensorGPU,
+        image: TensorGPU,
+        label: TensorGPU,
         dtm: Optional[TensorGPU]=None,
     ) -> Sequence[TensorGPU]:
         """Apply random flips to the input image, labels, and DTMs.
@@ -339,8 +339,8 @@ class TrainPipeline(GenericPipeline):
         horizontally, vertically, or depthwise with a 0.5 probability.
 
         Args:
-            img: The input image data to apply flips to.
-            lbl: The input label data to apply the same flips as the image.
+            image: The input image data to apply flips to.
+            label: The input label data to apply the same flips as the image.
             dtm: The input DTM data to apply the same flips as the image.
 
         Returns:
@@ -350,34 +350,34 @@ class TrainPipeline(GenericPipeline):
         kwargs = {
             "horizontal": (
                 fn.random.coin_flip(
-                    probability=constants.DataLoadingConstants.HORIZONTAL_FLIP_PROBABILITY
+                    probability=constants.HORIZONTAL_FLIP_PROBABILITY
                 )
             ),
             "vertical": (
                 fn.random.coin_flip(
-                    probability=constants.DataLoadingConstants.VERTICAL_FLIP_PROBABILITY
+                    probability=constants.VERTICAL_FLIP_PROBABILITY
                 )
             ),
             "depthwise": (
                 fn.random.coin_flip(
-                    probability=constants.DataLoadingConstants.DEPTH_FLIP_PROBABILITY
+                    probability=constants.DEPTH_FLIP_PROBABILITY
                 )
             ),
         }
 
         # Apply the flips to the image, label, and DTM data and return the
         # results.
-        flipped_img = fn.flip(img, **kwargs)
-        flipped_lbl = fn.flip(lbl, **kwargs)
+        flipped_image = fn.flip(image, **kwargs)
+        flipped_label = fn.flip(label, **kwargs)
         if self.has_dtms:
             flipped_dtm = fn.flip(dtm, **kwargs)
-            return flipped_img, flipped_lbl, flipped_dtm
-        return flipped_img, flipped_lbl
+            return flipped_image, flipped_label, flipped_dtm
+        return flipped_image, flipped_label
 
     def zoom_fn(
             self,
-            img: TensorGPU,
-            lbl: TensorGPU
+            image: TensorGPU,
+            label: TensorGPU
     ) -> Tuple[TensorGPU, TensorGPU]:
         """Apply a random zoom to the input image and labels.
 
@@ -388,8 +388,8 @@ class TrainPipeline(GenericPipeline):
         while maintaining the overall image size.
 
         Args:
-            img: The input image tensor to apply zoom to.
-            lbl: The input label tensor, typically segmentation labels, to apply
+            image: The input image tensor to apply zoom to.
+            label: The input label tensor, typically segmentation labels, to apply
                 the same zoom as the image.
 
         Returns:
@@ -399,11 +399,11 @@ class TrainPipeline(GenericPipeline):
         # probability of applying the augmentation. If not applied, the scale
         # remains 1.0.
         scale = utils.random_augmentation(
-            constants.DataLoadingConstants.ZOOM_FN_PROBABILITY,
+            constants.ZOOM_FN_PROBABILITY,
             fn.random.uniform(
                 range=(
-                    constants.DataLoadingConstants.ZOOM_FN_RANGE_MIN,
-                    constants.DataLoadingConstants.ZOOM_FN_RANGE_MAX,
+                    constants.ZOOM_FN_RANGE_MIN,
+                    constants.ZOOM_FN_RANGE_MAX,
                 )
             ),
             1.0,
@@ -414,25 +414,25 @@ class TrainPipeline(GenericPipeline):
         d, h, w = [scale * x for x in self.roi_size]
 
         # Crop both the image and label using the new scaled dimensions.
-        img = fn.crop(img, crop_h=h, crop_w=w, crop_d=d)
-        lbl = fn.crop(lbl, crop_h=h, crop_w=w, crop_d=d)
+        image = fn.crop(image, crop_h=h, crop_w=w, crop_d=d)
+        label = fn.crop(label, crop_h=h, crop_w=w, crop_d=d)
 
         # Resize the cropped image and label back to the original patch size.
         # Use cubic interpolation for the image and nearest neighbor for the
         # label to maintain the segmentation mask.
-        img = fn.resize(
-            img,
+        image = fn.resize(
+            image,
             interp_type=types.DALIInterpType.INTERP_CUBIC,
             size=self.crop_shape_float,
         )
-        lbl = fn.resize(
-            lbl,
+        label = fn.resize(
+            label,
             interp_type=types.DALIInterpType.INTERP_NN,
             size=self.crop_shape_float,
         )
 
         # Return the resized image and label.
-        return img, lbl
+        return image, label
 
     def define_graph(self):
         """Define the training pipeline graph for data loading.
@@ -451,42 +451,42 @@ class TrainPipeline(GenericPipeline):
         # image, label, and DTM data. Transfer the cropped patches to the GPU.
         # Apply flips and zooming for additional augmentation.
         if self.has_dtms:
-            img, lbl, dtm = self.load_data()
+            image, label, dtm = self.load_data()
             if self.extract_patches:
-                img, lbl, dtm = self.biased_crop_fn(img, lbl, dtm)
+                image, label, dtm = self.biased_crop_fn(image, label, dtm)
 
             if self.use_augmentation and self.use_flips:
-                img, lbl, dtm = self.flips_fn(img, lbl, dtm)
+                image, label, dtm = self.flips_fn(image, label, dtm)
         else:
-            img, lbl = self.load_data()
+            image, label = self.load_data()
             if self.extract_patches:
-                img, lbl = self.biased_crop_fn(img, lbl)
+                image, label = self.biased_crop_fn(image, label)
 
             if self.use_augmentation:
                 if self.use_zoom:
-                    img, lbl = self.zoom_fn(img, lbl)
+                    image, label = self.zoom_fn(image, label)
 
                 if self.use_flips:
-                    img, lbl = self.flips_fn(img, lbl)
+                    image, label = self.flips_fn(image, label)
 
         # Apply random augmentations to the image data only.
         if self.use_augmentation:
             if self.use_noise:
-                img = utils.noise_fn(img)
+                image = utils.noise_fn(image)
             if self.use_blur:
-                img = utils.blur_fn(img)
+                image = utils.blur_fn(image)
             if self.use_brightness:
-                img = utils.brightness_fn(img)
+                image = utils.brightness_fn(image)
             if self.use_contrast:
-                img = utils.contrast_fn(img)
+                image = utils.contrast_fn(image)
 
         # Change format to CDWH for pytorch compatibility.
-        img = fn.transpose(img, perm=[3, 0, 1, 2])
-        lbl = fn.transpose(lbl, perm=[3, 0, 1, 2])
+        image = fn.transpose(image, perm=[3, 0, 1, 2])
+        label = fn.transpose(label, perm=[3, 0, 1, 2])
         if self.has_dtms:
             dtm = fn.transpose(dtm, perm=[3, 0, 1, 2])
-            return img, lbl, dtm
-        return img, lbl
+            return image, label, dtm
+        return image, label
 
 
 class TestPipeline(GenericPipeline):
@@ -512,15 +512,15 @@ class TestPipeline(GenericPipeline):
     def define_graph(self):
         """Define the test pipeline graph for data loading."""
         # Load the image data from the input reader and transfer it to the GPU.
-        img = self.input_images(name="image_reader").gpu()
+        image = self.input_images(name="image_reader").gpu()
 
         # Reshape the image data to DHWC format.
-        img = fn.reshape(img, layout="DHWC")
+        image = fn.reshape(image, layout="DHWC")
 
         # Change format to CDHW for pytorch compatibility
-        img = fn.transpose(img, perm=[3, 0, 1, 2])
+        image = fn.transpose(image, perm=[3, 0, 1, 2])
 
-        return img
+        return image
 
 
 class EvalPipeline(GenericPipeline):
@@ -548,17 +548,17 @@ class EvalPipeline(GenericPipeline):
         """Define the evaluation pipeline graph for data loading."""
         # Load the image and label data from the input readers and transfer them
         # to the GPU.
-        img = self.input_images(name="image_reader").gpu()
-        img = fn.reshape(img, layout="DHWC")
+        image = self.input_images(name="image_reader").gpu()
+        image = fn.reshape(image, layout="DHWC")
 
-        lbl = self.input_labels(name="label_reader").gpu()
-        lbl = fn.reshape(lbl, layout="DHWC")
+        label = self.input_labels(name="label_reader").gpu()
+        label = fn.reshape(label, layout="DHWC")
 
         # Change format to CDHW for pytorch compatibility.
-        img = fn.transpose(img, perm=[3, 0, 1, 2])
-        lbl = fn.transpose(lbl, perm=[3, 0, 1, 2])
+        image = fn.transpose(image, perm=[3, 0, 1, 2])
+        label = fn.transpose(label, perm=[3, 0, 1, 2])
 
-        return img, lbl
+        return image, label
 
 
 def get_training_dataset(

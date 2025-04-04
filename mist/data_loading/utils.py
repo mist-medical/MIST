@@ -11,7 +11,7 @@ from nvidia.dali import types # type: ignore
 from nvidia.dali.tensors import TensorGPU # type: ignore
 # pylint: enable=import-error
 
-from mist.data_loading import data_loading_constants as constants
+from mist.data_loading.data_loading_constants import DataLoadingConstants as constants
 
 
 def get_numpy_reader(
@@ -97,8 +97,8 @@ def noise_fn(img: TensorGPU) -> TensorGPU:
         img +
         fn.random.normal(img, stddev=fn.random.uniform(
             range=(
-                constants.DataLoadingConstants.NOISE_FN_RANGE_MIN,
-                constants.DataLoadingConstants.NOISE_FN_RANGE_MAX
+                constants.NOISE_FN_RANGE_MIN,
+                constants.NOISE_FN_RANGE_MAX
                 )
             )
         )
@@ -106,7 +106,7 @@ def noise_fn(img: TensorGPU) -> TensorGPU:
 
     # Return the augmented image data with a probability of 0.15.
     return random_augmentation(
-        constants.DataLoadingConstants.NOISE_FN_PROBABILITY, img_noised, img
+        constants.NOISE_FN_PROBABILITY, img_noised, img
     )
 
 
@@ -128,15 +128,15 @@ def blur_fn(img: TensorGPU) -> TensorGPU:
     img_blurred = fn.gaussian_blur(
         img, sigma=fn.random.uniform(
             range=(
-                constants.DataLoadingConstants.BLUR_FN_RANGE_MIN,
-                constants.DataLoadingConstants.BLUR_FN_RANGE_MAX,
+                constants.BLUR_FN_RANGE_MIN,
+                constants.BLUR_FN_RANGE_MAX,
             )
         )
     )
 
     # Return the augmented image data with a probability of 0.15.
     return random_augmentation(
-        constants.DataLoadingConstants.BLUR_FN_PROBABILITY, img_blurred, img
+        constants.BLUR_FN_PROBABILITY, img_blurred, img
     )
 
 
@@ -156,11 +156,11 @@ def brightness_fn(img: TensorGPU) -> TensorGPU:
     # Generate a random brightness scale between 0.7 and 1.3 with a
     # probability of 0.15. Otherwise, the brightness scale is 1.0.
     brightness_scale = random_augmentation(
-        constants.DataLoadingConstants.BRIGHTNESS_FN_PROBABILITY,
+        constants.BRIGHTNESS_FN_PROBABILITY,
         fn.random.uniform(
             range=(
-                constants.DataLoadingConstants.BRIGHTNESS_FN_RANGE_MIN,
-                constants.DataLoadingConstants.BRIGHTNESS_FN_RANGE_MAX,
+                constants.BRIGHTNESS_FN_RANGE_MIN,
+                constants.BRIGHTNESS_FN_RANGE_MAX,
             )
         ),
         1.0,
@@ -191,11 +191,11 @@ def contrast_fn(img: TensorGPU) -> TensorGPU:
     # Generate a random contrast scaling factor between 0.65 and 1.5 with
     # a probability of 0.15. Otherwise, the scaling factor is 1.0.
     scale = random_augmentation(
-        constants.DataLoadingConstants.CONTRAST_FN_PROBABILITY,
+        constants.CONTRAST_FN_PROBABILITY,
         fn.random.uniform(
             range=(
-                constants.DataLoadingConstants.CONTRAST_FN_RANGE_MIN,
-                constants.DataLoadingConstants.CONTRAST_FN_RANGE_MAX,
+                constants.CONTRAST_FN_RANGE_MIN,
+                constants.CONTRAST_FN_RANGE_MAX,
             )
         ),
         1.0,
@@ -229,17 +229,17 @@ def flips_fn(
     kwargs = {
         "horizontal": (
             fn.random.coin_flip(
-                probability=constants.DataLoadingConstants.HORIZONTAL_FLIP_PROBABILITY
+                probability=constants.HORIZONTAL_FLIP_PROBABILITY
             )
         ),
         "vertical": (
             fn.random.coin_flip(
-                probability=constants.DataLoadingConstants.VERTICAL_FLIP_PROBABILITY
+                probability=constants.VERTICAL_FLIP_PROBABILITY
             )
         ),
         "depthwise": (
             fn.random.coin_flip(
-                probability=constants.DataLoadingConstants.DEPTH_FLIP_PROBABILITY
+                probability=constants.DEPTH_FLIP_PROBABILITY
             )
         ),
     }
