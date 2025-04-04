@@ -363,10 +363,6 @@ def preprocess_example(
                 )
             image = utils.crop_to_fg(image, fg_bbox)
 
-        # N4 bias correction.
-        if config["use_n4_bias_correction"]:
-            image = ants.n4_bias_field_correction(image)
-
         # Put all images into standard space.
         image = ants.reorient_image2(image, "RAI")
         image.set_direction(
@@ -445,7 +441,7 @@ def convert_nifti_to_numpy(
     Args:
         image_list: List of paths to NIfTI images.
         mask: Path to segmentation mask.
-    
+
     Returns:
         conversion_output: Dictionary with the following keys:
             image: Numpy array of images.
@@ -484,7 +480,6 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
         args: Namespace object with MIST arguments.
 
     Raises:
-        ValueError: If N4 bias correction is used for non-MR images.
         FileNotFoundError: If configuration file, training paths file, or
             foreground bounding box file is not found.
     """
@@ -494,12 +489,6 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
             f"Configuration file not found in {args.results}."
         )
     config = utils.read_json_file(os.path.join(args.results, "config.json"))
-
-    if config["modality"] != "mr" and config["use_n4_bias_correction"]:
-        raise ValueError(
-            "N4 bias correction should only be used for MR images. "
-            f"Got {config['modality']} instead."
-        )
 
     # Check if training paths file exists and read it.
     if not os.path.exists(os.path.join(args.results, "train_paths.csv")):
