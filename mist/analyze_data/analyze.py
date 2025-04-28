@@ -1,3 +1,13 @@
+# Copyright (c) MIST Imaging LLC.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """Analyzer class for creating MIST configuration file."""
 import os
 import json
@@ -71,11 +81,10 @@ class Analyzer:
                 )
 
             # Check that the required fields are not None.
-            if field is None:
+            if self.dataset_information[field] is None:
                 raise ValueError(
-                    f"Dataset description JSON file must contain a '{field}' "
-                    f"entry. There is a None value in the JSON file for "
-                    f"'{field}'."
+                    f"Dataset description JSON file must contain a "
+                    f"entry '{field}'. Got None for '{field}' in the JSON file."
                 )
 
             # Check that the train data folder exists and is not empty.
@@ -113,16 +122,15 @@ class Analyzer:
                 if not isinstance(self.dataset_information[field], dict):
                     raise TypeError(
                         "The 'images' entry must be a dictionary of the format "
-                        "{'image_type': [list of image names]} in the dataset "
-                        "description JSON file. Found the following entry "
-                        f"instead: {self.dataset_information[field]}."
+                        "'image_type': [list of image names] in the dataset "
+                        "description JSON file."
                     )
 
                 if not self.dataset_information[field]:
                     raise ValueError(
                         "The 'images' entry is empty. Please provide a "
                         "dictionary of the format "
-                        f"{'image_type': [list of image names]} in the dataset "
+                        "{'image_type': [list of image names]} in the dataset "
                         "description JSON file."
                     )
 
@@ -514,7 +522,7 @@ class Analyzer:
                         "images are 3D\n"
                     )
                     bad_data.append(i)
-                    break
+                    continue
 
                 # Check that the mask and image headers match and that each
                 # images is 3D.
