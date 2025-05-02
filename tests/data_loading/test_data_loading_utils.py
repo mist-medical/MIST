@@ -11,7 +11,7 @@
 """Tests for the DALI data loading utilities module in MIST."""
 import pytest
 from unittest import mock
-from mist.data_loading import utils
+import mist.data_loading.data_loading_utils as utils
 
 
 def test_is_valid_generic_pipeline_input_valid(tmp_path):
@@ -38,8 +38,18 @@ def test_is_valid_generic_pipeline_input_invalid(bad_input):
     [
         ([], ["lbl"], None, "No images found!"),
         (["img"], [], None, "No labels found!"),
-        (["img1"], ["lbl1", "lbl2"], None, "Number of images and labels do not match!"),
-        (["img"], ["lbl"], ["dtm1", "dtm2"], "Number of images and DTMs do not match!"),
+        (
+            ["img1"],
+            ["lbl1", "lbl2"],
+            None,
+            "Number of images and labels do not match!"
+        ),
+        (
+            ["img"],
+            ["lbl"],
+            ["dtm1", "dtm2"],
+            "Number of images and DTMs do not match!"
+        ),
     ]
 )
 def test_validate_train_and_eval_inputs_raises(imgs, lbls, dtms, err_msg):
@@ -55,7 +65,7 @@ def test_validate_train_and_eval_inputs_valid(dtms):
     utils.validate_train_and_eval_inputs(["img"], ["lbl"], dtms)
 
 
-@mock.patch("mist.data_loading.utils.ops.readers.Numpy")
+@mock.patch("mist.data_loading.data_loading_utils.ops.readers.Numpy")
 def test_get_numpy_reader(mock_numpy_reader):
     """Test get_numpy_reader with mocked Numpy reader."""
     result = utils.get_numpy_reader(
@@ -69,8 +79,8 @@ def test_get_numpy_reader(mock_numpy_reader):
     assert result == mock_numpy_reader.return_value
 
 
-@mock.patch("mist.data_loading.utils.fn.random.coin_flip")
-@mock.patch("mist.data_loading.utils.fn.cast")
+@mock.patch("mist.data_loading.data_loading_utils.fn.random.coin_flip")
+@mock.patch("mist.data_loading.data_loading_utils.fn.cast")
 def test_random_augmentation(mock_cast, mock_coin_flip):
     """Test random_augmentation with mocked dependencies."""
     condition = mock.MagicMock(name="condition")
@@ -91,9 +101,13 @@ def test_random_augmentation(mock_cast, mock_coin_flip):
 
 
 @mock.patch(
-        "mist.data_loading.utils.random_augmentation", return_value="augmented"
+        "mist.data_loading.data_loading_utils.random_augmentation",
+        return_value="augmented"
 )
-@mock.patch("mist.data_loading.utils.fn.random.normal", return_value="noise")
+@mock.patch(
+    "mist.data_loading.data_loading_utils.fn.random.normal",
+    return_value="noise"
+)
 def test_noise_fn(mock_normal, mock_aug):
     """Test noise_fn with mocked dependencies."""
     result = utils.noise_fn("img")
@@ -101,16 +115,20 @@ def test_noise_fn(mock_normal, mock_aug):
 
 
 @mock.patch(
-        "mist.data_loading.utils.random_augmentation", return_value="augmented"
+        "mist.data_loading.data_loading_utils.random_augmentation",
+        return_value="augmented"
 )
-@mock.patch("mist.data_loading.utils.fn.gaussian_blur", return_value="blurred")
+@mock.patch(
+    "mist.data_loading.data_loading_utils.fn.gaussian_blur",
+    return_value="blurred"
+)
 def test_blur_fn(mock_blur, mock_aug):
     """Test blur_fn with mocked dependencies."""
     result = utils.blur_fn("img")
     assert result == "augmented"
 
 
-@mock.patch("mist.data_loading.utils.random_augmentation")
+@mock.patch("mist.data_loading.data_loading_utils.random_augmentation")
 def test_brightness_fn(mock_aug):
     """Test brightness_fn with mocked dependencies."""
     scale = mock.MagicMock(name="scale")
@@ -121,10 +139,19 @@ def test_brightness_fn(mock_aug):
     assert result == "scaled_image"
 
 
-@mock.patch("mist.data_loading.utils.math.clamp", return_value="clamped")
-@mock.patch("mist.data_loading.utils.fn.reductions.min", return_value="min")
-@mock.patch("mist.data_loading.utils.fn.reductions.max", return_value="max")
-@mock.patch("mist.data_loading.utils.random_augmentation")
+@mock.patch(
+        "mist.data_loading.data_loading_utils.math.clamp",
+        return_value="clamped"
+)
+@mock.patch(
+    "mist.data_loading.data_loading_utils.fn.reductions.min",
+    return_value="min"
+)
+@mock.patch(
+    "mist.data_loading.data_loading_utils.fn.reductions.max",
+    return_value="max"
+)
+@mock.patch("mist.data_loading.data_loading_utils.random_augmentation")
 def test_contrast_fn(mock_aug, mock_max, mock_min, mock_clamp):
     """Test contrast_fn with mocked dependencies."""
     scale = mock.MagicMock(name="scale")
@@ -140,11 +167,12 @@ def test_contrast_fn(mock_aug, mock_max, mock_min, mock_clamp):
     ("dtm", ("flipped_img", "flipped_lbl", "flipped_dtm")),
 ])
 @mock.patch(
-    "mist.data_loading.utils.fn.flip",
+    "mist.data_loading.data_loading_utils.fn.flip",
     side_effect=lambda x, **kwargs: f"flipped_{x}"
 )
 @mock.patch(
-    "mist.data_loading.utils.fn.random.coin_flip", side_effect=["h", "v", "d"]
+    "mist.data_loading.data_loading_utils.fn.random.coin_flip",
+    side_effect=["h", "v", "d"]
 )
 def test_flips_fn_variants(mock_coin_flip, mock_flip, dtm, expected):
     """Test flips_fn with different DTM inputs."""

@@ -22,7 +22,7 @@ from nvidia.dali.plugin.pytorch import DALIGenericIterator # type: ignore
 # pylint: enable=import-error
 
 from mist.data_loading.data_loading_constants import DataLoadingConstants as constants
-from mist.data_loading import utils
+import mist.data_loading.data_loading_utils as utils
 
 
 class GenericPipeline(Pipeline):

@@ -14,6 +14,7 @@ from unittest import mock
 from mist.data_loading import dali_loader
 
 
+
 @pytest.fixture
 def base_pipeline_args():
     return {
@@ -43,10 +44,10 @@ def base_pipeline_args():
 
 @pytest.mark.parametrize("dtm_present", [False, True])
 @mock.patch(
-        "mist.data_loading.utils.is_valid_generic_pipeline_input",
+        "mist.data_loading.data_loading_utils.is_valid_generic_pipeline_input",
         return_value=True
 )
-@mock.patch("mist.data_loading.utils.get_numpy_reader")
+@mock.patch("mist.data_loading.data_loading_utils.get_numpy_reader")
 def test_train_pipeline_instantiates(
     mock_reader, mock_validator, dtm_present, base_pipeline_args
 ):
@@ -64,13 +65,13 @@ def test_train_pipeline_instantiates(
     ("label", "Input labels are not valid"),
     ("dtm", "Input DTMs are not valid"),
 ])
-@mock.patch("mist.data_loading.utils.get_numpy_reader")
+@mock.patch("mist.data_loading.data_loading_utils.get_numpy_reader")
 def test_train_pipeline_invalid_inputs(
     mock_reader, bad_arg, expected_message, base_pipeline_args
 ):
     """Test that TrainPipeline raises ValueError for invalid inputs."""
     with mock.patch(
-        "mist.data_loading.utils.is_valid_generic_pipeline_input",
+        "mist.data_loading.data_loading_utils.is_valid_generic_pipeline_input",
         return_value=False
     ):
         args = base_pipeline_args.copy()
@@ -82,10 +83,10 @@ def test_train_pipeline_invalid_inputs(
 
 
 @mock.patch(
-        "mist.data_loading.utils.is_valid_generic_pipeline_input",
+        "mist.data_loading.data_loading_utils.is_valid_generic_pipeline_input",
         return_value=True
 )
-@mock.patch("mist.data_loading.utils.get_numpy_reader")
+@mock.patch("mist.data_loading.data_loading_utils.get_numpy_reader")
 def test_train_pipeline_disables_augmentations(
     mock_reader, mock_validator, base_pipeline_args
 ):
@@ -105,10 +106,10 @@ def test_train_pipeline_disables_augmentations(
 
 
 @mock.patch(
-        "mist.data_loading.utils.is_valid_generic_pipeline_input",
+        "mist.data_loading.data_loading_utils.is_valid_generic_pipeline_input",
         return_value=True
 )
-@mock.patch("mist.data_loading.utils.get_numpy_reader")
+@mock.patch("mist.data_loading.data_loading_utils.get_numpy_reader")
 def test_train_pipeline_invalid_dimension_raises(
     mock_reader, mock_validator, base_pipeline_args
 ):
@@ -122,9 +123,10 @@ def test_train_pipeline_invalid_dimension_raises(
 @pytest.mark.parametrize("use_dtm", [False, True])
 @mock.patch("mist.data_loading.dali_loader.fn.reshape")
 @mock.patch(
-    "mist.data_loading.utils.is_valid_generic_pipeline_input", return_value=True
+    "mist.data_loading.data_loading_utils.is_valid_generic_pipeline_input",
+    return_value=True
 )
-@mock.patch("mist.data_loading.utils.get_numpy_reader")
+@mock.patch("mist.data_loading.data_loading_utils.get_numpy_reader")
 def test_load_data(
     mock_reader,
     mock_validator,
@@ -165,9 +167,10 @@ def test_load_data(
 @mock.patch("mist.data_loading.dali_loader.fn.segmentation.random_object_bbox")
 @mock.patch("mist.data_loading.dali_loader.fn.pad")
 @mock.patch(
-    "mist.data_loading.utils.is_valid_generic_pipeline_input", return_value=True
+    "mist.data_loading.data_loading_utils.is_valid_generic_pipeline_input",
+    return_value=True
 )
-@mock.patch("mist.data_loading.utils.get_numpy_reader")
+@mock.patch("mist.data_loading.data_loading_utils.get_numpy_reader")
 def test_biased_crop_fn(
     mock_reader,
     mock_validator,
@@ -207,9 +210,10 @@ def test_biased_crop_fn(
 @mock.patch("mist.data_loading.dali_loader.fn.flip")
 @mock.patch("mist.data_loading.dali_loader.fn.random.coin_flip")
 @mock.patch(
-    "mist.data_loading.utils.is_valid_generic_pipeline_input", return_value=True
+    "mist.data_loading.data_loading_utils.is_valid_generic_pipeline_input",
+    return_value=True
 )
-@mock.patch("mist.data_loading.utils.get_numpy_reader")
+@mock.patch("mist.data_loading.data_loading_utils.get_numpy_reader")
 def test_flips_fn(
     mock_reader,
     mock_validator,
@@ -244,11 +248,12 @@ def test_flips_fn(
 @mock.patch("mist.data_loading.dali_loader.fn.resize")
 @mock.patch("mist.data_loading.dali_loader.fn.crop")
 @mock.patch("mist.data_loading.dali_loader.fn.random.uniform")
-@mock.patch("mist.data_loading.utils.random_augmentation")
+@mock.patch("mist.data_loading.data_loading_utils.random_augmentation")
 @mock.patch(
-    "mist.data_loading.utils.is_valid_generic_pipeline_input", return_value=True
+    "mist.data_loading.data_loading_utils.is_valid_generic_pipeline_input",
+    return_value=True
 )
-@mock.patch("mist.data_loading.utils.get_numpy_reader")
+@mock.patch("mist.data_loading.data_loading_utils.get_numpy_reader")
 def test_zoom_fn_applies_zoom_and_resize(
     mock_reader,
     mock_validator,
@@ -294,16 +299,25 @@ def test_zoom_fn_applies_zoom_and_resize(
 
 @pytest.mark.parametrize("use_dtm", [False, True])
 @mock.patch(
-    "mist.data_loading.utils.is_valid_generic_pipeline_input", return_value=True
+    "mist.data_loading.data_loading_utils.is_valid_generic_pipeline_input",
+    return_value=True
 )
-@mock.patch("mist.data_loading.utils.get_numpy_reader")
-@mock.patch("mist.data_loading.utils.noise_fn", return_value="noisy_image")
-@mock.patch("mist.data_loading.utils.blur_fn", return_value="blurred_image")
+@mock.patch("mist.data_loading.data_loading_utils.get_numpy_reader")
 @mock.patch(
-    "mist.data_loading.utils.brightness_fn", return_value="bright_image"
+    "mist.data_loading.data_loading_utils.noise_fn",
+    return_value="noisy_image"
 )
 @mock.patch(
-    "mist.data_loading.utils.contrast_fn", return_value="contrast_image"
+    "mist.data_loading.data_loading_utils.blur_fn",
+    return_value="blurred_image"
+)
+@mock.patch(
+    "mist.data_loading.data_loading_utils.brightness_fn",
+    return_value="bright_image"
+)
+@mock.patch(
+    "mist.data_loading.data_loading_utils.contrast_fn",
+    return_value="contrast_image"
 )
 @mock.patch(
     "mist.data_loading.dali_loader.fn.transpose",
@@ -366,10 +380,10 @@ def test_define_graph_with_and_without_dtm(
 
 
 @mock.patch(
-        "mist.data_loading.utils.is_valid_generic_pipeline_input",
+        "mist.data_loading.data_loading_utils.is_valid_generic_pipeline_input",
         return_value=True
 )
-@mock.patch("mist.data_loading.utils.get_numpy_reader")
+@mock.patch("mist.data_loading.data_loading_utils.get_numpy_reader")
 @mock.patch(
     "mist.data_loading.dali_loader.fn.transpose",
     return_value="transposed_image"
@@ -409,10 +423,10 @@ def test_test_pipeline_define_graph(
 
 
 @mock.patch(
-        "mist.data_loading.utils.is_valid_generic_pipeline_input",
+        "mist.data_loading.data_loading_utils.is_valid_generic_pipeline_input",
         return_value=True
 )
-@mock.patch("mist.data_loading.utils.get_numpy_reader")
+@mock.patch("mist.data_loading.data_loading_utils.get_numpy_reader")
 @mock.patch(
     "mist.data_loading.dali_loader.fn.transpose",
     side_effect=["transposed_image", "transposed_label"]
@@ -470,7 +484,7 @@ def test_eval_pipeline_define_graph(
 )
 @mock.patch("mist.data_loading.dali_loader.DALIGenericIterator")
 @mock.patch("mist.data_loading.dali_loader.TrainPipeline")
-@mock.patch("mist.data_loading.utils.validate_train_and_eval_inputs")
+@mock.patch("mist.data_loading.data_loading_utils.validate_train_and_eval_inputs")
 def test_get_training_dataset_parametrized(
     mock_validate,
     mock_train_pipeline,
@@ -511,7 +525,9 @@ def test_get_training_dataset_parametrized(
 
 @mock.patch("mist.data_loading.dali_loader.DALIGenericIterator")
 @mock.patch("mist.data_loading.dali_loader.EvalPipeline")
-@mock.patch("mist.data_loading.utils.validate_train_and_eval_inputs")
+@mock.patch(
+    "mist.data_loading.data_loading_utils.validate_train_and_eval_inputs"
+)
 def test_get_validation_dataset(mock_validate, mock_pipeline, mock_dali_iter):
     """Test that get_validation_dataset returns a DALI iterator."""
     # Create dummy paths for images and labels.
