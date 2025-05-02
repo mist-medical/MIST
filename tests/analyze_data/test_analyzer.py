@@ -19,7 +19,7 @@ import pandas as pd
 import pytest
 import ants
 
-from mist.analyze_data.analyze import Analyzer
+from mist.analyze_data.analyzer import Analyzer
 from mist.runtime import utils
 from importlib import metadata
 
