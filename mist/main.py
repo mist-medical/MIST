@@ -9,11 +9,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Main script for MIST."""
-from typing import Tuple, Optional, List
 import os
 import argparse
 import numpy as np
-import pandas as pd
 import torch
 from rich.console import Console
 
