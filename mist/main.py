@@ -9,19 +9,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Main script for MIST."""
+from typing import Tuple, Optional, List
 import os
 import argparse
 import numpy as np
+import pandas as pd
 import torch
+from rich.console import Console
 
 # Import MIST modules.
 from mist.analyze_data.analyzer import Analyzer
 from mist.preprocess_data.preprocess import preprocess_dataset
 from mist.runtime import args
 from mist.runtime.run import Trainer
-from mist.evaluate_preds.evaluate import evaluate
+from mist.evaluate_preds.evaluator import Evaluator
+from mist.evaluate_preds import evaluation_utils
 from mist.runtime import utils
 from mist.inference import main_inference
+
+
+# Initialize console for rich output.
+console = Console()
 
 
 def create_folders(arguments: argparse.Namespace) -> None:
@@ -76,19 +84,35 @@ def main(arguments: argparse.Namespace) -> None:
             main_inference.test_on_fold(arguments, fold)
 
         # Evaluate predictions from cross-validation.
-        evaluate(
-            config_json=os.path.join(arguments.results, "config.json"),
-            paths_to_predictions=os.path.join(
-                arguments.results, "train_paths.csv"
-            ),
-            source_dir=os.path.join(
-                arguments.results, "predictions", "train", "raw"
-            ),
-            output_csv=os.path.join(arguments.results, "results.csv"),
-            list_of_metrics=arguments.metrics,
-            use_unit_spacing=arguments.use_unit_spacing,
-            surf_dice_tol=arguments.surf_dice_tol,
+        filepaths_df, warnings = (
+            evaluation_utils.build_evaluation_dataframe_from_mist_arguments(
+                arguments
+            )
         )
+
+        # Print warnings from constructing the evaluation dataframe if any.
+        if warnings:
+            console.print(warnings)
+
+        # If no valid prediction-mask pairs were found, skip evaluation.
+        if filepaths_df.empty:
+            console.print(
+                "[red]No valid prediction-mask pairs found. "
+                "Skipping evaluation.[/red]"
+            )
+        else:
+            evaluation_classes = utils.read_json_file(
+                os.path.join(arguments.results, "config.json")
+            )["final_classes"]
+
+            evaluator = Evaluator(
+                filepaths_dataframe=filepaths_df,
+                evaluation_classes=evaluation_classes,
+                output_csv_path=os.path.join(arguments.results, "results.csv"),
+                selected_metrics=arguments.metrics,
+                surf_dice_tol=arguments.surf_dice_tol,
+            )
+            evaluator.run()
 
     # Inference pipeline. Run inference on test set.
     if arguments.exec_mode == "all" or arguments.exec_mode == "train":

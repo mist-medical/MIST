@@ -589,14 +589,16 @@ def get_flip_axes() -> List[List[int]]:
     return [[2], [3], [4], [2, 3], [2, 4], [3, 4], [2, 3, 4]]
 
 
-def init_results_df(
-        config: Dict[str, Any],
+def initialize_results_dataframe(
+        evaluation_classes: Dict[str, List[int]],
         metrics: List[str]
 ) -> pd.DataFrame:
     """Initialize results dataframe.
 
     Args:
-        config: Configuration dictionary.
+        evaluation_classes: Dictionary with class names as keys and lists of
+            labels. This can be found in the MIST configuration file under
+            the "final_classes" key.
         metrics: List of metrics to be included in the results.
 
     Returns:
@@ -606,7 +608,7 @@ def init_results_df(
     # Initialize new results dataframe
     results_cols = ["id"]
     for metric in metrics:
-        for key in config["final_classes"].keys():
+        for key in evaluation_classes.keys():
             results_cols.append(f"{key}_{metric}")
 
     results_df = pd.DataFrame(columns=results_cols)

@@ -499,11 +499,6 @@ def get_main_args():
         choices=["dice", "surf_dice", "haus95", "avg_surf"],
         help="List of metrics to use for evaluation"
     )
-    parser.boolean_flag(
-        "--use-unit-spacing",
-        default=False,
-        help="Use unit image spacing (1, 1, 1) to compute Hausdorff distances"
-    )
     parser.arg(
         "--surf-dice-tol",
         type=positive_float,
