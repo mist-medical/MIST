@@ -9,43 +9,48 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Utilities for evaluating predictions."""
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional
 import os
-import argparse
 import pandas as pd
 
 
-def build_evaluation_dataframe_from_mist_arguments(
-        arguments:argparse.Namespace
-) -> Tuple[pd.DataFrame, Optional[List[str]]]:
+def build_evaluation_dataframe(
+        train_paths_csv: str,
+        prediction_folder: str,
+) -> Tuple[pd.DataFrame, Optional[str]]:
     """Get DataFrame with columns 'id', 'mask', and 'prediction' for evaluation.
 
     This function matches predictions to ground truth masks based on the patient
     ID, skipping any rows where either file is missing.
 
     Args:
-        arguments: Namespace object containing MIST command-line arguments.
+        train_paths_csv: Filepath for train_paths.csv in the MIST results
+            folder.
+        prediction_folder: Folder containing the predictions form either
+            the MIST training pipeline or from the MIST Postprocessor.
 
     Returns:
         Tuple:
             Dataframe with valid entries for evaluation.
             Any warning messages related to missing files.
     """
+    # Initialize the error messages list.
     error_messages = []
 
-    # Path to input CSV and prediction directory
-    train_paths_csv = os.path.join(arguments.results, "train_paths.csv")
-    prediction_folder = os.path.join(
-        arguments.results, "predictions", "train", "raw"
-    )
-
+    # Check if the train_paths.csv file exists. If not, return an empty
+    # DataFrame and an error message indicating the missing file. This will
+    # signal to the evaluator that the evaluation cannot proceed.
     if not os.path.exists(train_paths_csv):
         error_messages.append(
-            "[red]Missing train_paths.csv at {train_paths_csv}[/red]"
+            "[red]No train_paths.csv at {train_paths_csv}[/red]"
         )
-        return pd.DataFrame(), error_messages
+        return pd.DataFrame(), error_messages[0]
 
+    # Otherwise, read the CSV file and extract the patient IDs and file paths.
     train_paths_df = pd.read_csv(train_paths_csv)
+
+    # Initialize an empty list to store the file paths for valid entries.
+    # This will be used to create the DataFrame for evaluation.
     filepaths = []
 
     for _, row in train_paths_df.iterrows():

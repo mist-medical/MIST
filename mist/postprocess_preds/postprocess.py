@@ -1,22 +1,36 @@
+# Copyright (c) MIST Imaging LLC.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Postprocessor class for MIST predictions.
+
+This class is responsible for applying postprocessing strategies to
+a set of predictions and evaluating the results. It includes methods for
+removing small objects, filling holes, and getting the top K connected
+components.
+"""
 import os
+import subprocess
 import json
-import pdb
 
 import ants
-import subprocess
 import pandas as pd
 import numpy as np
 
-# Rich progress bar
+# Rich progress bar.
 from rich.console import Console
 from rich.text import Text
 
-from mist.evaluate_preds.evaluate import evaluate
-from mist.runtime.utils import (
-    get_progress_bar,
-    get_transform,
-    group_labels
-)
+# MIST imports.
+from mist.evaluate_preds.evaluator import Evaluator
+from mist.evaluate_preds import evaluation_utils
+from mist.runtime import utils
 
 console = Console()
 
@@ -48,14 +62,14 @@ def compute_improvement_score(original_results, new_results, metrics):
 
 
 def apply_transform(mask_ants, transform_name, all_labels, apply_to_labels, transform_kwargs):
-    transform = get_transform(transform_name)
+    transform = utils.get_transform(transform_name)
 
     old_pred_npy = mask_ants.numpy()
 
     if apply_to_labels == [-1]:
         apply_to_labels = all_labels
 
-    grouped_labels = group_labels(old_pred_npy, apply_to_labels)
+    grouped_labels = utils.group_labels(old_pred_npy, apply_to_labels)
     grouped_labels = grouped_labels.astype("uint8")
 
     if transform_name != "fill_holes":
@@ -83,11 +97,10 @@ def apply_transform(mask_ants, transform_name, all_labels, apply_to_labels, tran
 
 class Postprocessor:
     def __init__(self, args):
-
         self.args = args
-        self.config_file = os.path.join(self.args.base_results, "config.json")
-        with open(self.config_file, "r") as file:
-            self.config = json.load(file)
+        self.config = utils.read_json_file(
+            os.path.join(self.args.base_results, "config.json")
+        )
 
         self.all_labels = self.config["labels"][1:]
         self.apply_to_labels = self.args.apply_to_labels
@@ -102,7 +115,7 @@ class Postprocessor:
 
     def check_transforms(self, transforms, messages, transform_kwargs):
         for transform_type in transforms:
-            progress = get_progress_bar(messages[transform_type])
+            progress = utils.get_progress_bar(messages[transform_type])
             with progress as pb:
                 for j in pb.track(range(len(self.base_results_df.iloc[:-5]))):
                     # Read raw prediction and apply morphological clean up
@@ -115,18 +128,27 @@ class Postprocessor:
                                                transform_kwargs)
                     ants.image_write(new_pred, os.path.join(self.dest_dir, "{}.nii.gz".format(patient_id)))
 
-        # Evaluate new predictions
-        evaluate(self.config_file,
-                 self.train_paths,
-                 self.dest_dir,
-                 self.new_results_csv,
-                 self.metrics,
-                 self.args.use_native_spacing,
-                 self.args.surf_dice_tol)
+        # Configure and run evaluator.
+        evaluation_paths_df, messages = (
+            evaluation_utils.build_evaluation_dataframe(
+                self.train_paths, self.dest_dir
+            )
+        )
+        if evaluation_paths_df is not None:
+            evaluator = Evaluator(
+                filepaths_dataframe=evaluation_paths_df,
+                evaluation_classes=self.config["final_classes"],
+                output_csv_path=self.new_results_csv,
+                selected_metrics=self.metrics,
+                surf_dice_tol=self.args.surf_dice_tol,
+            )
+            evaluator.run()
 
         # Compute improvement score
         new_results_df = pd.read_csv(self.new_results_csv)
-        score = compute_improvement_score(self.base_results_df, new_results_df, self.metrics)
+        score = compute_improvement_score(
+            self.base_results_df, new_results_df, self.metrics
+        )
         return score
 
     def run(self):

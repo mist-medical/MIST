@@ -83,8 +83,13 @@ def main(arguments: argparse.Namespace) -> None:
 
         # Evaluate predictions from cross-validation.
         filepaths_df, warnings = (
-            evaluation_utils.build_evaluation_dataframe_from_mist_arguments(
-                arguments
+            evaluation_utils.build_evaluation_dataframe(
+                train_paths_csv=os.path.join(
+                    arguments.results, "train_paths.csv"
+                ),
+                prediction_folder=os.path.join(
+                    arguments.results, "predictions", "train", "raw"
+                ),
             )
         )
 
