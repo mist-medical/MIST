@@ -26,7 +26,7 @@ from mist.models import get_model
 from mist.data_loading import dali_loader
 from mist.preprocess_data import preprocess
 from mist.runtime import utils
-from mist.postprocess_preds import postprocess
+from mist.postprocess_preds import postprocessor
 
 
 def get_sw_prediction(
@@ -621,7 +621,7 @@ def test_time_inference(
                                     "fill_label": config[transform][i][1]
                                 }
 
-                            prediction = postprocess.apply_transform(
+                            prediction = postprocessor.apply_transform(
                                 prediction,
                                 transform,
                                 config["labels"],
