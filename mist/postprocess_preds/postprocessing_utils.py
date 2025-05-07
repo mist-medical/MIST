@@ -150,6 +150,10 @@ def replace_small_components_binary(
     Returns:
         A labeled mask where small objects are relabeled.
     """
+    # Check if the binary mask is empty.
+    if binary_mask.max() == 0:
+        return binary_mask.astype("uint8")
+    
     # Convert binary mask to labeled connected components.
     labeled_components = skimage.measure.label(binary_mask)
 

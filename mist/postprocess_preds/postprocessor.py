@@ -37,11 +37,11 @@ class Postprocessor:
         prediction_dir: Directory containing the original predicted masks.
         output_dir: Destination directory for saving postprocessed masks.
         transforms: List of transform names to apply.
-        transform_kwargs: Keyword arguments to be passed to each transform.
         all_labels: List of all labels in the dataset.
         apply_to_labels: Subset of labels to which transforms should be applied.
         apply_sequentially: Whether to apply transforms label-by-label or to the
             entire set of labels at once.
+        transform_kwargs: Keyword arguments to be passed to each transform.
         console: Rich console object for printing messages.
     """
     def __init__(
@@ -50,10 +50,10 @@ class Postprocessor:
         prediction_dir: str,
         output_dir: str,
         transforms: List[str],
-        transform_kwargs: Dict[str, Any],
         all_labels: List[int],
         apply_to_labels: List[int],
-        apply_sequentially: bool=False,
+        apply_sequentially: bool,
+        transform_kwargs: Dict[str, Any],
     ):
         """Initialize a Postprocessor.
 
@@ -62,26 +62,26 @@ class Postprocessor:
             prediction_dir: Folder with original prediction masks.
             output_dir: Destination to save transformed masks.
             transforms: List of transform names to apply.
-            transform_kwargs: Dictionary of transform parameters.
             all_labels: All available labels in the dataset.
             apply_to_labels: Labels to apply the transform to.
             apply_sequentially: Whether to apply per-label or grouped.
+            transform_kwargs: Dictionary of transform parameters.
         """
         self.train_paths_csv = train_paths_csv
         self.prediction_dir = prediction_dir
         self.output_dir = output_dir
         self.transforms = transforms
-        self.transform_kwargs = transform_kwargs
         self.all_labels = all_labels
         self.apply_to_labels = (
             all_labels if apply_to_labels == [-1] else apply_to_labels
         )
         self.apply_sequentially = apply_sequentially
+        self.transform_kwargs = transform_kwargs
         self.console = Console()
 
         os.makedirs(self.output_dir, exist_ok=True)
 
-    def apply(self) -> pd.DataFrame:
+    def run(self) -> pd.DataFrame:
         """Apply the configured transforms to the prediction directory.
 
         Returns:
@@ -95,55 +95,114 @@ class Postprocessor:
             f"[bold]Transforms:[/bold] {', '.join(self.transforms)}"
         )
         self.console.print(
-            f"[bold]Target Labels:[/bold] {', '.join(map(str, self.apply_to_labels))}"
+            "[bold]Target Labels:[/bold] "
+            f"{', '.join(map(str, self.apply_to_labels))}"
+        )
+        self.console.print(
+            "[bold]Applying sequentially:[/bold] "
+            f"{'Yes' if self.apply_sequentially else 'No'}"
         )
         self.console.print()  # Add spacing after header.
 
+        # Error or warning messages to be printed at the end.
+        messages = []
+
         # Copy base predictions to output folder.
         for filename in os.listdir(self.prediction_dir):
-            shutil.copy(
-                os.path.join(self.prediction_dir, filename),
-                os.path.join(self.output_dir, filename),
-            )
+            try:
+                shutil.copy(
+                    os.path.join(self.prediction_dir, filename),
+                    os.path.join(self.output_dir, filename),
+                )
+            except FileNotFoundError as e:
+                messages.append(
+                    f"[red]Error copying {filename}: {e}[/red]"
+                )
 
-        # Load ID list.
+        # Load ID list. Terminate the process if the CSV is not found.
+        if not os.path.exists(self.train_paths_csv):
+            messages.append(
+                f"[red]train_paths.csv not found at {self.train_paths_csv}"
+                "[/red]"
+            )
+            return pd.DataFrame()
         train_paths_df = pd.read_csv(self.train_paths_csv)
         patient_ids = train_paths_df["id"].tolist()
 
+        # Apply each transform to the prediction masks.
         for transform_name in self.transforms:
-            transform_fn = get_transform(transform_name)
+            try:
+                transform_fn = get_transform(transform_name)
+            except ValueError as e:
+                messages.append(
+                    f"[red]Error getting transform {transform_name}: {e}[/red]"
+                )
+                continue
             progress_bar = get_progress_bar(f"Applying {transform_name}")
 
             with progress_bar as pb:
                 for patient_id in pb.track(patient_ids, total=len(patient_ids)):
+                    # Get the path to the original mask and the output path.
                     output_path = os.path.join(
                         self.output_dir, f"{patient_id}.nii.gz"
                     )
                     base_mask_path = os.path.join(
                         self.prediction_dir, f"{patient_id}.nii.gz"
                     )
+
+                    # Check if base mask exists.
+                    if not os.path.exists(base_mask_path):
+                        messages.append(
+                            f"[red]For patient {patient_id}, base mask not "
+                            "found! Skipping this case.[/red]"
+                        )
+                        continue
                     base_mask = ants.image_read(base_mask_path)
 
-                    transformed_mask = transform_fn(
-                        base_mask.numpy().astype("uint8"),
-                        labels_list=self.apply_to_labels,
-                        apply_sequentially=self.apply_sequentially,
-                        **self.transform_kwargs
-                    ).astype("uint8")
-
-                    transformed_mask = base_mask.new_image_like(
-                        transformed_mask
-                    )
-                    ants.image_write(transformed_mask, output_path)
+                    # Apply the transform to the mask.
+                    try:
+                        transformed_mask = transform_fn(
+                            base_mask.numpy().astype("uint8"),
+                            labels_list=self.apply_to_labels,
+                            apply_sequentially=self.apply_sequentially,
+                            **self.transform_kwargs
+                        ).astype("uint8")
+                    except ValueError as e:
+                        messages.append(
+                            f"[red]Error applying transform {transform_name} "
+                            f"to patient {patient_id}: {e}[/red]"
+                        )
+                        continue
+                    else:
+                        # Save the transformed mask.
+                        transformed_mask = base_mask.new_image_like(
+                            transformed_mask
+                        )
+                        ants.image_write(transformed_mask, output_path)
 
         # Return evaluation-compatible DataFrame.
-        post_df, warnings = evaluation_utils.build_evaluation_dataframe(
+        postprocess_df, warnings = evaluation_utils.build_evaluation_dataframe(
             self.train_paths_csv, self.output_dir
         )
 
+        # Check for warnings and errors in the DataFrame. If so, add them to
+        # the messages list.
         if warnings:
+            messages += warnings
+
+        # Print any messages collected during the process.
+        if messages:
             self.console.print(
-                f"[yellow]Warnings during postprocessing:[/yellow]\n{warnings}"
+                Text(
+                    "Postprocessing completed with the following messages:",
+                    style="bold underline"
+                )
+            )
+            for message in messages:
+                self.console.print(message)
+        else:
+            self.console.print(
+                "[green]Postprocessing completed successfully![/green]"
             )
 
-        return post_df
+        return postprocess_df
