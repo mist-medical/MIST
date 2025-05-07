@@ -13,6 +13,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Tuple, Optional
 import numpy as np
 
+# MIST imports.
 from mist.metrics import metrics
 
 
@@ -57,6 +58,7 @@ def register_metric(cls):
 
 @register_metric
 class DiceCoefficient(Metric):
+    """Dice coefficient metric."""
     name = "dice"
     best = 1.0
     worst = 0.0
@@ -67,9 +69,10 @@ class DiceCoefficient(Metric):
 
 @register_metric
 class Hausdorff95(Metric):
+    """95th percentile Hausdorff distance metric."""
     name = "haus95"
     best = 0.0
-    worst = float("inf")  # Will be dynamically overridden.
+    worst = float("inf") # Will be dynamically overridden.
 
     def __call__(self, truth, pred, spacing, **kwargs):
         distances = metrics.compute_surface_distances(truth, pred, spacing)
@@ -78,6 +81,7 @@ class Hausdorff95(Metric):
 
 @register_metric
 class SurfaceDice(Metric):
+    """Surface Dice metric."""
     name = "surf_dice"
     best = 1.0
     worst = 0.0
@@ -91,9 +95,10 @@ class SurfaceDice(Metric):
 
 @register_metric
 class AverageSurfaceDistance(Metric):
+    """Average surface distance metric."""
     name = "avg_surf"
     best = 0.0
-    worst = float("inf")  # Will be dynamically overridden.
+    worst = float("inf") # Will be dynamically overridden.
 
     def __call__(self, truth, pred, spacing, **kwargs):
         distances = metrics.compute_surface_distances(truth, pred, spacing)
