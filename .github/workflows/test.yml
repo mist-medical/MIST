@@ -1,0 +1,60 @@
+name: Run Tests and Generate Coverage Badge
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install \
+          torch \
+          monai \
+          antspyx \
+          simpleitk \
+          numpy \
+          pandas \
+          rich \
+          scipy \
+          scikit-learn \
+          scikit-image \
+          einops \
+          pytest \
+          pytest-cov \
+          coverage-badge
+
+    - name: Run tests and generate coverage report
+      run: |
+        pytest --cov=mist --cov-report=term-missing --cov-report=xml
+        coverage-badge -o coverage.svg -f
+
+    - name: Upload coverage badge
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-badge
+        path: coverage.svg
+
+    - name: Commit coverage badge to repo (optional)
+      if: github.ref == 'refs/heads/main'
+      run: |
+        git config --global user.name "github-actions"
+        git config --global user.email "github-actions@github.com"
+        git add coverage.svg
+        git commit -m "Update coverage badge"
+        git push
+      continue-on-error: true

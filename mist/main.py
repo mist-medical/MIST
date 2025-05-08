@@ -1,17 +1,33 @@
+# Copyright (c) MIST Imaging LLC.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """Main script for MIST."""
 import os
 import argparse
 import numpy as np
 import torch
+from rich.console import Console
 
 # Import MIST modules.
-from mist.analyze_data.analyze import Analyzer
+from mist.analyze_data.analyzer import Analyzer
 from mist.preprocess_data.preprocess import preprocess_dataset
 from mist.runtime import args
 from mist.runtime.run import Trainer
-from mist.evaluate_preds.evaluate import evaluate
+from mist.evaluate_preds.evaluator import Evaluator
+from mist.evaluate_preds import evaluation_utils
 from mist.runtime import utils
 from mist.inference import main_inference
+
+
+# Initialize console for rich output.
+console = Console()
 
 
 def create_folders(arguments: argparse.Namespace) -> None:
@@ -66,19 +82,48 @@ def main(arguments: argparse.Namespace) -> None:
             main_inference.test_on_fold(arguments, fold)
 
         # Evaluate predictions from cross-validation.
-        evaluate(
-            config_json=os.path.join(arguments.results, "config.json"),
-            paths_to_predictions=os.path.join(
-                arguments.results, "train_paths.csv"
-            ),
-            source_dir=os.path.join(
-                arguments.results, "predictions", "train", "raw"
-            ),
-            output_csv=os.path.join(arguments.results, "results.csv"),
-            list_of_metrics=arguments.metrics,
-            use_unit_spacing=arguments.use_unit_spacing,
-            surf_dice_tol=arguments.surf_dice_tol,
+        filepaths_df, warnings = (
+            evaluation_utils.build_evaluation_dataframe(
+                train_paths_csv=os.path.join(
+                    arguments.results, "train_paths.csv"
+                ),
+                prediction_folder=os.path.join(
+                    arguments.results, "predictions", "train", "raw"
+                ),
+            )
         )
+
+        # Print warnings from constructing the evaluation dataframe if any.
+        if warnings:
+            console.print(warnings)
+
+        # If no valid prediction-mask pairs were found, skip evaluation.
+        if filepaths_df.empty:
+            console.print(
+                "[red]No valid prediction-mask pairs found. "
+                "Skipping evaluation.[/red]"
+            )
+        else:
+            # Save paths to predictions and masks to CSV file.
+            filepaths_df.to_csv(
+                os.path.join(arguments.results, "evaluation_paths.csv"),
+                index=False,
+            )
+
+            # Get evaluation classes from config.json file.
+            evaluation_classes = utils.read_json_file(
+                os.path.join(arguments.results, "config.json")
+            )["final_classes"]
+
+            # Initialize the evaluator and run the evaluation.
+            evaluator = Evaluator(
+                filepaths_dataframe=filepaths_df,
+                evaluation_classes=evaluation_classes,
+                output_csv_path=os.path.join(arguments.results, "results.csv"),
+                selected_metrics=arguments.metrics,
+                surf_dice_tol=arguments.surf_dice_tol,
+            )
+            evaluator.run()
 
     # Inference pipeline. Run inference on test set.
     if arguments.exec_mode == "all" or arguments.exec_mode == "train":

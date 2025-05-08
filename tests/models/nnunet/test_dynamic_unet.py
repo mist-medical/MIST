@@ -11,7 +11,7 @@ def create_valid_params(
         num_deep_supervision_heads: int=1
 ) -> Dict:
     """Helper to generate a valid set of parameters for a 2D UNet.
-    
+
     In this helper, we define a network with three levels (input, decoder,
     and bottleneck) to ensure the kernel_size and strides have a length of 3.
     For the decoder layers, the upsample_kernel_size must have a length of

@@ -14,7 +14,7 @@ This module contains a modified version of MONAI's implementation of the
 Dynamic UNet architecture. This module is designed to be used with the MIST
 and is (in our opinion) more readable than the original MONAI implementation.
 This implementation is based on the original MONAI implementation, but has been
-
+modified to be compatible with the MIST.
 """
 from collections.abc import Sequence
 from typing import Union, Tuple, Optional, Dict

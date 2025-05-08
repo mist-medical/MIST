@@ -1,3 +1,13 @@
+# Copyright (c) MIST Imaging LLC.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """Analyzer class for creating MIST configuration file."""
 import os
 import json
@@ -12,7 +22,7 @@ import rich
 
 # MIST imports.
 from mist.runtime import utils
-from mist.analyze_data import analyzer_constants as constants
+from mist.analyze_data.analyzer_constants import AnalyzeConstants as constants
 
 # Set up console for rich text.
 console = rich.console.Console()
@@ -71,11 +81,10 @@ class Analyzer:
                 )
 
             # Check that the required fields are not None.
-            if field is None:
+            if self.dataset_information[field] is None:
                 raise ValueError(
-                    f"Dataset description JSON file must contain a '{field}' "
-                    f"entry. There is a None value in the JSON file for "
-                    f"'{field}'."
+                    f"Dataset description JSON file must contain a "
+                    f"entry '{field}'. Got None for '{field}' in the JSON file."
                 )
 
             # Check that the train data folder exists and is not empty.
@@ -113,16 +122,15 @@ class Analyzer:
                 if not isinstance(self.dataset_information[field], dict):
                     raise TypeError(
                         "The 'images' entry must be a dictionary of the format "
-                        "{'image_type': [list of image names]} in the dataset "
-                        "description JSON file. Found the following entry "
-                        f"instead: {self.dataset_information[field]}."
+                        "'image_type': [list of image names] in the dataset "
+                        "description JSON file."
                     )
 
                 if not self.dataset_information[field]:
                     raise ValueError(
                         "The 'images' entry is empty. Please provide a "
                         "dictionary of the format "
-                        f"{'image_type': [list of image names]} in the dataset "
+                        "{'image_type': [list of image names]} in the dataset "
                         "description JSON file."
                     )
 
@@ -223,7 +231,7 @@ class Analyzer:
         )
         crop_to_fg = (
             np.mean(vol_reduction) >=
-            constants.AnalyzeConstants.MIN_AVERAGE_VOLUME_REDUCTION_FRACTION
+            constants.MIN_AVERAGE_VOLUME_REDUCTION_FRACTION
         )
         return crop_to_fg, cropped_dims
 
@@ -246,8 +254,7 @@ class Analyzer:
                 )
 
         use_nz_mask = (
-            (1. - np.mean(nz_ratio)) >=
-            constants.AnalyzeConstants.MIN_SPARSITY_FRACTION
+            (1. - np.mean(nz_ratio)) >= constants.MIN_SPARSITY_FRACTION
         )
         return use_nz_mask
 
@@ -267,9 +274,7 @@ class Analyzer:
                 # We load the masks because they are smaller and faster to load.
                 mask = ants.image_read(patient["mask"])
                 mask = ants.reorient_image2(mask, "RAI")
-                mask.set_direction(
-                    constants.AnalyzeConstants.RAI_ANTS_DIRECTION
-                )
+                mask.set_direction(constants.RAI_ANTS_DIRECTION)
 
                 # Get voxel spacing.
                 original_spacings[i, :] = mask.spacing
@@ -280,13 +285,13 @@ class Analyzer:
         # If anisotropic, adjust the coarsest resolution to bring ratio down.
         if (
             np.max(target_spacing) / np.min(target_spacing) >
-            constants.AnalyzeConstants.MAX_DIVIDED_BY_MIN_SPACING_THRESHOLD
+            constants.MAX_DIVIDED_BY_MIN_SPACING_THRESHOLD
         ):
             low_res_axis = np.argmax(target_spacing)
             target_spacing[low_res_axis] = (
                 np.percentile(
                     original_spacings[:, low_res_axis],
-                    constants.AnalyzeConstants.ANISOTROPIC_LOW_RESOLUTION_AXIS_PERCENTILE
+                    constants.ANISOTROPIC_LOW_RESOLUTION_AXIS_PERCENTILE
                 )
             )
 
@@ -331,14 +336,13 @@ class Analyzer:
                 # set in MAX_RECOMMENDED_MEMORY_SIZE, then warn the user and
                 # print to console.
                 if (
-                    image_memory_size >
-                    constants.AnalyzeConstants.MAX_RECOMMENDED_MEMORY_SIZE
+                    image_memory_size > constants.MAX_RECOMMENDED_MEMORY_SIZE
                 ):
                     print_patient_id = patient["id"]
                     messages += (
                         f"[Warning] In {print_patient_id}: Resampled example "
                         "is larger than the recommended memory size of "
-                        f"{constants.AnalyzeConstants.MAX_RECOMMENDED_MEMORY_SIZE/1e9} "
+                        f"{constants.MAX_RECOMMENDED_MEMORY_SIZE/1e9} "
                         "GB. Consider coarsening or removing this example.\n"
                     )
 
@@ -371,18 +375,16 @@ class Analyzer:
                 # You don"t need to use all of the voxels for this.
                 fg_intensities += (
                     image[mask != 0]
-                ).tolist()[::constants.AnalyzeConstants.CT_GATHER_EVERY_ITH_VOXEL_VALUE] # type: ignore
+                ).tolist()[::constants.CT_GATHER_EVERY_ITH_VOXEL_VALUE] # type: ignore
 
         global_z_score_mean = np.mean(fg_intensities)
         global_z_score_std = np.std(fg_intensities)
         global_window_range = [
             np.percentile(
-                fg_intensities,
-                constants.AnalyzeConstants.CT_GLOBAL_CLIP_MIN_PERCENTILE
+                fg_intensities, constants.CT_GLOBAL_CLIP_MIN_PERCENTILE
             ),
             np.percentile(
-                fg_intensities,
-                constants.AnalyzeConstants.CT_GLOBAL_CLIP_MAX_PERCENTILE
+                fg_intensities, constants.CT_GLOBAL_CLIP_MAX_PERCENTILE
             ),
         ]
 
@@ -514,7 +516,7 @@ class Analyzer:
                         "images are 3D\n"
                     )
                     bad_data.append(i)
-                    break
+                    continue
 
                 # Check that the mask and image headers match and that each
                 # images is 3D.
@@ -592,11 +594,6 @@ class Analyzer:
             self.config_if_no_preprocess()
         else:
             self.analyze_dataset()
-
-        # Add default postprocessing arguments.
-        transforms = ["remove_small_objects", "top_k_cc", "fill_holes"]
-        for transform in transforms:
-            self.config[transform] = []
 
         # Save files.
         self.paths_dataframe.to_csv(

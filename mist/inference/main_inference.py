@@ -1,4 +1,14 @@
-"""Inference functions for MIST."""
+# Copyright (c) MIST Imaging LLC.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Inference functions for 3D, full resolution segmentation using MIST."""
 import argparse
 import os
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
@@ -16,7 +26,7 @@ from mist.models import get_model
 from mist.data_loading import dali_loader
 from mist.preprocess_data import preprocess
 from mist.runtime import utils
-from mist.postprocess_preds import postprocess
+from mist.postprocess_preds.postprocessor import Postprocessor
 
 
 def get_sw_prediction(
@@ -485,7 +495,8 @@ def test_time_inference(
         blend_mode: str,
         tta: bool,
         no_preprocess: bool=False,
-        output_std: bool=False
+        output_std: bool=False,
+        postprocess_strategy_filepath: Optional[str]=None,
 ) -> None:
     """Run test time inference on a dataframe of images.
 
@@ -508,6 +519,8 @@ def test_time_inference(
         tta: Whether to use test time augmentation.
         no_preprocess: Whether to skip preprocessing.
         output_std: Whether to output the standard deviation of the predictions.
+        postprocess_strategy_filepath: The file path to the postprocess strategy
+            JSON file. If None, no postprocessing will be applied.
 
     Returns:
         None. Saves predictions to the destination directory
@@ -587,37 +600,20 @@ def test_time_inference(
                     output_std=output_std,
                 )
 
-                # Apply postprocessing if necessary.
-                transforms = ["remove_small_objects", "top_k_cc", "fill_holes"]
-                for transform in transforms:
-                    if len(config[transform]) > 0:
-                        for i in range(len(config[transform])):
-                            if transform == "remove_small_objects":
-                                transform_kwargs = {
-                                    "small_object_threshold": (
-                                        config[transform][i][1]
-                                        )
-                                }
-                            if transform == "top_k_cc":
-                                transform_kwargs = {
-                                    "morph_cleanup": config[transform][i][1],
-                                    "morph_cleanup_iterations": (
-                                        config[transform][i][2]
-                                    ),
-                                    "top_k": config[transform][i][3]
-                                }
-                            if transform == "fill_holes":
-                                transform_kwargs = {
-                                    "fill_label": config[transform][i][1]
-                                }
-
-                            prediction = postprocess.apply_transform(
-                                prediction,
-                                transform,
-                                config["labels"],
-                                config[transform][i][0],
-                                transform_kwargs
-                            )
+                # Apply postprocessing ig a postprocess strategy is provided.
+                if (
+                    postprocess_strategy_filepath is not None and
+                    os.path.exists(postprocess_strategy_filepath)
+                ):
+                    postprocessor = Postprocessor(
+                        strategy_path=postprocess_strategy_filepath,
+                    )
+                    prediction, _ = (
+                        postprocessor.apply_strategy_to_single_example(
+                            patient_id=patient["id"],
+                            mask=prediction,
+                        )
+                    )
             except (FileNotFoundError, RuntimeError, ValueError) as e:
                 error_messages += (
                     f"[Error] {str(e)}: Prediction failed for {patient['id']}\n"

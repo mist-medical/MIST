@@ -12,6 +12,7 @@ import SimpleITK as sitk
 
 from mist.runtime import utils
 from mist.preprocess_data import preprocessing_constants
+import pdb
 
 console = rich.console.Console()
 
@@ -257,13 +258,13 @@ def compute_dtm(
     # Initialize the list of distance transform maps.
     dtms_sitk = []
 
-    # Get the one-hot encoded masks as a list of sitk images.
+    # Get the one-hot encoded masks as a list of SimpleITK images.
     masks_sitk = utils.make_onehot(mask_ants, labels)
 
     for mask in masks_sitk:
         # Start with case that the mask for the label is non-empty.
         if utils.sitk_get_sum(mask) != 0:
-            # Compute the DTM for the current mask in the list of masks.
+            # Compute the DTM for the current mask.
             dtm_i = sitk.SignedMaurerDistanceMap(
                 sitk.Cast(mask, sitk.sitkUInt8),
                 squaredDistance=False,
@@ -272,6 +273,8 @@ def compute_dtm(
 
             # Normalize the DTM if necessary.
             if normalize_dtm:
+                # Separate the negative (interior) and positive (exterior)
+                # parts.
                 dtm_int = sitk.Cast((dtm_i < 0), sitk.sitkFloat32)
                 dtm_int *= dtm_i
                 int_min, _ = utils.sitk_get_min_max(dtm_int)
@@ -280,12 +283,22 @@ def compute_dtm(
                 dtm_ext *= dtm_i
                 _, ext_max = utils.sitk_get_min_max(dtm_ext)
 
+                # Safeguard against division by zero.
+                # If ext_max is zero, then there are no positive distances.
+                # Similarly, if int_min is zero, then there are no negative
+                # distances.
+                if ext_max == 0:
+                    # Avoid division by zero; this effectively leaves dtm_ext
+                    # unchanged.
+                    ext_max = 1 
+                if int_min == 0:
+                    # Avoid division by zero; this effectively leaves dtm_int
+                    # unchanged.
+                    int_min = -1
+
                 dtm_i = (dtm_ext / ext_max) - (dtm_int / int_min)
         else:
-            # If the mask is empty, create a DTM of ones with the same shape
-            # as the mask. If we are normalizing the DTMs, the we keep the
-            # DTM as an array of ones. Otherwise, we multiply the array of
-            # ones by the diagonal distance of the mask.
+            # Handle the case of an empty mask.
             mask_depth = mask.GetDepth()
             mask_width = mask.GetWidth()
             mask_height = mask.GetHeight()
@@ -297,7 +310,7 @@ def compute_dtm(
                     mask_depth**2 + mask_width**2 + mask_height**2
                 )
                 dtm_i = sitk.GetImageFromArray(
-                    diagonal_distance*all_ones_mask
+                    diagonal_distance * all_ones_mask
                 )
 
             dtm_i = sitk.Cast(dtm_i, sitk.sitkFloat32)
@@ -305,13 +318,14 @@ def compute_dtm(
             dtm_i.SetOrigin(mask.GetOrigin())
             dtm_i.SetDirection(mask.GetDirection())
 
-        # Append the current DTM to the final list of DTMs.
+        # Append the current DTM to the final list.
         dtms_sitk.append(dtm_i)
 
     # Join the DTMs into a single 4D image and return as a numpy array.
     dtm = utils.sitk_to_ants(sitk.JoinSeries(dtms_sitk))
     dtm = dtm.numpy()
     return dtm
+
 
 
 def preprocess_example(
@@ -340,9 +354,8 @@ def preprocess_example(
                 input and the config file calls for its use.
             dtm: DTM(s) as a numpy array.
     """
-    training = True
-    if mask_path is None:
-        training = False
+    # Determine if we are in training mode.
+    training = True if mask_path else False
 
     # Read all images (and mask if training).
     images = []
@@ -376,19 +389,14 @@ def preprocess_example(
         images.append(image)
 
     if training:
-        # Read mask if we are in training mode
+        # Read mask if we are in training mode.
         mask = ants.image_read(mask_path)
 
-        # Crop to foreground
+        # Crop to foreground.
         if config["crop_to_fg"]:
-            if fg_bbox is None:
-                raise ValueError(
-                    "Received None for fg_bbox when cropping to foreground. "
-                    "Please provide a fg_bbox."
-                )
             mask = utils.crop_to_fg(mask, fg_bbox)
 
-        # Put mask into standard space
+        # Put mask into standard space.
         mask = ants.reorient_image2(mask, "RAI")
         mask.set_direction(
             preprocessing_constants.PreprocessingConstants.RAI_ANTS_DIRECTION
@@ -408,14 +416,14 @@ def preprocess_example(
         else:
             dtm = None
 
-        # Add channel axis to mask
+        # Add channel axis to mask.
         mask = np.expand_dims(mask.numpy(), axis=-1)
     else:
         mask = None
         dtm = None
 
-    # Apply windowing and normalization to images
-    # Get dimensions of image in standard space
+    # Apply windowing and normalization to images.
+    # Get dimensions of image in standard space.
     preprocessed_numpy_image = np.zeros((*images[0].shape, len(images)))
     for i, image in enumerate(images):
         preprocessed_numpy_image[..., i] = window_and_normalize(
@@ -450,13 +458,13 @@ def convert_nifti_to_numpy(
     dims = ants.image_header_info(image_list[0])
     dims = dims["dimensions"]
 
-    # Convert images
+    # Convert images.
     image_npy = np.zeros((*dims, len(image_list)))
     for i, image_path in enumerate(image_list):
         image = ants.image_read(image_path)
         image_npy[..., i] = image.numpy()
 
-    # Convert mask if given
+    # Convert mask if given.
     if mask is not None:
         mask_npy = ants.image_read(mask)
         mask_npy = np.expand_dims(mask_npy.numpy(), axis=-1)
