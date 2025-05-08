@@ -595,11 +595,6 @@ class Analyzer:
         else:
             self.analyze_dataset()
 
-        # Add default postprocessing arguments.
-        transforms = ["remove_small_objects", "top_k_cc", "fill_holes"]
-        for transform in transforms:
-            self.config[transform] = []
-
         # Save files.
         self.paths_dataframe.to_csv(
             self.file_paths["image_mask_paths"], index=False

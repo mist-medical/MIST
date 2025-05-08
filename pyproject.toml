@@ -58,8 +58,8 @@ mist_analyze = "mist.scripts.analyze_entrypoint:analyze_entry"
 mist_preprocess = "mist.scripts.preprocess_entrypoint:preprocess_entry"
 mist_train = "mist.scripts.train_entrypoint:train_entry"
 mist_predict = "mist.predict:mist_predict_entry"
-mist_evaluate = "mist.eval_preds:mist_eval_entry"
-mist_postprocess = "mist.post_preds:mist_postprocess_entry"
+mist_evaluate = "mist.scripts.evaluation_entrypoint:evaluation_entry"
+mist_postprocess = "mist.scripts.postprocess_entrypoint:postprocess_entry"
 mist_convert_dataset = "mist.convert_to_mist:convert_to_mist_entry"
 
 [tool.codespell]

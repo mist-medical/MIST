@@ -77,11 +77,11 @@ def main(args: argparse.Namespace) -> None:
     evaluator.run()
 
 
-def mist_eval_entry():
+def evaluation_entry():
     """Entry point for evaluating predictions."""
     args = get_eval_args()
     main(args)
 
 
 if __name__ == "__main__":
-    mist_eval_entry()
+    evaluation_entry()

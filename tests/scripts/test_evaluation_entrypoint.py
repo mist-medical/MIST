@@ -8,21 +8,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Test for evaluation command line tool."""
+"""Tests for evaluation command line tool."""
 import os
 import sys
 import pytest
 from unittest import mock
 import pandas as pd
-import numpy as np
 import argparse
 
 # Path to the script being tested
-import mist.eval_preds as evaluate_cli
+import mist.scripts.evaluation_entrypoint as evaluate_cli
 
 
 @pytest.fixture
 def mock_args():
+    """Fixture to create mock arguments for testing."""
     return argparse.Namespace(
         config="mock_config.json",
         paths_csv="mock_paths.csv",
@@ -32,12 +32,13 @@ def mock_args():
     )
 
 
-@mock.patch("mist.eval_preds.pd.read_csv")
-@mock.patch("mist.eval_preds.utils.read_json_file")
+@mock.patch("mist.scripts.evaluation_entrypoint.pd.read_csv")
+@mock.patch("mist.scripts.evaluation_entrypoint.utils.read_json_file")
 @mock.patch(
-    "mist.eval_preds.utils.compute_results_stats", return_value=pd.DataFrame()
+    "mist.scripts.evaluation_entrypoint.utils.compute_results_stats",
+    return_value=pd.DataFrame()
 )
-@mock.patch("mist.eval_preds.Evaluator")
+@mock.patch("mist.scripts.evaluation_entrypoint.Evaluator")
 @mock.patch("ants.image_header_info", return_value={"spacing": (1.0, 1.0, 1.0)})
 @mock.patch("ants.image_read", return_value=mock.MagicMock())
 def test_main_calls_evaluator_correctly(
@@ -59,14 +60,14 @@ def test_main_calls_evaluator_correctly(
     mock_read_csv.return_value = mock_df
     mock_read_json.return_value = {"final_classes": {"liver": [1]}}
 
-    # Set up a mocked Evaluator instance with a mocked .run method
+    # Set up a mocked Evaluator instance with a mocked .run method.
     mock_evaluator_instance = mock.MagicMock()
     mock_evaluator_cls.return_value = mock_evaluator_instance
 
-    # Call the main function
+    # Call the main function.
     evaluate_cli.main(mock_args)
 
-    # Assertions
+    # Assertions.
     mock_read_csv.assert_called_once_with("mock_paths.csv")
     mock_read_json.assert_called_once_with("mock_config.json")
 
@@ -102,14 +103,14 @@ def test_get_eval_args_parses_arguments_correctly():
     assert args.surf_dice_tol == 2.5
 
 
-@mock.patch("mist.eval_preds.get_eval_args")
-@mock.patch("mist.eval_preds.main")
+@mock.patch("mist.scripts.evaluation_entrypoint.get_eval_args")
+@mock.patch("mist.scripts.evaluation_entrypoint.main")
 def test_mist_eval_entry_calls_main(mock_main, mock_get_args):
     """Test that mist_eval_entry calls main with the correct arguments."""
     mock_args = mock.Mock()
     mock_get_args.return_value = mock_args
 
-    evaluate_cli.mist_eval_entry()
+    evaluate_cli.evaluation_entry()
 
     mock_get_args.assert_called_once()
     mock_main.assert_called_once_with(mock_args)

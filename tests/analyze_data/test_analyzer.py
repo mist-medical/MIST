@@ -978,9 +978,6 @@ def test_run_with_preprocessing(monkeypatch, dummy_mist_args, tmp_path):
         "median_image_size",
         "patch_size",
         "mist_version",
-        "remove_small_objects",
-        "top_k_cc",
-        "fill_holes",
     }
     # (If CT, also window_range, global_z_score_mean, global_z_score_std)
 
@@ -1061,11 +1058,6 @@ def test_run_with_no_preprocessing(monkeypatch, dummy_mist_args, tmp_path):
     assert config["global_z_score_mean"] is None
     assert config["global_z_score_std"] is None
     assert config["median_image_size"] is None
-
-    # But check that postprocessing transforms exist.
-    assert config["remove_small_objects"] == []
-    assert config["top_k_cc"] == []
-    assert config["fill_holes"] == []
 
     # Check that image_mask_paths CSV exists.
     paths_csv_path = analyzer.file_paths["image_mask_paths"]

@@ -9,11 +9,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Postprocessing utilities for MIST predictions."""
-from typing import List, Any
+from typing import List, Any, Dict, TypedDict
 import numpy as np
 import numpy.typing as npt
 import skimage
 from scipy import ndimage
+
+
+class StrategyStep(TypedDict):
+    """TypedDict for a single step in the postprocessing strategy."""
+    transform: str
+    apply_to_labels: list[int]
+    apply_sequentially: bool
+    kwargs: Dict[str, Any]
 
 
 def group_labels_in_mask(
@@ -153,7 +161,7 @@ def replace_small_components_binary(
     # Check if the binary mask is empty.
     if binary_mask.max() == 0:
         return binary_mask.astype("uint8")
-    
+
     # Convert binary mask to labeled connected components.
     labeled_components = skimage.measure.label(binary_mask)
 

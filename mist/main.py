@@ -104,10 +104,18 @@ def main(arguments: argparse.Namespace) -> None:
                 "Skipping evaluation.[/red]"
             )
         else:
+            # Save paths to predictions and masks to CSV file.
+            filepaths_df.to_csv(
+                os.path.join(arguments.results, "evaluation_paths.csv"),
+                index=False,
+            )
+
+            # Get evaluation classes from config.json file.
             evaluation_classes = utils.read_json_file(
                 os.path.join(arguments.results, "config.json")
             )["final_classes"]
 
+            # Initialize the evaluator and run the evaluation.
             evaluator = Evaluator(
                 filepaths_dataframe=filepaths_df,
                 evaluation_classes=evaluation_classes,

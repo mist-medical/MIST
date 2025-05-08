@@ -16,7 +16,9 @@ from scipy import ndimage
 
 # MIST imports.
 from mist.postprocess_preds import postprocessing_utils as utils
-from mist.postprocess_preds.postprocessing_constants import PostprocessingConstants as constants
+from mist.postprocess_preds.postprocessing_constants import (
+    PostprocessingConstants as pc
+)
 
 # Registry dictionary.
 POSTPROCESSING_TRANSFORMS: Dict[str, Callable[..., npt.NDArray[Any]]] = {}
@@ -58,9 +60,7 @@ def remove_small_objects(
     if mask.max() == 0:
         return mask.astype("uint8")
 
-    threshold = kwargs.get(
-        "small_object_threshold", constants.SMALL_OBJECT_THRESHOLD
-    )
+    threshold = kwargs.get("small_object_threshold", pc.SMALL_OBJECT_THRESHOLD)
 
     cleaned_mask = mask.copy()
 
@@ -82,7 +82,7 @@ def remove_small_objects(
 def get_top_k_connected_components(
     mask: npt.NDArray[Any],
     labels_list: List[int],
-    apply_sequentially: bool = False,
+    apply_sequentially: bool=False,
     **kwargs
 ) -> npt.NDArray[Any]:
     """Keeps only top K connected components for specified labels in a mask.
@@ -104,16 +104,16 @@ def get_top_k_connected_components(
     if mask.max() == 0:
         return mask.astype("uint8")
 
-    # Retrieve transformation parameters from kwargs or constants.
+    # Retrieve transformation parameters from kwargs or pc.
     top_k = kwargs.get(
-        "top_k_connected_components", constants.TOP_K_CONNECTED_COMPONENTS
+        "top_k_connected_components", pc.TOP_K_CONNECTED_COMPONENTS
     )
     morph = kwargs.get(
-        "apply_morphological_cleaning", constants.APPLY_MORPHOLOGICAL_CLEANING
+        "apply_morphological_cleaning", pc.APPLY_MORPHOLOGICAL_CLEANING
     )
     morph_iters = kwargs.get(
         "morphological_cleaning_iterations",
-        constants.MORPHOLOGICAL_CLEANING_ITERATIONS
+        pc.MORPHOLOGICAL_CLEANING_ITERATIONS
     )
 
     # Make a copy of the original mask to apply modifications.
@@ -160,7 +160,7 @@ def get_top_k_connected_components(
 def fill_holes_with_label(
     mask: npt.NDArray[Any],
     labels_list: List[int],
-    apply_sequentially: bool = False,
+    apply_sequentially: bool=False,
     **kwargs
 ) -> npt.NDArray[Any]:
     """
@@ -181,7 +181,7 @@ def fill_holes_with_label(
         return mask.astype("uint8")
 
     # Get the label used to fill holes. Defaults to constant.
-    fill_label = kwargs.get("fill_holes_label", constants.FILL_HOLES_LABEL)
+    fill_label = kwargs.get("fill_holes_label", pc.FILL_HOLES_LABEL)
 
     # Make a copy of the original mask for modification.
     filled_mask = mask.copy()
@@ -216,7 +216,7 @@ def fill_holes_with_label(
 def replace_small_objects_with_label(
     mask: npt.NDArray[Any],
     labels_list: List[int],
-    apply_sequentially: bool = False,
+    apply_sequentially: bool=False, # pylint: disable=unused-argument
     **kwargs
 ) -> npt.NDArray[Any]:
     """Replace small objects belonging to certain labels with replacement label.
@@ -224,7 +224,8 @@ def replace_small_objects_with_label(
     Args:
         mask: A multi-label mask.
         labels_list: Labels to apply the transformation to.
-        apply_sequentially: Whether to apply the transform per-label.
+        apply_sequentially: Whether to apply the transform per-label. This is
+            a placeholder and not used in this implementation.
         **kwargs:
             small_object_threshold: Threshold below which objects are replaced.
             replacement_label: Label to use for replacement.
@@ -238,39 +239,29 @@ def replace_small_objects_with_label(
 
     # Get size threshold and replacement label from kwargs or use defaults.
     min_size = kwargs.get(
-        "small_object_threshold", constants.SMALL_OBJECT_THRESHOLD
+        "small_object_threshold", pc.SMALL_OBJECT_THRESHOLD
     )
     replacement = kwargs.get(
-        "replacement_label", constants.REPLACE_SMALL_OBJECTS_LABEL
+        "replacement_label", pc.REPLACE_SMALL_OBJECTS_LABEL
     )
 
     # Create a copy of the input mask to apply changes.
     updated_mask = mask.copy()
 
-    if apply_sequentially:
-        # Apply the transformation to each label independently.
-        for label in labels_list:
-            # Create a binary mask where the current label is present.
-            binary = mask == label
+    # Apply the transformation to each label independently.
+    # This is required to preserve the original label values for large
+    # components while replacing only small components with the specified
+    # replacement label.
+    for label in labels_list:
+        # Create a binary mask where the current label is present.
+        binary = mask == label
 
-            # Clear this label from the updated mask before replacement.
-            updated_mask[binary] = 0
+        # Clear this label from the updated mask before replacement.
+        updated_mask[binary] = 0
 
-            # Replace small components with the replacement label.
-            updated_mask += utils.replace_small_components_binary(
-                binary, label, replacement, min_size
-            )
-    else:
-        # Group all specified labels into a single binary mask.
-        grouped_binary = utils.group_labels_in_mask(mask, labels_list) > 0
-
-        # Clear these labels from the updated mask before replacement.
-        updated_mask[grouped_binary] = 0
-
-        # Replace small grouped components with the replacement label.
-        # The original_label is passed only for bookkeeping.
+        # Replace small components with the replacement label.
         updated_mask += utils.replace_small_components_binary(
-            grouped_binary, labels_list[0], replacement, min_size
+            binary, label, replacement, min_size
         )
 
     # Return the updated mask as an unsigned 8-bit integer array.
