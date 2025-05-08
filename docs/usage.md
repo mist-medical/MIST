@@ -116,7 +116,7 @@ The ```mist_predict``` command and its arguments are described below:
 * ```mist_predict```: Test time inference on new data given as either a JSON or CSV file 
 	- ```--models```: (required) The full path to the ```models``` folder in the output of the MIST pipeline
 	- ```--config```: (required) The full path to the directory to the ```config.json``` file in the output of the MIST pipeline
-	- ```--data```: (required) The full path to the JSON or CSV file, which contains the path to your test data
+	- ```--data```: (required) The full path to the CSV file, which contains the path to your test data
 	- ```--output```: (required) The full path to the directory to save the predictions
     - ```--fast```: (optional, default: False) Only use the first model (not all five) to get prediction
     - ```--gpu```: (optional, default: 0) Which GPU to run inference on
@@ -126,64 +126,169 @@ The ```mist_predict``` command and its arguments are described below:
     - ```--no-preprocess``` (optional, default: False) Use this to turn off the preprocessing pipeline before inference
     - ```--output-std``` (optional, default: False) Use this to output the standard deviation for predictions from multiple models
 
-For CSV formatted data, the CSV file must, at a minimum, have an ```id``` column with the new patient IDs and one column for each image type. A column for the ```mask``` is allowed if you want to run the evaluation portion of the pipeline. For example, for the BraTS dataset, our CSV header would look like the following.
+For CSV formatted data, the CSV file must, at a minimum, have an ```id``` column with the new patient IDs and one column for each image type. For example, for the BraTS dataset, our CSV header would look like the following.
 
-| id         | mask (optional) | t1               | t2               | tc               | fl               |
-|------------|-----------------|------------------|------------------|------------------|------------------|
-| Patient ID | Path to mask    | Path to t1 image | Path to t2 image | Path to tc image | Path to fl image |
-
-Similarly, for JSON formatted data, we would have the following.
-
-```text
-{
-  "Patient ID": {
-      "mask": "Path to mask", *** (optional) ***
-      "t1": "Path to t1 image",
-      "t2": "Path to t2 image",
-      "tc": "Path to tc image", 
-      "fl": "Path to fl image"
-  }
-}
-```
+| id         | t1               | t2               | tc               | fl               |
+|------------|------------------|------------------|------------------|------------------|
+| Patient ID | Path to t1 image | Path to t2 image | Path to tc image | Path to fl image |
 
 ## Postprocessing
-MIST provides an optional postprocessing tool to test different postprocessing strategies after training. This command 
-will apply a combination of user-provided postprocessing transformations and evaluate the new set of predictions. After
-evaluation, an improvement score that ranges from 0 to 100 based on the average change for each metric vs. the original 
-predictions is computed. If this improvement score exceeds 5, the MIST pipeline can update the ```config.json```
-file with this new postprocessing strategy. 
 
-The ```mist_postprocess``` and its arguments are described below:
+MIST includes a flexible postprocessing utility that allows users to apply custom postprocessing strategies to prediction masks. These strategies are defined via a JSON file and support operations like removing small objects, extracting connected components, and filling holes. This enables experimentation with a range of postprocessing techniques to improve segmentation accuracy.
 
-* ```mist_postprocess```: Runs the postprocessing pipeline on the original predictions produced by the main MIST pipeline
-	- ```--base-results```: (required) The full path to the results of the MIST pipeline
-	- ```--output```: (required) The full path to the output of the postprocessing pipeline
-	- ```--apply-to-labels```: (required, default: [-1]) List of labels to apply postprocessing transformations, default is ```[-1]``` or all labels combined
-	- At least one postprocessing transformation:
-      	- ```--remove-small-objects```: Removes small objects of size less than or equal to ```--small-object-threshold```, which is 64 by default
-      	- ```--top-k-cc```: Only keep the ```--top-k``` (by default 2) connected components
-      	- ```--fill-holes```: Fill holes with ```--fill-label``` (you need to specify this)
-    - ```--metrics```: (required, default: ["dice", "haus95"]) List of metrics to use during evaluation (see ```mist_evaluate```)
-	- ```--update-config```: (optional, default: False) Set this if you want the config file to be updated if postprocessing, on average, improves results by at least 5%
-	- ```--morph-cleanup```: (optional, default: False) Applies a morphological erosion prior to selecting the top k connected components and then uses a dilation after the connected components are selected
-    - ```--normalize-hd```: (optional, default: False) Turn this on to normalize Hausdorff distances during evaluation
-    - ```--use-native-spacing```: (optional, default: False) Use native image spacing for computing Hausdorff distances during evaluation
-	
-!!! warning
-	```mist_postprocess``` can be very slow if your images are extremely large and/or you have a lot of labels (which will slow down evaluation).
+Postprocessing is run using the `mist_postprocess` command and requires:
+- a directory containing prediction masks (`--base-predictions`)
+- an output directory to save the transformed predictions (`--output`)
+- a strategy file specifying the sequence of transformations (`--postprocess-strategy`)
+
+### Strategy-Based Postprocessing
+
+Postprocessing is configured using a JSON strategy file. Each strategy is a list of steps, where each step includes the transformation name, the target labels, a flag for whether the operation should be applied sequentially per label, and any additional parameters.
+
+### Usage
+
+```bash
+mist_postprocess \
+  --base-predictions /path/to/results/predictions/train/raw \
+  --output /path/to/results/predictions/train/post \
+  --postprocess-strategy /path/to/strategy.json
+```
+
+### Strategy File Format
+The strategy file is a JSON file containing a list of postprocessing steps. Each step is a dictionary with the following required fields:
+
+- **`transform`** (`str`):  
+  Name of the postprocessing transformation. Currently supported transformations are
+  	- `remove_small_objects`: Remove connected components below a given size threshold.
+	- `fill_holes_with_label`: Fill holes in a mask with a specified label.
+	- `get_top_k_connected_components`: Keep the largest `k` connected components.
+	- `replace_small_objects_with_label`: Replace the label of small objects with a different label.
+
+  Each transformation can be applied either **sequentially per label** or **across a grouped set of labels**, controlled via the `apply_sequentially` flag.
+
+  Each transform is registered in the `transform_registry.py` file. You can add custom postprocessing transforms by implementing them in this file and registering them with the `@register_transform('name')` decorator.
+
+- **`apply_to_labels`** (`List[int]`):  
+  A list of label integers to which the transform should be applied.  
+  For example, `[1, 2]` will apply the transform to labels 1 and 2.
+
+- **`apply_sequentially`** (`bool`):  
+  Indicates whether to apply the transform to each label individually (`true`),  
+  or to all the labels in the group at once (`false`).
+
+- **`kwargs`** *(optional, `Dict[str, Any]`)*:  
+  Additional keyword arguments passed directly to the transform function. These are transform-specific. For the currently available transforms, the following keyword arguments are valid:
+
+  - `small_object_threshold` – A threshold for removing or replacing small objects.  
+    Used in `remove_small_objects` and `replace_small_objects_with_label`. A common default value is `64`.
+
+  - `top_k` – The number of largest connected components to retain.  
+    Used in `get_top_k_connected_components`. For example, `top_k: 1` retains only the largest component.
+
+  - `fill_label` – The label value to use when filling holes.  
+    Used in `fill_holes_with_label`. For example, `fill_label: 1` will fill holes using label `1`.
+
+  - `replacement_label` – The label used to replace small components. Used in `replace_small_objects_with_label`. For example, `replacement_label: 1` will update the label of objects smaller than `small_object_threshold` with `1`.
+
+  - `morph_cleanup` – Whether to apply morphological erosion/dilation during `get_top_k_connected_components`. Set to `true` to activate cleanup.
+
+  - `morph_cleanup_iterations` – The number of iterations to use for morphological erosion/dilation if `morph_cleanup` is enabled. Default is usually `2`.
+
+
+Below is an example strategy file that demonstrates several transformations:
+
+```json
+[
+  {
+    "transform": "remove_small_objects",
+    "apply_to_labels": [1],
+    "apply_sequentially": true,
+    "kwargs": {
+      "small_object_threshold": 64
+    }
+  },
+  {
+    "transform": "remove_small_objects",
+    "apply_to_labels": [2, 4],
+    "apply_sequentially": false,
+    "kwargs": {
+      "small_object_threshold": 100
+    }
+  },
+  {
+    "transform": "fill_holes_with_label",
+    "apply_to_labels": [1, 2],
+    "apply_sequentially": false,
+    "kwargs": {
+      "fill_label": 1
+    }
+  },
+  {
+    "transform": "get_top_k_connected_components",
+    "apply_to_labels": [4],
+    "apply_sequentially": true,
+    "kwargs": {
+      "top_k": 1,
+      "morph_cleanup": true,
+      "morph_cleanup_iterations": 1
+    }
+  },
+  {
+    "transform": "replace_small_objects_with_label",
+    "apply_to_labels": [1, 2, 4],
+    "apply_sequentially": true,
+    "kwargs": {
+      "small_object_threshold": 50,
+      "replacement_label": 0
+    }
+  }
+]
+```
+
+### Notes
+
+- This version of `mist_postprocess` does **not** perform evaluation or update the `config.json` file. It is designed to decouple strategy testing from evaluation logic.
+- Evaluation of postprocessing performance can be done separately using `mist_evaluate`.
 
 ## Evaluation
-The MIST evaluation command computes a set of metrics for a given set of predictions and ground truth masks. 
 
-The ```mist_evaluate``` command and its arguments are described below:
+MIST provides a flexible command-line tool to evaluate prediction masks against ground truth using various metrics. The evaluation script supports several metrics and outputs a detailed summary of the evaluation in CSV format.
 
-* ```mist_evaluate```: Evaluate a set of predictions 
-	- ```--paths```: (required) Path to CSV or JSON file with paths to ground truth masks (see ```mist_predict```)
-	- ```--config```: (required) Path to ```config.json``` file from MIST output
-	- ```--preds-dir```: (required) Path to directory where predictions are saved
-	- ```--output-csv```: (required) Path to CSV file where evaluation results will be saved
-    - ```--metrics```: (required, default: ["dice", "haus95"]) List of metrics to compute. The default metrics are the Dice coefficient (```dice```) and 95th percentile Hausdorff distance (```haus95```)
-  						other metrics which can be included in this list are the average surface distance (```avg_surf```) and surface Dice (```surf_dice```) 
+### Command
+
+```bash
+mist_evaluate --config CONFIG_PATH \
+              --paths-csv PATHS_CSV \
+              --output-csv OUTPUT_CSV \
+              --metrics dice haus95 surf_dice \
+			  --surf-dice-tol 1.0
+```
+
+### Arguments
+
+- **`--config`** *(str, required)*:  
+  Path to the `config.json` file generated by the MIST pipeline. This file must contain the `final_classes` list, which defines the evaluation classes.
+
+- **`--paths-csv`** *(str, required)*:  
+  Path to a CSV file that contains absolute paths to prediction and ground truth files. This file should contain the following columns `id`, `mask`, `prediction`, which are the unique patient id, path to the ground truth mask, and path to the prediction, respectively.
+
+- **`--output-csv`** *(str, required)*:  
+  Path to the CSV file where evaluation results will be saved.
+
+- **`--metrics`** *(List[str], optional)*:  
+  A list of evaluation metrics to compute. Available options include:
+  - `dice`: Dice coefficient  
+  - `haus95`: 95th percentile Hausdorff distance  
+  - `surf_dice`: Surface Dice  
+  - `avg_surf`: Average symmetric surface distance  
+  **Default**: `["dice", "haus95"]`
+
+  Custom metrics can be implemented and registered in the `metrics_registry.py` file.
+
+- **`--surf-dice-tol`** *(float, optional)*:  
+  Tolerance value (in mm) used to compute the surface Dice.  
+  Only applicable if `surf_dice` is included in `--metrics`.  
+  **Default**: `1.0`
   
 ## Converting CSV and MSD Data
 Several popular formats exist for different datasets, like the Medical Segmentation Decathlon (MSD) or simple CSV files 
