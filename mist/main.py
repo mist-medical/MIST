@@ -20,8 +20,8 @@ from mist.analyze_data.analyzer import Analyzer
 from mist.preprocess_data.preprocess import preprocess_dataset
 from mist.runtime import args
 from mist.runtime.run import Trainer
-from mist.evaluate_preds.evaluator import Evaluator
-from mist.evaluate_preds import evaluation_utils
+from mist.evaluation.evaluator import Evaluator
+from mist.evaluation import evaluation_utils
 from mist.runtime import utils
 from mist.inference import main_inference
 

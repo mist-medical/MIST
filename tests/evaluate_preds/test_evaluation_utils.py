@@ -13,7 +13,7 @@ from unittest import mock
 import pandas as pd
 
 # MIST imports.
-from mist.evaluate_preds import evaluation_utils
+from mist.evaluation import evaluation_utils
 
 
 # Tests for the build_evaluation_dataframe function. This function is builds the
