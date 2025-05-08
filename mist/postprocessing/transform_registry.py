@@ -15,8 +15,8 @@ import numpy.typing as npt
 from scipy import ndimage
 
 # MIST imports.
-from mist.postprocess_preds import postprocessing_utils as utils
-from mist.postprocess_preds.postprocessing_constants import (
+from mist.postprocessing import postprocessing_utils as utils
+from mist.postprocessing.postprocessing_constants import (
     PostprocessingConstants as pc
 )
 

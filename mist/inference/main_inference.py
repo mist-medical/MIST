@@ -26,7 +26,7 @@ from mist.models import get_model
 from mist.data_loading import dali_loader
 from mist.preprocess_data import preprocess
 from mist.runtime import utils
-from mist.postprocess_preds.postprocessor import Postprocessor
+from mist.postprocessing.postprocessor import Postprocessor
 
 
 def get_sw_prediction(

@@ -19,8 +19,8 @@ from rich.text import Text
 from rich.table import Table
 
 # MIST imports.
-from mist.postprocess_preds.transform_registry import get_transform
-from mist.postprocess_preds.postprocessing_utils import StrategyStep
+from mist.postprocessing.transform_registry import get_transform
+from mist.postprocessing.postprocessing_utils import StrategyStep
 from mist.runtime import utils
 
 
