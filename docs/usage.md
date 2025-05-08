@@ -260,8 +260,7 @@ MIST provides a flexible command-line tool to evaluate prediction masks against 
 mist_evaluate --config CONFIG_PATH \
               --paths-csv PATHS_CSV \
               --output-csv OUTPUT_CSV \
-              --metrics dice haus95 surf_dice \
-			  --surf-dice-tol 1.0
+              --metrics dice haus95
 ```
 
 ### Arguments
