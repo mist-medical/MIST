@@ -260,7 +260,7 @@ def replace_small_objects_with_label(
         updated_mask[binary] = 0
 
         # Replace small components with the replacement label.
-        updated_mask += utils.replace_small_components_binary(
+        updated_mask += utils.replace_small_objects_binary(
             binary, label, replacement, min_size
         )
 

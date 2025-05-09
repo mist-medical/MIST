@@ -9,7 +9,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Postprocessing utilities for MIST predictions."""
-from typing import List, Any, Dict, TypedDict
+from typing import List, Any, Dict, TypedDict, cast
 import numpy as np
 import numpy.typing as npt
 import skimage
@@ -69,14 +69,22 @@ def remove_small_objects_binary(
     Returns:
         Cleaned binary mask as a boolean array.
     """
-    labeled = skimage.measure.label(binary_mask)
-    if labeled.max() == 0:
+    # If the binary mask is completely empty, return it unchanged as a boolean
+    # array.
+    if binary_mask.max() == 0:
         return binary_mask.astype(bool)
+
+    # Explicitly cast to ndarray because skimage.measure.label has multiple
+    # return types, and we are using it with return_num=False, which always
+    # returns an ndarray.
+    labeled = cast(
+        np.ndarray, skimage.measure.label(binary_mask, return_num=False)
+    )
 
     cleaned = skimage.morphology.remove_small_objects(
         labeled, min_size=threshold
     )
-    return cleaned > 0
+    return cleaned.astype(bool)
 
 
 def get_top_k_connected_components_binary(
@@ -110,7 +118,12 @@ def get_top_k_connected_components_binary(
 
     # Label connected components in the mask.
     # Each connected component gets a unique integer label.
-    labeled = skimage.measure.label(binary_mask)
+    # Explicitly cast to ndarray because skimage.measure.label has multiple
+    # return types, and we are using it with return_num=False, which always
+    # returns an ndarray.
+    labeled = cast(
+        np.ndarray, skimage.measure.label(binary_mask, return_num=False)
+    )
 
     # Compute the size of each connected component.
     # We exclude the background (label 0) using [1:].
@@ -138,7 +151,7 @@ def get_top_k_connected_components_binary(
     return top_k_mask.astype(bool)
 
 
-def replace_small_components_binary(
+def replace_small_objects_binary(
     binary_mask: npt.NDArray[np.bool_],
     original_label: int,
     replacement_label: int,
@@ -158,16 +171,22 @@ def replace_small_components_binary(
     Returns:
         A labeled mask where small objects are relabeled.
     """
-    # Check if the binary mask is empty.
+    # Check if the binary mask is empty. If so, return it unchanged as a uint8
+    # array.
     if binary_mask.max() == 0:
         return binary_mask.astype("uint8")
 
     # Convert binary mask to labeled connected components.
-    labeled_components = skimage.measure.label(binary_mask)
+    # Explicitly cast to ndarray because skimage.measure.label has multiple
+    # return types, and we are using it with return_num=False, which always
+    # returns an ndarray.
+    labeled = cast(
+        np.ndarray, skimage.measure.label(binary_mask, return_num=False)
+    )
 
     # regionprops extracts stats for each component, including pixel
     # coordinates.
-    regions = skimage.measure.regionprops(labeled_components)
+    regions = skimage.measure.regionprops(labeled)
 
     # Initialize the output mask where retained components remain as
     # original_label.
