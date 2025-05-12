@@ -6,7 +6,7 @@ import random
 import argparse
 import subprocess
 import warnings
-from typing import Any, Dict, Tuple, List, Callable
+from typing import Any, Dict, Tuple, List
 
 import ants
 import numpy as np
@@ -18,7 +18,6 @@ import torch
 from torch import nn
 from rich.progress import (BarColumn, MofNCompleteColumn, Progress, TextColumn,
                            TimeElapsedColumn)
-from scipy import ndimage
 from sklearn.model_selection import KFold
 
 
@@ -708,154 +707,6 @@ def sitk_to_ants(img_sitk: sitk.Image) -> ants.core.ants_image.ANTsImage:
     img_ants.set_origin(origin)
     img_ants.set_direction(direction)
     return img_ants
-
-
-def remove_small_objects(
-        mask_npy: npt.NDArray[Any],
-        **kwargs
-) -> npt.NDArray[Any]:
-    """
-    Removes small connected objects in the mask based on a threshold.
-
-    Args:
-        mask_npy: Input binary mask as a numpy array.
-        **kwargs: Additional keyword arguments. Requires
-            'small_object_threshold' to specify the minimum size for objects to
-            retain.
-
-    Returns:
-        mask_npy: Updated mask with small objects removed.
-    """
-    # Get connected components.
-    labels = skimage.measure.label(mask_npy)
-
-    # Assume at least one component.
-    if labels.max() > 0: # type: ignore
-        # Remove small objects smaller than the threshold.
-        mask_npy = skimage.morphology.remove_small_objects(
-            mask_npy.astype(bool),
-            min_size=kwargs["small_object_threshold"]
-        )
-    return mask_npy
-
-
-def get_top_k_components(
-        mask_npy: npt.NDArray[Any],
-        **kwargs
-) -> npt.NDArray[Any]:
-    """Get the top k largest connected components from a binary mask.
-
-    Args:
-        mask_npy: Input binary mask as a numpy array.
-        **kwargs: Additional keyword arguments. Requires
-            'top_k' to specify the number of largest components to retain. Other
-            optional arguments include 'morph_cleanup' and
-            'morph_cleanup_iterations' for morphological operations. If
-            'morph_cleanup' is True, 'morph_cleanup_iterations' iterations of
-            binary erosion will be applied before taking the top k components.
-            After that, the same number of iterations of dilation will be
-            applied to the remaining components in the binary mask.
-
-    Returns:
-        mask_npy: Updated mask with only the top k components.
-    """
-    # Morphological cleaning.
-    if kwargs["morph_cleanup"]:
-        mask_npy = ndimage.binary_erosion(
-            mask_npy, iterations=kwargs["morph_cleanup_iterations"]
-        )
-
-    # Get connected components
-    labels = skimage.measure.label(mask_npy)
-    label_bin_cnts = list(np.bincount(labels.flat)[1:]) # type: ignore
-    label_bin_cnts_sort = sorted(label_bin_cnts, reverse=True)
-
-    # Assume at least one component
-    if labels.max() > 0 and len(label_bin_cnts) >= kwargs["top_k"]: # type: ignore
-        temp = np.zeros(mask_npy.shape)
-        for i in range(kwargs["top_k"]):
-            temp += labels == np.where(
-                label_bin_cnts == label_bin_cnts_sort[i]
-            )[0][0] + 1
-        mask_npy = temp
-
-    if kwargs["morph_cleanup"]:
-        mask_npy = ndimage.binary_dilation(
-            mask_npy, iterations=kwargs["morph_cleanup_iterations"]
-        )
-    return mask_npy
-
-
-def get_holes(
-        mask_npy: npt.NDArray[Any],
-        **kwargs
-) -> npt.NDArray[Any]:
-    """Get holes in a binary mask and apply a label to them.
-
-    This function is an intermediate step for filling holes in multi-label
-    segmentation masks. It identifies holes in the binary mask and returns an
-    image where the holes are the non-zero values. The holes are multiplied by
-    the specified fill label.
-
-    Args:
-        mask_npy: Input binary mask as a numpy array.
-        **kwargs: Additional keyword arguments. Requires 'fill_label' to specify
-            the label to fill the holes with.
-
-    Returns:
-        holes: A numpy array where the non-zero values represent the holes in
-            the input mask. The holes are multiplied by the fill label.
-    """
-    labels = skimage.measure.label(mask_npy)
-
-    if labels.max() > 0: # type: ignore
-        # Fill holes with specified label
-        mask_npy_binary = (mask_npy != 0).astype("uint8")
-        holes = ndimage.binary_fill_holes(mask_npy_binary) - mask_npy_binary
-        holes *= kwargs["fill_label"]
-    else:
-        holes = np.zeros(mask_npy.shape)
-
-    return holes
-
-
-def group_labels(
-        mask_npy: npt.NDArray[Any],
-        labels_list: List[int]
-) -> npt.NDArray[Any]:
-    """Extract a group of labels from a multi-label mask.
-
-    Args:
-        mask_npy: Input multi-label mask as a numpy array.
-        labels_list: List of labels to group.
-
-    Returns:
-        grouped_labels: A mask with only the specified labels.
-    """
-    # Create a mask where the values in mask_npy match any in labels_list.
-    mask = np.isin(mask_npy, labels_list)
-
-    # Assign corresponding labels to the grouped mask.
-    grouped_labels = mask_npy * mask
-    return grouped_labels
-
-
-def get_transform(transform: str) -> Callable:
-    """Get the appropriate transformation function based on the input string.
-
-    Args:
-        transform: Name of the transformation to apply. Valid options are
-            "fill_holes", "remove_small_objects", and "top_k_cc".
-
-    Returns:
-        Corresponding transformation function.
-    """
-    transform_dictionary = {
-        "fill_holes": get_holes,
-        "remove_small_objects": remove_small_objects,
-        "top_k_cc": get_top_k_components
-    }
-    return transform_dictionary[transform]
 
 
 def get_fg_mask_bbox(
