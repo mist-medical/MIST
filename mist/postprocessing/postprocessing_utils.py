@@ -81,6 +81,12 @@ def remove_small_objects_binary(
         np.ndarray, skimage.measure.label(binary_mask, return_num=False)
     )
 
+    # If there is only one non-zero label, pass a boolean array to
+    # remove_small_objects. This helps avoid a warning from remove_small_objects
+    # about not passing in a boolean array.
+    if labeled.max() == 1:
+        labeled = labeled.astype(bool)
+
     cleaned = skimage.morphology.remove_small_objects(
         labeled, min_size=threshold
     )
