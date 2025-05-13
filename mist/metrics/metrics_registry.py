@@ -42,7 +42,7 @@ class Metric(ABC):
         Returns:
             Computed metric value, or None if not computable.
         """
-        pass
+        pass # pylint: disable=unnecessary-pass
 
 
 # Global registry for metrics.
@@ -54,6 +54,13 @@ def register_metric(cls):
     instance = cls()
     METRIC_REGISTRY[instance.name] = instance
     return cls
+
+
+def get_metric(name: str) -> Metric:
+    """Retrieve a metric by name."""
+    if name not in METRIC_REGISTRY:
+        raise ValueError(f"Metric '{name}' is not registered.")
+    return METRIC_REGISTRY[name]
 
 
 @register_metric

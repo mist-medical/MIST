@@ -18,7 +18,7 @@ import rich
 
 # MIST imports.
 from mist.runtime import utils
-from mist.metrics.metrics_registry import METRIC_REGISTRY
+from mist.metrics.metrics_registry import get_metric
 
 
 class Evaluator:
@@ -102,7 +102,7 @@ class Evaluator:
         Args:
             filepaths_dataframe: DataFrame that should contain columns 'id',
                 'mask', and 'prediction'.
-        
+
         Returns:
             pd.DataFrame: The validated DataFrame.
 
@@ -171,7 +171,7 @@ class Evaluator:
             Euclidean diagonal length in mm.
         """
         dims_mm = np.multiply(shape, spacing)
-        return np.linalg.norm(dims_mm)
+        return np.linalg.norm(dims_mm).item()
 
     @staticmethod
     def _handle_edge_cases(
@@ -196,13 +196,13 @@ class Evaluator:
         if bool(num_mask_voxels == 0) ^ bool(num_prediction_voxels == 0):
             return worst_case_value
         return None
-    
+
     def _load_patient_data(
             self,
             patient_id: str
     ) -> Dict[str, ants.core.ants_image.ANTsImage]:
         """Load the ground truth and prediction paths for a given patient ID.
-        
+
         Args:
             patient_id: Unique identifier for the patient, which corresponds to
                 the 'id' column in the filepaths DataFrame.
@@ -226,14 +226,14 @@ class Evaluator:
         # Check if the patient ID exists in the DataFrame.
         if row.empty:
             raise ValueError(f"No data found for patient ID: {patient_id}")
-        
+
         # Check if there are multiple rows for the same patient ID.
         if len(row) > 1:
             raise ValueError(
                 f"Multiple entries found for patient ID: {patient_id}. "
                 "Please ensure unique IDs in the DataFrame."
             )
-        
+
         # If row is not empty and unique, safely access the row as a dictionary.
         row = row.iloc[0].to_dict()  # Convert to dictionary for easier access.
 
@@ -256,7 +256,7 @@ class Evaluator:
                 "Ensure that the ground truth mask and prediction have the "
                 "same dimensions and spacing."
             )
-    
+
         # Load the ANTs images for mask and prediction.
         return {
             "mask": ants.image_read(row['mask']),
@@ -303,7 +303,7 @@ class Evaluator:
         )
 
         for metric_name in self.selected_metrics:
-            metric = METRIC_REGISTRY[metric_name]
+            metric = get_metric(metric_name)
             best, worst = (
                 metric.best,
                 (
@@ -332,7 +332,10 @@ class Evaluator:
                     # Check for NaN or Inf values in the metric result before
                     # assigning it to the result. If the value is NaN or Inf,
                     # we assign the worst case value and log a warning message.
-                    if np.isnan(metric_value) or np.isinf(metric_value):
+                    if (
+                        metric_value and
+                        (np.isnan(metric_value) or np.isinf(metric_value))
+                    ):
                         error_messages.append(
                             f"Metric '{metric_name}' returned NaN or Inf for "
                             f"patient {patient_id}. Using worst case value."
@@ -348,7 +351,7 @@ class Evaluator:
         mask: np.ndarray,
         prediction: np.ndarray,
         spacing: Tuple[float, float, float],
-    ) -> Tuple[Dict[str, float], Optional[str]]:
+    ) -> Tuple[Dict[str, Union[str, float]], Optional[str]]:
         """Evaluate a single patient example and compute metrics for each class.
 
         For each class defined in the evaluation_classes argument, this method
@@ -369,7 +372,7 @@ class Evaluator:
                 A combined string of error messages, or None if no errors
                     occurred.
         """
-        results = {"id": patient_id}
+        results: Dict[str, Union[str, float]] = {"id": patient_id}
         error_messages = []
 
         for class_name, class_labels in self.evaluation_classes.items():
@@ -450,7 +453,7 @@ class Evaluator:
         # Print error messages to the console.
         if error_messages:
             full_error_text = "\n".join(error_messages)
-            self.console.print(rich.text.Text(full_error_text))
+            self.console.print(rich.text.Text(full_error_text)) # type: ignore
 
         # Compute summary statistics and write results.
         self.results_dataframe = utils.compute_results_stats(
