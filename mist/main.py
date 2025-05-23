@@ -23,7 +23,8 @@ from mist.runtime.run import Trainer
 from mist.evaluation.evaluator import Evaluator
 from mist.evaluation import evaluation_utils
 from mist.runtime import utils
-from mist.inference import main_inference
+from mist.inference import inference_runners
+from mist.inference import inference_utils
 
 
 # Initialize console for rich output.
@@ -79,7 +80,7 @@ def main(arguments: argparse.Namespace) -> None:
 
         # Test on each specified fold.
         for fold in arguments.folds:
-            main_inference.test_on_fold(arguments, fold)
+            inference_runners.test_on_fold(arguments, fold)
 
         # Evaluate predictions from cross-validation.
         filepaths_df, warnings = (
@@ -134,24 +135,22 @@ def main(arguments: argparse.Namespace) -> None:
                 os.path.join(arguments.results, "test_paths.csv"), index=False
             )
 
-            # Load models for test-time inference.
-            models = main_inference.load_test_time_models(
-                os.path.join(arguments.results, "models"), False
-            )
-            models = [model.eval() for model in models]
-            models = [model.to("cuda") for model in models]
-
             with torch.no_grad():
-                main_inference.test_time_inference(
-                    df=test_df,
-                    dest=os.path.join(arguments.results, "predictions", "test"),
-                    config_file=os.path.join(arguments.results, "config.json"),
-                    models=models,
-                    overlap=arguments.sw_overlap,
+                inference_runners.infer_from_dataframe(
+                    paths_dataframe=test_df,
+                    output_directory=os.path.join(
+                        arguments.results, "predictions", "test"
+                    ),
+                    models_directory=os.path.join(arguments.results, "models"),
+                    patch_overlap=arguments.sw_overlap,
                     blend_mode=arguments.blend_mode,
-                    tta=arguments.tta,
-                    no_preprocess=arguments.no_preprocess,
-                    output_std=arguments.output_std,
+                    ensemble_models=True,
+                    test_time_augmentation=arguments.tta,
+                    skip_preprocessing=arguments.no_preprocess,
+                    postprocessing_strategy_filepath=None,
+                    device=torch.device(
+                        "cuda" if torch.cuda.is_available() else "cpu"
+                    ),
                 )
 
 
