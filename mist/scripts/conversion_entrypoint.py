@@ -21,8 +21,10 @@ The script takes in the following arguments:
 from argparse import ArgumentDefaultsHelpFormatter
 
 # MIST imports.
-from mist.conversion_tools.msd import convert_msd
-from mist.conversion_tools.csv import convert_csv
+from mist.conversion_tools.conversion_format_registry import (
+    get_conversion_function,
+    get_supported_formats
+)
 from mist.runtime.args import ArgParser
 
 
@@ -30,13 +32,22 @@ def get_conversion_args():
     """Parse command line arguments for dataset conversion."""
     p = ArgParser(formatter_class=ArgumentDefaultsHelpFormatter)
 
+    # Required arguments.
     p.arg(
         "--format",
         type=str,
-        default="msd",
-        choices=["msd", "csv"],
+        required=True,
+        choices=get_supported_formats(),
         help="Format of dataset to be converted"
     )
+    p.arg(
+        "--output",
+        type=str,
+        required=True,
+        help="Directory to save converted MIST formatted dataset"
+    )
+
+    # Format-specific arguments.
     p.arg(
         "--msd-source",
         type=str,
@@ -52,29 +63,23 @@ def get_conversion_args():
         type=str,
         help="Path to CSV containing test ids and images"
     )
-    p.arg(
-        "--output",
-        type=str,
-        help="Directory to save converted MIST formatted dataset"
-    )
 
     args = p.parse_args()
     return args
 
 
 def main(args):
+    """Main function to handle dataset conversion based on format."""
+    convert_fn = get_conversion_function(args.format)
+
     if args.format == "msd":
-        convert_msd(args.msd_source, args.output)
+        convert_fn(args.msd_source, args.output)
     elif args.format == "csv":
-        convert_csv(args.train_csv, args.output, args.test_csv)
-    else:
-        raise ValueError(
-            f"Invalid format '{args.format}'. Supported formats are 'msd' and "
-            "'csv'."
-        )
+        convert_fn(args.train_csv, args.output, args.test_csv)
 
 
 def conversion_entry():
+    """Entry point for the dataset conversion script."""
     args = get_conversion_args()
     main(args)
 

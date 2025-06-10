@@ -13,12 +13,13 @@ import types
 import pytest
 from unittest import mock
 
+# MIST imports.
 import mist.scripts.conversion_entrypoint as convert_script
 
 
 @pytest.fixture
 def dummy_args_msd():
-    """Dummy args for MSD format."""
+    """Fixture for dummy arguments with MSD format."""
     return types.SimpleNamespace(
         format="msd",
         msd_source="dummy_msd_source",
@@ -30,7 +31,7 @@ def dummy_args_msd():
 
 @pytest.fixture
 def dummy_args_csv():
-    """Dummy args for CSV format."""
+    """Fixture for dummy arguments with CSV format."""
     return types.SimpleNamespace(
         format="csv",
         msd_source=None,
@@ -40,34 +41,39 @@ def dummy_args_csv():
     )
 
 
-def test_main_calls_convert_msd(dummy_args_msd):
+@mock.patch("mist.scripts.conversion_entrypoint.get_conversion_function")
+def test_main_calls_convert_msd(mock_get_fn, dummy_args_msd):
     """Test that main() calls convert_msd when format is 'msd'."""
-    with mock.patch.object(convert_script, "convert_msd") as mock_convert_msd:
-        convert_script.main(dummy_args_msd)
-        mock_convert_msd.assert_called_once_with(
-            "dummy_msd_source", "dummy_output"
-        )
+    mock_convert = mock.Mock()
+    mock_get_fn.return_value = mock_convert
+    convert_script.main(dummy_args_msd)
+    mock_convert.assert_called_once_with("dummy_msd_source", "dummy_output")
 
 
-def test_main_calls_convert_csv(dummy_args_csv):
+@mock.patch("mist.scripts.conversion_entrypoint.get_conversion_function")
+def test_main_calls_convert_csv(mock_get_fn, dummy_args_csv):
     """Test that main() calls convert_csv when format is 'csv'."""
-    with mock.patch.object(convert_script, "convert_csv") as mock_convert_csv:
-        convert_script.main(dummy_args_csv)
-        mock_convert_csv.assert_called_once_with(
-            "dummy_train.csv", "dummy_output", "dummy_test.csv"
-        )
+    mock_convert = mock.Mock()
+    mock_get_fn.return_value = mock_convert
+    convert_script.main(dummy_args_csv)
+    mock_convert.assert_called_once_with(
+        "dummy_train.csv", "dummy_output", "dummy_test.csv"
+    )
 
 
 def test_main_invalid_format():
-    """Test that main() prints an error for invalid format."""
+    """Test that main() raises KeyError for invalid format."""
     bad_args = types.SimpleNamespace(
         format="invalid",
         msd_source=None,
         train_csv=None,
         test_csv=None,
-        dest="dummy_output"
+        output="dummy_output"
     )
-    with pytest.raises(ValueError, match="Invalid format 'invalid'"):
+    with pytest.raises(
+        KeyError,
+        match="Format 'invalid' is not a registered conversion format"
+    ):
         convert_script.main(bad_args)
 
 

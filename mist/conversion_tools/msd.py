@@ -17,18 +17,19 @@ import rich
 import numpy as np
 import SimpleITK as sitk
 
+# MIST imports.
 from mist.runtime import utils
 
 console = rich.console.Console()
 
 
 def copy_msd_data(
-        source: str,
-        dest: str,
-        msd_json: Dict[str, Any],
-        modalities: Dict[int, str],
-        mode: str,
-        progress_bar_message: str,
+    source: str,
+    dest: str,
+    msd_json: Dict[str, Any],
+    modalities: Dict[int, str],
+    mode: str,
+    progress_bar_message: str,
 ) -> None:
     """Copy MSD data to destination in MIST format.
 
@@ -137,8 +138,8 @@ def copy_msd_data(
 
 
 def convert_msd(
-        source: str,
-        dest: str,
+    source: str,
+    dest: str,
 ) -> None:
     """Converts medical segmentation decathlon dataset to MIST dataset.
 

@@ -16,6 +16,7 @@ import pprint
 import rich
 import pandas as pd
 
+# MIST imports.
 from mist.runtime import utils
 
 # Set up console for rich text.
@@ -23,10 +24,10 @@ console = rich.console.Console()
 
 
 def copy_csv_data(
-        df: pd.DataFrame,
-        dest: str,
-        mode: str,
-        progress_bar_message: str,
+    df: pd.DataFrame,
+    dest: str,
+    mode: str,
+    progress_bar_message: str,
 ) -> None:
     """Copy data from csv file to a MIST-compatible directory structure.
 
@@ -84,9 +85,9 @@ def copy_csv_data(
 
 
 def convert_csv(
-        train_csv: str,
-        dest: str,
-        test_csv: Optional[str]=None,
+    train_csv: str,
+    dest: str,
+    test_csv: Optional[str]=None,
 ) -> None:
     """Converts train and test data from csv files to MIST format.
 
