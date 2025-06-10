@@ -13,7 +13,7 @@ import types
 import pytest
 from unittest import mock
 
-import mist.convert_to_mist as convert_script
+import mist.scripts.conversion_entrypoint as convert_script
 
 
 @pytest.fixture
@@ -24,7 +24,7 @@ def dummy_args_msd():
         msd_source="dummy_msd_source",
         train_csv=None,
         test_csv=None,
-        dest="dummy_dest"
+        output="dummy_output"
     )
 
 
@@ -36,7 +36,7 @@ def dummy_args_csv():
         msd_source=None,
         train_csv="dummy_train.csv",
         test_csv="dummy_test.csv",
-        dest="dummy_dest"
+        output="dummy_output"
     )
 
 
@@ -45,7 +45,7 @@ def test_main_calls_convert_msd(dummy_args_msd):
     with mock.patch.object(convert_script, "convert_msd") as mock_convert_msd:
         convert_script.main(dummy_args_msd)
         mock_convert_msd.assert_called_once_with(
-            "dummy_msd_source", "dummy_dest"
+            "dummy_msd_source", "dummy_output"
         )
 
 
@@ -54,59 +54,59 @@ def test_main_calls_convert_csv(dummy_args_csv):
     with mock.patch.object(convert_script, "convert_csv") as mock_convert_csv:
         convert_script.main(dummy_args_csv)
         mock_convert_csv.assert_called_once_with(
-            "dummy_train.csv", "dummy_dest", "dummy_test.csv"
+            "dummy_train.csv", "dummy_output", "dummy_test.csv"
         )
 
 
-def test_main_invalid_format(capfd):
+def test_main_invalid_format():
     """Test that main() prints an error for invalid format."""
     bad_args = types.SimpleNamespace(
         format="invalid",
         msd_source=None,
         train_csv=None,
         test_csv=None,
-        dest="dummy_dest"
+        dest="dummy_output"
     )
-    convert_script.main(bad_args)
-    out, _ = capfd.readouterr()
-    assert "Enter valid format type!" in out
+    with pytest.raises(ValueError, match="Invalid format 'invalid'"):
+        convert_script.main(bad_args)
 
 
 def test_get_convert_args_parses_msd(monkeypatch):
-    """Test get_convert_args parses arguments correctly for msd format."""
+    """Test get_conversion_args parses arguments correctly for msd format."""
     monkeypatch.setattr("sys.argv", [
         "prog",
         "--format", "msd",
         "--msd-source", "path_to_msd",
-        "--dest", "dest_dir"
+        "--output", "output_dir"
     ])
-    args = convert_script.get_convert_args()
+    args = convert_script.get_conversion_args()
     assert args.format == "msd"
     assert args.msd_source == "path_to_msd"
-    assert args.dest == "dest_dir"
+    assert args.output == "output_dir"
 
 
 def test_get_convert_args_parses_csv(monkeypatch):
-    """Test get_convert_args parses arguments correctly for csv format."""
+    """Test get_conversion_args parses arguments correctly for csv format."""
     monkeypatch.setattr("sys.argv", [
         "prog",
         "--format", "csv",
         "--train-csv", "train.csv",
         "--test-csv", "test.csv",
-        "--dest", "dest_dir"
+        "--output", "output_dir"
     ])
-    args = convert_script.get_convert_args()
+    args = convert_script.get_conversion_args()
     assert args.format == "csv"
     assert args.train_csv == "train.csv"
     assert args.test_csv == "test.csv"
-    assert args.dest == "dest_dir"
+    assert args.output == "output_dir"
 
 
 def test_convert_to_mist_entry(monkeypatch):
-    """Test that convert_to_mist_entry() calls get_convert_args and main."""
+    """Test that convert_to_mist_entry() calls get_conversion_args and main."""
     dummy_args = mock.Mock()
-
-    monkeypatch.setattr(convert_script, "get_convert_args", lambda: dummy_args)
+    monkeypatch.setattr(
+        convert_script, "get_conversion_args", lambda: dummy_args
+    )
     with mock.patch.object(convert_script, "main") as mock_main:
-        convert_script.convert_to_mist_entry()
+        convert_script.conversion_entry()
         mock_main.assert_called_once_with(dummy_args)

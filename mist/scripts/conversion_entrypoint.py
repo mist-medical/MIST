@@ -16,7 +16,7 @@ The script takes in the following arguments:
     --msd-source: Directory containing MSD formatted dataset
     --train-csv: Path to and name of csv containing training ids, mask, and images
     --test-csv: Path to and name of csv containing test ids and images
-    --dest: Directory to save converted, MIST formatted dataset
+    --output: Directory to save converted, MIST formatted dataset
 """
 from argparse import ArgumentDefaultsHelpFormatter
 
@@ -64,13 +64,14 @@ def get_conversion_args():
 
 def main(args):
     if args.format == "msd":
-        convert_msd(args.msd_source, args.dest)
-    if args.format == "csv":
-        convert_csv(args.train_csv, args.dest, args.test_csv)
-    raise ValueError(
-        f"Invalid format '{args.format}'. Supported formats are 'msd' and "
-        "'csv'."
-    )
+        convert_msd(args.msd_source, args.output)
+    elif args.format == "csv":
+        convert_csv(args.train_csv, args.output, args.test_csv)
+    else:
+        raise ValueError(
+            f"Invalid format '{args.format}'. Supported formats are 'msd' and "
+            "'csv'."
+        )
 
 
 def conversion_entry():
