@@ -10,10 +10,10 @@
 from typing import Callable, List, Optional, Union
 import torch
 
-# MIST imports.
-from mist.inference.inferers.base import AbstractInferer
-from mist.inference.tta.transforms import AbstractTransform
-from mist.inference.ensemblers.base import AbstractEnsembler
+# MIST imports (relative).
+from .inferers import AbstractInferer
+from .ensemblers import AbstractEnsembler
+from .tta.transforms import AbstractTransform
 
 
 class Predictor:
@@ -24,7 +24,7 @@ class Predictor:
         inferer: AbstractInferer,
         ensembler: AbstractEnsembler,
         tta_transforms: List[AbstractTransform],
-        device: Union[str, torch.device]=None,
+        device: Optional[Union[str, torch.device]]=None,
     ):
         """Initialize the predictor.
 

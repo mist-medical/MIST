@@ -9,27 +9,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Utility functions for MIST inference modules."""
-from typing import Any, Dict, Optional, Tuple, List, Union
-from collections.abc import Sequence, Callable
+# Standard library imports.
 import os
+from typing import Any, Dict, Optional, Tuple, List, Union
+from collections.abc import Callable
+
+# Third-party imports.
 import ants
 import torch
 import numpy as np
-import pandas as pd
 import numpy.typing as npt
+import pandas as pd
 
-# MIST imports.
-from mist.preprocess_data import preprocess
-from mist.runtime import utils
-from mist.inference.inference_constants import InferenceConstants as ic
-from mist.models import get_model
+# MIST imports (relative).
+from ..preprocess_data import preprocess
+from ..runtime import utils
+from .inference_constants import InferenceConstants as ic
+from ..models import get_model
 
 
 def back_to_original_space(
-    prediction: npt.NDArray[Any],
+    raw_prediction: npt.NDArray[Any],
     original_ants_image: ants.core.ants_image.ANTsImage,
     target_spacing: Tuple[float, float, float],
-    training_labels: Sequence[int],
+    training_labels: List[int],
     foreground_bounding_box: Optional[Dict[str, Any]],
 ) -> ants.core.ants_image.ANTsImage:
     """Place 3D prediction back into original image space.
@@ -41,7 +44,7 @@ def back_to_original_space(
     header to the prediction's header.
 
     Args:
-        prediction: The prediction to place back into the original image
+        raw_prediction: The prediction to place back into the original image
             space. This should be a numpy array.
         original_ants_image: The original ANTs image.
         target_spacing: The spacing used for training. This can be found in the
@@ -68,7 +71,9 @@ def back_to_original_space(
         The prediction in the original image space. This will be an ANTs image.
     """
     # Convert prediction to ANTs image.
-    prediction = ants.from_numpy(data=prediction, spacing=target_spacing)
+    prediction: ants.core.ants_image.ANTsImage = ants.from_numpy(
+        data=raw_prediction, spacing=target_spacing
+    )
 
     # Reorient prediction.
     prediction = ants.reorient_image2(
@@ -103,7 +108,7 @@ def back_to_original_space(
     # Copy header from original image onto the prediction so they match. This
     # will take care of other details in the header like the origin and the
     # image bounding box.
-    prediction = original_ants_image.new_image_like(prediction.numpy())
+    prediction = original_ants_image.new_image_like(prediction.numpy()) # type: ignore
     return prediction
 
 
@@ -190,7 +195,7 @@ def remap_mask_labels(
 
 def validate_inference_images(
     patient_dict: Dict[str, str]
-) -> Union[ants.core.ants_image.ANTsImage, List[str]]:
+) -> Tuple[ants.core.ants_image.ANTsImage, List[str]]:
     """Validate all images listed in the patient dictionary.
 
     Ensures that each image file exists, is a valid 3D image, and that all
@@ -230,21 +235,21 @@ def validate_inference_images(
                 f"Image file not found: {os.path.basename(image_path)}"
             )
 
-    # Load anchor image.
-    anchor_image = ants.image_read(image_paths[0])
+    # Load anchor image. Check if it is 3D before proceeding.
     anchor_filename = os.path.basename(image_paths[0])
-    if not utils.is_image_3d(anchor_image):
+    anchor_header = ants.image_header_info(image_paths[0])
+    if not utils.is_image_3d(anchor_header):
         raise ValueError(f"Anchor image is not 3D: {anchor_filename}")
+    anchor_image = ants.image_read(image_paths[0])
 
     # Check header compatibility for additional modalities.
     for image_path in image_paths[1:]:
-        current_image = ants.image_read(image_path)
         current_filename = os.path.basename(image_path)
-
-        if not utils.is_image_3d(current_image):
+        current_header = ants.image_header_info(image_path)
+        if not utils.is_image_3d(current_header):
             raise ValueError(f"Image is not 3D: {current_filename}")
 
-        if not utils.compare_headers(anchor_image, current_image):
+        if not utils.compare_headers(anchor_header, current_header):
             raise ValueError(
                 f"Image headers do not match: {anchor_filename} and "
                 f"{current_filename}"

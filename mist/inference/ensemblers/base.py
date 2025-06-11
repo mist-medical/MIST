@@ -21,8 +21,9 @@ class AbstractEnsembler(ABC):
     (e.g., probabilities or logits) are aggregated into a single output.
     """
 
-    def __init__(self, name: str):
-        self.name = name
+    def __init__(self):
+        """Initialize the ensembler."""
+        self.name = self.__class__.__name__.lower()
 
     @abstractmethod
     def combine(self, predictions: List[torch.Tensor]) -> torch.Tensor:
@@ -35,7 +36,7 @@ class AbstractEnsembler(ABC):
         Returns:
             Aggregated prediction tensor of the same shape.
         """
-        pass
+        pass # pylint: disable=unnecessary-pass
 
     def __call__(self, predictions: List[torch.Tensor]) -> torch.Tensor:
         return self.combine(predictions)

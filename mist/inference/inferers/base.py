@@ -10,21 +10,14 @@
 # limitations under the License.
 """Abstract base class for all inferers in MIST."""
 from abc import ABC, abstractmethod
-from typing import Callable, Union, Any
+from typing import Callable, Union, Any, Optional
 import torch
 
 
 class AbstractInferer(ABC):
     """Abstract base class for MIST inference methods."""
-    def __init__(
-        self,
-        name: str,
-        device: Union[str, torch.device] = None,
-    ):
-        self.name = name
-        self.device = device or (
-            torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        )
+    def __init__(self):
+        self.name = self.__class__.__name__.lower()
 
     def __call__(
         self,
@@ -41,7 +34,7 @@ class AbstractInferer(ABC):
         model: Callable[[torch.Tensor], torch.Tensor],
     ) -> torch.Tensor:
         """Perform model inference on a single image."""
-        pass
+        pass # pylint:disable=unnecessary-pass
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(name='{self.name}')"

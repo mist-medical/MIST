@@ -14,27 +14,30 @@ This module contains high-level entry points for running full-resolution
 3D segmentation inference using trained MIST models. It includes runners
 for fold-based evaluation and general test-time prediction from CSV input.
 """
-from typing import Any, Dict, Optional, Union, List
+# Standard library imports.
 import argparse
 import os
+from typing import Any, Dict, Optional, Union, List
+
+# Third-party imports.
 import ants
 import numpy as np
 import pandas as pd
 import rich
 import torch
 
-# MIST imports.
-from mist.inference import inference_utils
-from mist.inference.ensemblers import get_ensembler
-from mist.inference.tta.strategies import get_strategy
-from mist.inference.inferers import get_inferer
-from mist.inference.predictor import Predictor
-from mist.data_loading import dali_loader
-from mist.preprocess_data import preprocess
-from mist.runtime import utils
-from mist.models import get_model
-from mist.postprocessing.postprocessor import Postprocessor
-from mist.inference.inference_constants import InferenceConstants as ic
+# MIST imports (relative).
+from . import inference_utils
+from .inference_constants import InferenceConstants as ic
+from .predictor import Predictor
+from ..data_loading import dali_loader
+from ..models import get_model
+from ..postprocessing.postprocessor import Postprocessor
+from ..preprocess_data import preprocess
+from ..runtime import utils
+from ..inference.ensemblers import get_ensembler
+from ..inference.tta import get_strategy
+from ..inference.inferers import get_inferer
 
 
 def predict_single_example(
@@ -42,7 +45,7 @@ def predict_single_example(
     original_ants_image: ants.core.ants_image.ANTsImage,
     mist_configuration: Dict[str, Any],
     predictor: Predictor,
-    foreground_bounding_box: Optional[Dict[str, Any]]=None,
+    foreground_bounding_box: Optional[Dict[str, int]]=None,
 ) -> ants.core.ants_image.ANTsImage:
     """Predict on a single example using a Predictor instance.
 
@@ -58,8 +61,8 @@ def predict_single_example(
     """
     # Training vs original labels.
     n_classes = len(mist_configuration["labels"])
-    training_labels = list(range(n_classes))
-    original_labels = mist_configuration["labels"]
+    training_labels: List[int] = list(range(n_classes))
+    original_labels: List[int] = mist_configuration["labels"]
 
     # Run prediction via Predictor (handles TTA + ensembling internally).
     prediction = predictor(preprocessed_image)
@@ -78,8 +81,8 @@ def predict_single_example(
 
     # Restore original spacing, orientation, and header.
     prediction = inference_utils.back_to_original_space(
-        prediction=prediction,
-        original_image_ants=original_ants_image,
+        raw_prediction=prediction,
+        original_ants_image=original_ants_image,
         target_spacing=mist_configuration["target_spacing"],
         training_labels=training_labels,
         foreground_bounding_box=foreground_bounding_box,
@@ -90,14 +93,14 @@ def predict_single_example(
         prediction = inference_utils.remap_mask_labels(
             prediction.numpy(), original_labels
         )
-        prediction = original_ants_image.new_image_like(data=prediction)
+        prediction = original_ants_image.new_image_like(data=prediction) # type: ignore
     return prediction.astype("uint8")
 
 
 def test_on_fold(
     mist_arguments: argparse.Namespace,
     fold_number: int,
-    device: Union[str, torch.device]=None,
+    device: Optional[Union[str, torch.device]]=None,
 ) -> None:
     """Run inference on the test set for a given fold.
 
@@ -167,16 +170,14 @@ def test_on_fold(
     # inference. This is the default mode of operation for MIST, but future
     # versions may allow for other modes.
     inferer = get_inferer("sliding_window")(
-        patch_size=mist_configuration["patch_size"],
-        patch_overlap=mist_configuration["patch_overlap"],
-        patch_blend_mode=mist_configuration["patch_blend_mode"],
-        device=device,
+        patch_size=mist_configuration["patch_size"], # type: ignore
+        patch_overlap=mist_configuration["patch_overlap"], # type: ignore
+        patch_blend_mode=mist_configuration["patch_blend_mode"], # type: ignore
+        device=device, # type: ignore
     )
     ensembler = get_ensembler("mean")
-    tta_transforms = (
-        get_strategy("all_flips") if mist_arguments.tta
-        else get_strategy("none")
-    )
+    strategy_name = "all_flips" if mist_arguments.tta else "none"
+    tta_transforms = get_strategy(strategy_name)()
     predictor = Predictor(
         models=[model],
         inferer=inferer,
@@ -255,13 +256,11 @@ def infer_from_dataframe(
     output_directory: str,
     mist_configuration: Dict[str, Any],
     models_directory: str,
-    patch_overlap: float=0.5,
-    patch_blend_mode: str="gaussian",
     ensemble_models: bool=True,
     test_time_augmentation: bool=False,
     skip_preprocessing: bool=False,
-    postprocessing_strategy_filepath: str=None,
-    device: Union[str, torch.device]=None,
+    postprocessing_strategy_filepath: Optional[str]=None,
+    device: Optional[Union[str, torch.device]]=None,
 ) -> None:
     """Run test-time inference on a set of input images.
 
@@ -283,9 +282,6 @@ def infer_from_dataframe(
         models_directory: Directory containing the trained models. The models
             should be in the format "model_fold_0.pt", "model_fold_1.pt", etc.
             The model_config.json file should also be in this directory.
-        patch_overlap: The fractional overlap between sliding window patches.
-        patch_blend_mode: The blending mode used to combine overlapping patches
-            (e.g., "gaussian", "constant").
         ensemble_models: If True, ensembling is performed by averaging
             predictions from multiple models. If False, only the first model
             is used for prediction.
@@ -340,16 +336,14 @@ def infer_from_dataframe(
     # inference. This is the default mode of operation for MIST, but future
     # versions may allow for other modes.
     inferer = get_inferer("sliding_window")(
-        patch_size=mist_configuration["patch_size"],
-        patch_overlap=patch_overlap,
-        patch_blend_mode=patch_blend_mode,
-        device=device,
+        patch_size=mist_configuration["patch_size"], # type: ignore
+        patch_overlap=mist_configuration["patch_overlap"], # type: ignore
+        patch_blend_mode=mist_configuration["patch_blend_mode"], # type: ignore
+        device=device, # type: ignore
     )
     ensembler = get_ensembler("mean")
-    tta_transforms = (
-        get_strategy("all_flips") if test_time_augmentation
-        else get_strategy("none")
-    )
+    strategy_name = "all_flips" if test_time_augmentation else "none"
+    tta_transforms = get_strategy(strategy_name)()
     predictor = Predictor(
         models=models_list,
         inferer=inferer,
@@ -401,12 +395,17 @@ def infer_from_dataframe(
                 else:
                     preprocessed_example = preprocess.preprocess_example(
                         config=mist_configuration,
-                        image_paths=image_paths,
+                        image_paths_list=image_paths,
                     )
 
                 # Convert the preprocessed image to a PyTorch tensor and move it
                 # to the device.
                 preprocessed_image = preprocessed_example["image"]
+                if not isinstance(preprocessed_image, np.ndarray):
+                    raise ValueError(
+                        "Preprocessed image is not a numpy array. "
+                        "Please check the preprocessing step."
+                    )
                 preprocessed_image = np.transpose(
                     preprocessed_image, axes=ic.NUMPY_TO_TORCH_TRANSPOSE_AXES
                 )
@@ -424,7 +423,7 @@ def infer_from_dataframe(
                     original_ants_image=anchor_image,
                     mist_configuration=mist_configuration,
                     predictor=predictor,
-                    foreground_bounding_box=preprocessed_example["fg_bbox"],
+                    foreground_bounding_box=preprocessed_example["fg_bbox"], # type: ignore
                 )
 
                 # Apply postprocessing if a strategy is provided.
@@ -454,7 +453,7 @@ def infer_from_dataframe(
     # warning messages, print them. Otherwise, print a success message.
     if error_messages:
         console.print(
-            rich.text.Text(
+            rich.text.Text( # type: ignore
                 "Inference completed with the following messages:",
                 style="bold underline"
             )

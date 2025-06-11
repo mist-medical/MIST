@@ -9,26 +9,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Registry for ensembling strategies in MIST."""
-from typing import Dict, Type, List
+from typing import Dict, Type, List, TypeVar, Callable
 
 # MIST imports.
-from mist.inference.ensemblers.base import AbstractEnsembler
-
+from .base import AbstractEnsembler
 
 # Global registry for ensemblers.
+T = TypeVar("T", bound=AbstractEnsembler)
 ENSEMBLER_REGISTRY: Dict[str, AbstractEnsembler] = {}
 
 
-def register_ensembler(name: str):
+def register_ensembler(name: str) -> Callable[[Type[T]], Type[T]]:
     """Decorator to register a new ensembler class."""
-    def decorator(cls: Type[AbstractEnsembler]):
+    def decorator(cls: Type[T]) -> Type[T]:
         if not issubclass(cls, AbstractEnsembler):
             raise TypeError(
                 f"{cls.__name__} must inherit from AbstractEnsembler."
             )
         if name in ENSEMBLER_REGISTRY:
             raise KeyError(f"Ensembler '{name}' is already registered.")
-        ENSEMBLER_REGISTRY[name] = cls()
+        ENSEMBLER_REGISTRY[name] = cls()  # Register an instance of the class.
         return cls
     return decorator
 
@@ -39,7 +39,7 @@ def list_ensemblers() -> List[str]:
 
 
 def get_ensembler(name: str) -> AbstractEnsembler:
-    """Retrieve a registered ensembler by name."""
+    """Retrieve a registered ensembler class by name."""
     if name not in ENSEMBLER_REGISTRY:
         raise KeyError(
             f"Ensembler '{name}' is not registered. "

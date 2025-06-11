@@ -12,17 +12,14 @@
 from typing import List
 import torch
 
-# MIST imports.
-from mist.inference.ensemblers.base import AbstractEnsembler
-from mist.inference.ensemblers.ensembler_registry import register_ensembler
+# MIST imports (relative).
+from .base import AbstractEnsembler
+from .ensembler_registry import register_ensembler
 
 
 @register_ensembler("mean")
 class MeanEnsembler(AbstractEnsembler):
     """Simple averaging ensembler over softmax outputs."""
-    def __init__(self):
-        super().__init__(name="mean")
-
     def combine(self, predictions: List[torch.Tensor]) -> torch.Tensor:
         """Overrides the combine method to average predictions."""
         if not predictions:

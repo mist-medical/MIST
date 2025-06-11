@@ -23,9 +23,7 @@ from mist.runtime.run import Trainer
 from mist.evaluation.evaluator import Evaluator
 from mist.evaluation import evaluation_utils
 from mist.runtime import utils
-from mist.inference import inference_runners
-from mist.inference import inference_utils
-
+from mist.inference import infer_from_dataframe, test_on_fold
 
 # Initialize console for rich output.
 console = Console()
@@ -80,7 +78,7 @@ def main(arguments: argparse.Namespace) -> None:
 
         # Test on each specified fold.
         for fold in arguments.folds:
-            inference_runners.test_on_fold(arguments, fold)
+            test_on_fold(arguments, fold)
 
         # Evaluate predictions from cross-validation.
         filepaths_df, warnings = (
@@ -136,14 +134,15 @@ def main(arguments: argparse.Namespace) -> None:
             )
 
             with torch.no_grad():
-                inference_runners.infer_from_dataframe(
+                infer_from_dataframe(
                     paths_dataframe=test_df,
                     output_directory=os.path.join(
                         arguments.results, "predictions", "test"
                     ),
+                    mist_configuration=utils.read_json_file(
+                        os.path.join(arguments.results, "config.json")
+                    ),
                     models_directory=os.path.join(arguments.results, "models"),
-                    patch_overlap=arguments.sw_overlap,
-                    blend_mode=arguments.blend_mode,
                     ensemble_models=True,
                     test_time_augmentation=arguments.tta,
                     skip_preprocessing=arguments.no_preprocess,

@@ -9,14 +9,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Sliding window inferer implementation using MONAI."""
-from typing import Callable, Tuple, Union
+from typing import Callable, Tuple, Union, Optional
 import torch
 import monai
 
-# MIST imports.
-from mist.inference.inference_constants import InferenceConstants as ic
-from mist.inference.inferers.base import AbstractInferer
-from mist.inference.inferers.inferer_registry import register_inferer
+# MIST imports (relative).
+from ..inference_constants import InferenceConstants as ic
+from .base import AbstractInferer
+from .inferer_registry import register_inferer
 
 
 @register_inferer("sliding_window")
@@ -27,7 +27,7 @@ class SlidingWindowInferer(AbstractInferer):
         patch_size: Tuple[int, int, int],
         patch_overlap: float=0.5,
         patch_blend_mode: str="gaussian",
-        device: Union[str, torch.device]=None,
+        device: Optional[Union[str, torch.device]]=None,
     ):
         """Initialize the sliding window inferer.
 
@@ -46,7 +46,7 @@ class SlidingWindowInferer(AbstractInferer):
                 available or "cpu" otherwise.
         """
         # Initialize the base class.
-        super().__init__(device=device)
+        super().__init__()
 
         # Validate input parameters.
         if len(patch_size) != 3:
@@ -58,7 +58,7 @@ class SlidingWindowInferer(AbstractInferer):
                 "All patch dimensions must be positive integers, got: "
                 f"{patch_size}"
             )
-        if not (0 <= patch_overlap < 1):
+        if not 0 <= patch_overlap < 1:
             raise ValueError(
                 "patch_overlap must be in the range [0, 1), got: "
                 f"{patch_overlap}"
@@ -73,6 +73,11 @@ class SlidingWindowInferer(AbstractInferer):
         self.patch_size = patch_size
         self.patch_overlap = patch_overlap
         self.patch_blend_mode = patch_blend_mode
+
+        # Set the device for inference.
+        self.device = device or (
+            torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        )
 
     def infer(
         self,
@@ -89,7 +94,7 @@ class SlidingWindowInferer(AbstractInferer):
             prediction: Softmax prediction tensor of shape (1, C, D, H, W).
         """
         # Run MONAI's sliding window inference.
-        prediction = monai.inferers.sliding_window_inference(
+        prediction = monai.inferers.sliding_window_inference( # type: ignore
             inputs=image,
             roi_size=self.patch_size,
             sw_batch_size=ic.SLIDING_WINDOW_BATCH_SIZE,

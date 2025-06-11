@@ -131,6 +131,14 @@ class Trainer:
             self.data_structures["dataset_description"]["labels"]
         )
 
+        # Save model blend mode and patch overlap in MIST configuration.
+        self.data_structures["mist_configuration"]["patch_overlap"] = (
+            self.mist_arguments.sw_overlap
+        )
+        self.data_structures["mist_configuration"]["patch_blend_mode"] = (
+            self.mist_arguments.blend_mode
+        )
+
         if self.mist_arguments.model != "pretrained":
             # If the model is not pretrained, create a new model configuration.
             # Update the patch size if the user overrides it.
@@ -196,6 +204,12 @@ class Trainer:
         utils.write_json_file(
             self.file_paths["model_configuration"],
             self.data_structures["model_configuration"],
+        )
+
+        # Update the MIST configuration file with the inference parameters.
+        utils.write_json_file(
+            self.file_paths["mist_configuration"],
+            self.data_structures["mist_configuration"],
         )
 
     # Set up for distributed training
@@ -346,7 +360,7 @@ class Trainer:
                 num_workers=self.mist_arguments.num_workers,
                 rank=rank,
                 world_size=world_size,
-                extract_patches=True, # TODO: Change this to user option.
+                extract_patches=True,
                 use_augmentation=not self.mist_arguments.no_augmentation,
                 use_flips=not self.mist_arguments.augmentation_no_flips,
                 use_blur=not self.mist_arguments.augmentation_no_blur,
@@ -479,7 +493,7 @@ class Trainer:
                 running_loss_validation = utils.RunningMean()
 
                 # Initialize best validation loss to infinity.
-                best_validation_loss = np.Inf # type: ignore
+                best_validation_loss = np.inf # type: ignore
 
                 # Set up tensorboard summary writer.
                 writer = SummaryWriter(
