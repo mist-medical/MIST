@@ -12,7 +12,7 @@
 from typing import Dict, Type, List, Callable, TypeVar
 
 # MIST imports.
-from .base import AbstractInferer
+from mist.inference.inferers.base import AbstractInferer
 
 # Global registry for inferers.
 T = TypeVar("T", bound=AbstractInferer)

@@ -23,7 +23,7 @@ from mist.runtime.run import Trainer
 from mist.evaluation.evaluator import Evaluator
 from mist.evaluation import evaluation_utils
 from mist.runtime import utils
-from mist.inference import infer_from_dataframe, test_on_fold
+from mist.inference.inference_runners import test_on_fold, infer_from_dataframe
 
 # Initialize console for rich output.
 console = Console()

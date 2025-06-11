@@ -10,7 +10,7 @@
 # limitations under the License.
 """Abstract base class for all inferers in MIST."""
 from abc import ABC, abstractmethod
-from typing import Callable, Union, Any, Optional
+from typing import Callable, Any
 import torch
 
 

@@ -12,9 +12,9 @@
 from typing import List
 import torch
 
-# MIST imports (relative).
-from .base import AbstractEnsembler
-from .ensembler_registry import register_ensembler
+# MIST imports.
+from mist.inference.ensemblers.base import AbstractEnsembler
+from mist.inference.ensemblers.ensembler_registry import register_ensembler
 
 
 @register_ensembler("mean")

@@ -10,10 +10,10 @@
 from typing import Callable, List, Optional, Union
 import torch
 
-# MIST imports (relative).
-from .inferers import AbstractInferer
-from .ensemblers import AbstractEnsembler
-from .tta.transforms import AbstractTransform
+# MIST imports.
+from mist.inference.inferers.base import AbstractInferer
+from mist.inference.ensemblers.base import AbstractEnsembler
+from mist.inference.tta.transforms import AbstractTransform
 
 
 class Predictor:

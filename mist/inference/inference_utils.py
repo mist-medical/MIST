@@ -21,11 +21,11 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
-# MIST imports (relative).
-from ..preprocess_data import preprocess
-from ..runtime import utils
-from .inference_constants import InferenceConstants as ic
-from ..models import get_model
+# MIST imports.
+from mist.preprocess_data import preprocess
+from mist.runtime import utils
+from mist.inference.inference_constants import InferenceConstants as ic
+from mist.models import get_model
 
 
 def back_to_original_space(

@@ -9,23 +9,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Initialize and register all available inferers."""
-
 # Explicitly import all inferer modules to trigger decorator-based registration.
 from .sliding_window import SlidingWindowInferer
-
-# Expose base class and registry access here for cleaner API.
-from .base import AbstractInferer
-from .inferer_registry import get_inferer, list_inferers, register_inferer
-
-__all__ = [
-    # Base types.
-    "AbstractInferer",
-
-    # Inferer implementations.
-    "SlidingWindowInferer",
-
-    # Registry API.
-    "get_inferer",
-    "list_inferers",
-    "register_inferer",
-]

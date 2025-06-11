@@ -13,10 +13,10 @@ from typing import Callable, Tuple, Union, Optional
 import torch
 import monai
 
-# MIST imports (relative).
-from ..inference_constants import InferenceConstants as ic
-from .base import AbstractInferer
-from .inferer_registry import register_inferer
+# MIST imports.
+from mist.inference.inference_constants import InferenceConstants as ic
+from mist.inference.inferers.base import AbstractInferer
+from mist.inference.inferers.inferer_registry import register_inferer
 
 
 @register_inferer("sliding_window")

@@ -26,18 +26,18 @@ import pandas as pd
 import rich
 import torch
 
-# MIST imports (relative).
-from . import inference_utils
-from .inference_constants import InferenceConstants as ic
-from .predictor import Predictor
-from ..data_loading import dali_loader
-from ..models import get_model
-from ..postprocessing.postprocessor import Postprocessor
-from ..preprocess_data import preprocess
-from ..runtime import utils
-from ..inference.ensemblers import get_ensembler
-from ..inference.tta import get_strategy
-from ..inference.inferers import get_inferer
+# MIST imports.
+from mist.inference import inference_utils
+from mist.inference.inference_constants import InferenceConstants as ic
+from mist.inference.predictor import Predictor
+from mist.data_loading import dali_loader
+from mist.models import get_model
+from mist.postprocessing.postprocessor import Postprocessor
+from mist.preprocess_data import preprocess
+from mist.runtime import utils
+from mist.inference.ensemblers.ensembler_registry import get_ensembler
+from mist.inference.tta.strategies import get_strategy
+from mist.inference.inferers.inferer_registry import get_inferer
 
 
 def predict_single_example(

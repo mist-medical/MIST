@@ -12,7 +12,7 @@
 from typing import Dict, Type, List, TypeVar, Callable
 
 # MIST imports.
-from .base import AbstractEnsembler
+from mist.inference.ensemblers.base import AbstractEnsembler
 
 # Global registry for ensemblers.
 T = TypeVar("T", bound=AbstractEnsembler)

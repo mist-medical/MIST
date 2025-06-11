@@ -19,8 +19,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import List, Dict, Type, Any, TypeVar, Callable
 
-# MIST imports (relative).
-from .transforms import AbstractTransform, get_transform
+# MIST imports.
+from mist.inference.tta.transforms import AbstractTransform, get_transform
 
 # Strategy registry now holds classes, not instances
 T = TypeVar("T", bound="TTAStrategy")
