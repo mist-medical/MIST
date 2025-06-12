@@ -22,6 +22,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+# MONAI imports.
 from monai.networks.blocks import dynunet_block as dynamic_unet_blocks
 from mist.models.nnunet.nnunet_constants import NNUnetConstants as constants
 
@@ -42,21 +43,21 @@ class DynamicUNet(nn.Module):
     returns the prediction.
     """
     def __init__(
-            self,
-            spatial_dims: int,
-            in_channels: int,
-            out_channels: int,
-            kernel_size: Sequence[Union[Sequence[int], int]],
-            strides: Sequence[Union[Sequence[int], int]],
-            upsample_kernel_size: Sequence[Union[Sequence[int], int]],
-            filters: Sequence[int],
-            norm_name: Union[Tuple, str],
-            act_name: Union[Tuple, str],
-            dropout: Optional[Union[Tuple, str, float]]=None,
-            use_deep_supervision: bool=False,
-            num_deep_supervision_heads: int=1,
-            use_residual_block: bool=False,
-            trans_bias: bool=False,
+        self,
+        spatial_dims: int,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: Sequence[Union[Sequence[int], int]],
+        strides: Sequence[Union[Sequence[int], int]],
+        upsample_kernel_size: Sequence[Union[Sequence[int], int]],
+        filters: Sequence[int],
+        norm_name: Union[Tuple, str],
+        act_name: Union[Tuple, str],
+        dropout: Optional[Union[Tuple, str, float]]=None,
+        use_deep_supervision: bool=False,
+        num_deep_supervision_heads: int=1,
+        use_residual_block: bool=False,
+        trans_bias: bool=False,
     ):
 
         super().__init__()

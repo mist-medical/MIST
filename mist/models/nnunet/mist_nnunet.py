@@ -14,8 +14,9 @@ from typing import Union, Dict
 import torch
 from torch import nn
 
+# MIST imports.
 from mist.models.nnunet import dynamic_unet
-from mist.models.nnunet import utils
+from mist.models.nnunet import nnunet_utils
 from mist.models.nnunet.nnunet_constants import NNUnetConstants as constants
 
 
@@ -31,16 +32,16 @@ class NNUNet(nn.Module):
     pocket version of the model.
     """
     def __init__(
-            self,
-            spatial_dims: int,
-            in_channels: int,
-            out_channels: int,
-            roi_size: Sequence[int],
-            image_spacing: Sequence[float],
-            use_residual_blocks: bool,
-            use_deep_supervision: bool,
-            num_deep_supervision_heads: int,
-            use_pocket_model: bool,
+        self,
+        spatial_dims: int,
+        in_channels: int,
+        out_channels: int,
+        roi_size: Sequence[int],
+        image_spacing: Sequence[float],
+        use_residual_blocks: bool,
+        use_deep_supervision: bool,
+        num_deep_supervision_heads: int,
+        use_pocket_model: bool,
     ):
         super().__init__()
         # Make sure that the ROI size matches the spatial dimensions.
@@ -56,7 +57,7 @@ class NNUNet(nn.Module):
         # final encoded dimensions from the bottleneck layer. The latter is used
         # to determine the latent dimension for VAE regularization.
         kernel_sizes, strides, _ = (
-            utils.get_unet_params(roi_size, image_spacing)
+            nnunet_utils.get_unet_params(roi_size, image_spacing)
         )
 
         # Determine the number of filters at each resolution level. If we use

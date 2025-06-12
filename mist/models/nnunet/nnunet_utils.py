@@ -13,12 +13,13 @@ from collections.abc import Sequence
 from typing import Union, Tuple
 import numpy as np
 
+# MIST imports.
 from mist.models.nnunet.nnunet_constants import NNUnetConstants as constants
 
 
 def get_padding(
-        kernel_size: Union[int, Sequence[int]],
-        stride: Union[int, Sequence[int]],
+    kernel_size: Union[int, Sequence[int]],
+    stride: Union[int, Sequence[int]],
 ) -> Union[int, Sequence[int]]:
     """Get padding for a convolution layer based on kernel size and stride.
 
@@ -49,9 +50,9 @@ def get_padding(
 
 
 def get_output_padding(
-        kernel_size: Union[int, Sequence[int]],
-        stride: Union[int, Sequence[int]],
-        padding: Union[int, Sequence[int]],
+    kernel_size: Union[int, Sequence[int]],
+    stride: Union[int, Sequence[int]],
+    padding: Union[int, Sequence[int]],
 ) -> Union[int, Sequence[int]]:
     """Get output padding of a convolution layer.
 
@@ -89,8 +90,8 @@ def get_output_padding(
 
 
 def get_unet_params(
-        patch_size: Sequence[int],
-        spacings: Sequence[float],
+    patch_size: Sequence[int],
+    spacings: Sequence[float],
 ) -> Tuple[Sequence[int], Sequence[int], Sequence[int]]:
     """Get parameters for UNet architecture based on patch size and spacings.
 
