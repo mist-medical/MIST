@@ -68,7 +68,7 @@ class TTAStrategy(ABC):
     @abstractmethod
     def get_transforms(self) -> List[AbstractTransform]:
         """Return a list of forward/inverse transforms to apply at inference."""
-        pass # pylint: disable=unnecessary-pass
+        pass # pylint: disable=unnecessary-pass # pragma: no cover
 
     def __call__(self) -> List[AbstractTransform]:
         return self.get_transforms()

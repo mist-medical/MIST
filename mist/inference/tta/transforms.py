@@ -65,12 +65,12 @@ class AbstractTransform(ABC):
     @abstractmethod
     def forward(self, image: torch.Tensor) -> torch.Tensor:
         """Apply the transformation to the input image."""
-        pass # pylint:disable=unnecessary-pass
+        pass # pylint:disable=unnecessary-pass # pragma: no cover
 
     @abstractmethod
     def inverse(self, prediction: torch.Tensor) -> torch.Tensor:
         """Invert the transformation on the prediction."""
-        pass # pylint:disable=unnecessary-pass
+        pass # pylint:disable=unnecessary-pass # pragma: no cover
 
     def __call__(self, image: torch.Tensor) -> torch.Tensor:
         """Alias for forward."""

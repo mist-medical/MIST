@@ -34,7 +34,7 @@ class AbstractInferer(ABC):
         model: Callable[[torch.Tensor], torch.Tensor],
     ) -> torch.Tensor:
         """Perform model inference on a single image."""
-        pass # pylint:disable=unnecessary-pass
+        pass # pylint:disable=unnecessary-pass # pragma: no cover
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(name='{self.name}')"
