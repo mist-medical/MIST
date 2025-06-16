@@ -40,7 +40,6 @@ class NNUNet(nn.Module):
         image_spacing: Sequence[float],
         use_residual_blocks: bool,
         use_deep_supervision: bool,
-        num_deep_supervision_heads: int,
         use_pocket_model: bool,
     ):
         super().__init__()
@@ -98,7 +97,6 @@ class NNUNet(nn.Module):
             norm_name=constants.NORMALIZATION,
             use_residual_block=use_residual_blocks,
             use_deep_supervision=use_deep_supervision,
-            num_deep_supervision_heads=num_deep_supervision_heads,
             trans_bias=True,
         )
 

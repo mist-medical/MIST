@@ -96,6 +96,7 @@ def get_inference_args():
 
 
 def main(args):
+    """Main function for MIST inference script."""
     # Set warning levels.
     utils.set_warning_levels()
 
@@ -127,8 +128,6 @@ def main(args):
             output_directory=args.output,
             mist_configuration=mist_configuration,
             models_directory=args.models_dir,
-            patch_overlap=args.sw_overlap,
-            patch_blend_mode=args.blend_mode,
             ensemble_models=not args.fast,
             test_time_augmentation=args.tta,
             skip_preprocessing=args.no_preprocess,
@@ -138,6 +137,7 @@ def main(args):
 
 
 def inference_entry():
+    """Entry point for MIST inference script."""
     args = get_inference_args()
     main(args)
 

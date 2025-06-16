@@ -10,7 +10,7 @@
 # limitations under the License.
 """Registry for segmentation metrics used in evaluation."""
 from abc import ABC, abstractmethod
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, List
 import numpy as np
 
 # MIST imports.
@@ -61,6 +61,11 @@ def get_metric(name: str) -> Metric:
     if name not in METRIC_REGISTRY:
         raise ValueError(f"Metric '{name}' is not registered.")
     return METRIC_REGISTRY[name]
+
+
+def list_registered_metrics() -> List[str]:
+    """List all registered metrics."""
+    return sorted(METRIC_REGISTRY.keys())
 
 
 @register_metric

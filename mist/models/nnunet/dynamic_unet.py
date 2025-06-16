@@ -55,7 +55,7 @@ class DynamicUNet(nn.Module):
         act_name: Union[Tuple, str],
         dropout: Optional[Union[Tuple, str, float]]=None,
         use_deep_supervision: bool=False,
-        num_deep_supervision_heads: int=1,
+        num_deep_supervision_heads: int=2,
         use_residual_block: bool=False,
         trans_bias: bool=False,
     ):

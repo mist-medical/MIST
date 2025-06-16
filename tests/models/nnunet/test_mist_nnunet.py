@@ -28,7 +28,6 @@ def base_kwargs():
         "image_spacing": [1.0, 1.0, 1.0],
         "use_residual_blocks": True,
         "use_deep_supervision": False,
-        "num_deep_supervision_heads": 0,
         "use_pocket_model": False,
     }
 
@@ -84,10 +83,7 @@ def test_nnunet_forward_output_shape(base_kwargs):
 
 def test_nnunet_forward_with_deep_supervision(base_kwargs):
     """Covers forward pass with deep supervision enabled."""
-    base_kwargs.update({
-        "use_deep_supervision": True,
-        "num_deep_supervision_heads": 2,
-    })
+    base_kwargs.update({"use_deep_supervision": True})
     model = NNUNet(**base_kwargs)
     input_tensor = torch.randn(1, base_kwargs["in_channels"], 32, 32, 32)
     output = model(input_tensor)
@@ -97,6 +93,3 @@ def test_nnunet_forward_with_deep_supervision(base_kwargs):
     assert "prediction" in output
     assert "deep_supervision" in output
     assert isinstance(output["deep_supervision"], list)
-    assert len(output["deep_supervision"]) == (
-        base_kwargs["num_deep_supervision_heads"]
-    )

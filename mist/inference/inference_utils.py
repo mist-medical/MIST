@@ -25,7 +25,7 @@ import pandas as pd
 from mist.preprocess_data import preprocess
 from mist.runtime import utils
 from mist.inference.inference_constants import InferenceConstants as ic
-from mist.models import get_model
+from mist.models import model_loader
 
 
 def back_to_original_space(
@@ -167,7 +167,7 @@ def load_test_time_models(
 
     models = []
     for path in model_paths:
-        model = get_model.load_model_from_config(path, model_config)
+        model = model_loader.load_model_from_config(path, model_config)
         models.append(model.to(device).eval())
     return models
 

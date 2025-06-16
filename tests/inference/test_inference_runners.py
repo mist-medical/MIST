@@ -85,6 +85,7 @@ def test_predict_single_example_parametrized(
 
 # Test for test_on_fold.
 @pytest.mark.parametrize("crop_to_fg", [False, True])
+@patch("mist.models.model_loader.load_model_from_config")
 @patch("mist.inference.inference_runners.ants.image_write")
 @patch("mist.inference.inference_runners.predict_single_example")
 @patch("mist.inference.inference_runners.ants.image_read")
@@ -92,7 +93,6 @@ def test_predict_single_example_parametrized(
 @patch("mist.inference.inference_runners.get_strategy")
 @patch("mist.inference.inference_runners.get_ensembler")
 @patch("mist.inference.inference_runners.get_inferer")
-@patch("mist.inference.inference_runners.get_model.load_model_from_config")
 @patch("mist.inference.inference_runners.utils.read_json_file")
 @patch("mist.inference.inference_runners.utils.get_progress_bar")
 def test_test_on_fold_parameterized(
@@ -195,9 +195,9 @@ def test_test_on_fold_parameterized(
 @patch("mist.inference.inference_runners.get_strategy")
 @patch("mist.inference.inference_runners.get_ensembler")
 @patch("mist.inference.inference_runners.get_inferer")
-@patch("mist.inference.inference_runners.get_model.load_model_from_config")
 @patch("mist.inference.inference_runners.utils.read_json_file")
 @patch("mist.inference.inference_runners.utils.get_progress_bar")
+@patch("mist.models.model_loader.load_model_from_config")
 def test_test_on_fold_prediction_error_handling(
     mock_get_progress_bar,
     mock_read_json,
@@ -291,10 +291,8 @@ def test_test_on_fold_prediction_error_handling(
 @patch("mist.inference.inference_runners.ants.image_write")
 @patch("mist.inference.inference_runners.predict_single_example")
 @patch("mist.inference.inference_runners.preprocess")
-@patch(
-    "mist.inference.inference_runners.inference_utils.validate_inference_images"
-)
-@patch("mist.inference.inference_runners.inference_utils.load_test_time_models")
+@patch("mist.inference.inference_runners.inference_utils.validate_inference_images")
+@patch("mist.models.model_loader.load_model_from_config")  # ✅ UPDATED
 @patch("mist.inference.inference_runners.get_strategy")
 @patch("mist.inference.inference_runners.get_ensembler")
 @patch("mist.inference.inference_runners.get_inferer")
@@ -302,7 +300,7 @@ def test_infer_from_dataframe_success(
     mock_get_inferer,
     mock_get_ensembler,
     mock_get_strategy,
-    mock_load_models,
+    mock_load_model,  # ✅ updated name
     mock_validate,
     mock_preprocess,
     mock_predict,
@@ -365,7 +363,7 @@ def test_infer_from_dataframe_success(
 @patch("mist.inference.inference_runners.get_strategy")
 @patch("mist.inference.inference_runners.get_ensembler")
 @patch("mist.inference.inference_runners.get_inferer")
-@patch("mist.inference.inference_utils.load_test_time_models")
+@patch("mist.models.model_loader.load_model_from_config")
 @patch("mist.inference.inference_runners.utils.get_progress_bar")
 def test_postprocessing_strategy_handling(
     mock_get_progress_bar,

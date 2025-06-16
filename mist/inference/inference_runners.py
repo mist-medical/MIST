@@ -31,7 +31,7 @@ from mist.inference import inference_utils
 from mist.inference.inference_constants import InferenceConstants as ic
 from mist.inference.predictor import Predictor
 from mist.data_loading import dali_loader
-from mist.models import get_model
+from mist.models import model_loader
 from mist.postprocessing.postprocessor import Postprocessor
 from mist.preprocess_data import preprocess
 from mist.runtime import utils
@@ -161,7 +161,7 @@ def test_on_fold(
         results_dir, "models", f"fold_{fold_number}.pt"
     )
     model_config = os.path.join(results_dir, "models", "model_config.json")
-    model = get_model.load_model_from_config(model_weights, model_config)
+    model = model_loader.load_model_from_config(model_weights, model_config)
     model.eval()
     model.to(device)
 
