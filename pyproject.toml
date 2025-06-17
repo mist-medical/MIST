@@ -1,6 +1,6 @@
 [project]
 name = "mist-medical"
-version = "0.1.8-beta"
+version = "0.2.0-beta"
 requires-python = ">= 3.8"
 description = "MIST is a simple and scalable end-to-end framework for medical imaging segmentation."
 readme = "README.md"
@@ -9,6 +9,7 @@ authors = [
     {name = "Adrian Celaya", email = "aecelaya@rice.edu"},
     {name = "David Fuentes", email = "dtfuentes@mdanderson.org"},
     {name = "Beatrice Riviere", email = "riviere@rice.edu"},
+    {name = "MIST Imaging LLC"},
     {name = "Rice University"},
     {name = "The University of Texas MD Anderson Cancer Center"}
 ]
@@ -57,10 +58,10 @@ mist_run_all = "mist.scripts.run_all_entrypoint:run_all_entry"
 mist_analyze = "mist.scripts.analyze_entrypoint:analyze_entry"
 mist_preprocess = "mist.scripts.preprocess_entrypoint:preprocess_entry"
 mist_train = "mist.scripts.train_entrypoint:train_entry"
-mist_predict = "mist.predict:mist_predict_entry"
+mist_predict = "mist.scripts.inference_entrypoint:inference_entry"
 mist_evaluate = "mist.scripts.evaluation_entrypoint:evaluation_entry"
 mist_postprocess = "mist.scripts.postprocess_entrypoint:postprocess_entry"
-mist_convert_dataset = "mist.convert_to_mist:convert_to_mist_entry"
+mist_convert_dataset = "mist.scripts.conversion_entrypoint:conversion_entry"
 
 [tool.codespell]
 skip = ".git"

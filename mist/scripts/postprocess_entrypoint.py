@@ -11,7 +11,7 @@
 """Command line tool for postprocessing predictions from MIST output."""
 from argparse import ArgumentDefaultsHelpFormatter
 
-from mist.postprocess_preds.postprocessor import Postprocessor
+from mist.postprocessing.postprocessor import Postprocessor
 from mist.runtime.args import ArgParser
 from mist.runtime import utils
 

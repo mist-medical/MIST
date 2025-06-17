@@ -15,7 +15,7 @@ import pandas as pd
 # MIST imports.
 from mist.runtime.args import ArgParser
 from mist.runtime.utils import set_warning_levels
-from mist.evaluate_preds.evaluator import Evaluator
+from mist.evaluation.evaluator import Evaluator
 from mist.runtime import utils
 
 

@@ -26,7 +26,7 @@ class NNUnetConstants:
     MAX_FILTERS_2D = 512 # Maximum number of filters for 2D network.
 
     # Activation function for nnUNet.
-    ACTIVATION =("leakyrelu", {"inplace": True, "negative_slope": 0.01})
+    ACTIVATION = ("leakyrelu", {"inplace": True, "negative_slope": 0.01})
 
     # Normalization layer for nnUNet.
     NORMALIZATION = ("INSTANCE", {"affine": True})

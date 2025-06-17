@@ -16,7 +16,7 @@ from monai.inferers import sliding_window_inference # type: ignore
 
 # Import MIST modules.
 from mist.data_loading import dali_loader
-from mist.models import get_model
+from mist.models.model_loader import get_model
 from mist.runtime import exceptions
 from mist.runtime import loss_functions
 from mist.runtime import progress_bar
@@ -131,71 +131,47 @@ class Trainer:
             self.data_structures["dataset_description"]["labels"]
         )
 
-        if self.mist_arguments.model != "pretrained":
-            # If the model is not pretrained, create a new model configuration.
-            # Update the patch size if the user overrides it.
-            if self.mist_arguments.patch_size is not None:
-                self.data_structures["mist_configuration"]["patch_size"] = (
-                    self.mist_arguments.patch_size
-                )
+        # Save model blend mode and patch overlap in MIST configuration.
+        self.data_structures["mist_configuration"]["patch_overlap"] = (
+            self.mist_arguments.sw_overlap
+        )
+        self.data_structures["mist_configuration"]["patch_blend_mode"] = (
+            self.mist_arguments.blend_mode
+        )
 
-            # Create a new model configuration based on user arguments.
-            self.data_structures["model_configuration"] = {
-                "model_name": self.mist_arguments.model,
-                "n_channels": number_of_channels,
-                "n_classes": number_of_classes,
-                "deep_supervision": self.mist_arguments.deep_supervision,
-                "deep_supervision_heads": (
-                    self.mist_arguments.deep_supervision_heads
-                ),
-                "pocket": self.mist_arguments.pocket,
-                "patch_size": (
-                    self.data_structures["mist_configuration"]["patch_size"]
-                ),
-                "target_spacing": (
-                    self.data_structures["mist_configuration"]["target_spacing"]
-                ),
-                "use_res_block": self.mist_arguments.use_res_block,
-            }
-        else:
-            # If the model is pretrained, read the model configuration from the
-            # pretrained model configuration file.
-            # Path to the pretrained model configuration file.
-            pretrained_model_config_path = os.path.join(
-                self.mist_arguments.pretrained_model_path, "model_config.json"
-            )
-
-            # Check if the pretrained model configuration file exists.
-            if not os.path.exists(pretrained_model_config_path):
-                raise FileNotFoundError(
-                    f"Pretrained model configuration file not found: "
-                    f"{pretrained_model_config_path}"
-                )
-
-            # Load the pretrained model configuration from file.
-            self.data_structures["model_configuration"] = utils.read_json_file(
-                pretrained_model_config_path
-            )
-
-            # Update the number of channels and classes from the current
-            # dataset description.
-            self.data_structures["model_configuration"].update(
-                {
-                    "n_channels": number_of_channels,
-                    "n_classes": number_of_classes,
-                }
-            )
-
-            # Update the patch size in the MIST configuration based on the
-            # patch size from the pretrained model configuration.
+        # If the model is not pretrained, create a new model configuration.
+        # Update the patch size if the user overrides it.
+        if self.mist_arguments.patch_size is not None:
             self.data_structures["mist_configuration"]["patch_size"] = (
-                self.data_structures["model_configuration"]["patch_size"]
+                self.mist_arguments.patch_size
             )
+
+        # Create a new model configuration based on user arguments.
+        self.data_structures["model_configuration"] = {
+            "model_name": self.mist_arguments.model,
+            "n_channels": number_of_channels,
+            "n_classes": number_of_classes,
+            "deep_supervision": self.mist_arguments.deep_supervision,
+            "pocket": self.mist_arguments.pocket,
+            "patch_size": (
+                self.data_structures["mist_configuration"]["patch_size"]
+            ),
+            "target_spacing": (
+                self.data_structures["mist_configuration"]["target_spacing"]
+            ),
+            "use_res_block": self.mist_arguments.use_res_block,
+        }
 
         # Save the model configuration to file.
         utils.write_json_file(
             self.file_paths["model_configuration"],
             self.data_structures["model_configuration"],
+        )
+
+        # Update the MIST configuration file with the inference parameters.
+        utils.write_json_file(
+            self.file_paths["mist_configuration"],
+            self.data_structures["mist_configuration"],
         )
 
     # Set up for distributed training
@@ -346,7 +322,7 @@ class Trainer:
                 num_workers=self.mist_arguments.num_workers,
                 rank=rank,
                 world_size=world_size,
-                extract_patches=True, # TODO: Change this to user option.
+                extract_patches=True,
                 use_augmentation=not self.mist_arguments.no_augmentation,
                 use_flips=not self.mist_arguments.augmentation_no_flips,
                 use_blur=not self.mist_arguments.augmentation_no_blur,
@@ -430,17 +406,7 @@ class Trainer:
                         )
 
             # Define the model from the model configuration file.
-            if self.mist_arguments.model != "pretrained":
-                # Create new model from the model configuration.
-                model = get_model.get_model(
-                    **self.data_structures["model_configuration"]
-                )
-            else:
-                model = get_model.configure_pretrained_model(
-                    self.mist_arguments.pretrained_model_path,
-                    self.data_structures["model_configuration"]["n_channels"],
-                    self.data_structures["model_configuration"]["n_classes"],
-                )
+            model = get_model(**self.data_structures["model_configuration"])
 
             # Make batch normalization compatible with DDP.
             model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
@@ -479,7 +445,7 @@ class Trainer:
                 running_loss_validation = utils.RunningMean()
 
                 # Initialize best validation loss to infinity.
-                best_validation_loss = np.Inf # type: ignore
+                best_validation_loss = np.inf # type: ignore
 
                 # Set up tensorboard summary writer.
                 writer = SummaryWriter(

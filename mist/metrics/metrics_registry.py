@@ -10,7 +10,7 @@
 # limitations under the License.
 """Registry for segmentation metrics used in evaluation."""
 from abc import ABC, abstractmethod
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, List
 import numpy as np
 
 # MIST imports.
@@ -42,7 +42,7 @@ class Metric(ABC):
         Returns:
             Computed metric value, or None if not computable.
         """
-        pass
+        pass # pylint: disable=unnecessary-pass
 
 
 # Global registry for metrics.
@@ -54,6 +54,18 @@ def register_metric(cls):
     instance = cls()
     METRIC_REGISTRY[instance.name] = instance
     return cls
+
+
+def get_metric(name: str) -> Metric:
+    """Retrieve a metric by name."""
+    if name not in METRIC_REGISTRY:
+        raise ValueError(f"Metric '{name}' is not registered.")
+    return METRIC_REGISTRY[name]
+
+
+def list_registered_metrics() -> List[str]:
+    """List all registered metrics."""
+    return sorted(METRIC_REGISTRY.keys())
 
 
 @register_metric

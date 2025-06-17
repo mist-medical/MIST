@@ -4,6 +4,10 @@ from typing import Union
 import argparse
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
+# MIST imports.
+from mist.metrics.metrics_registry import list_registered_metrics
+from mist.models.model_registry import list_registered_models
+
 
 def positive_int(value: Union[str, int]) -> int:
     """Check if the input is a positive integer.
@@ -314,46 +318,23 @@ def get_main_args():
         "--model",
         type=str,
         default="nnunet",
-        choices=[
-            "nnunet",
-            "mednext-v1-small",
-            "mednext-v1-base",
-            "mednext-v1-medium",
-            "mednext-v1-large",
-            "unet",
-            "fmgnet",
-            "wnet",
-            "attn-unet",
-            "swin-unetr",
-            "pretrained"
-        ],
+        choices=list_registered_models(),
         help="Pick which network architecture to use"
-    )
-    parser.arg(
-        "--pretrained-model-path",
-        type=str,
-        help="Full path to pretrained mist models directory"
     )
     parser.boolean_flag(
         "--use-res-block",
         default=False,
-        help="Use residual blocks for nnUNet, UNet, FMG-Net, or W-Net"
+        help="Use residual blocks for nnUNet, FMG-Net, W-Net, or MedNeXt"
     )
     parser.boolean_flag(
         "--pocket",
         default=False,
-        help="Use pocket version of nnUNet or UNet"
+        help="Use pocket version of nnUNet or MedNeXt"
     )
     parser.boolean_flag(
         "--deep-supervision",
         default=False,
-        help="Use deep supervision for nnUNet, UNet, FMG-Net, W-Net, or Attention UNet"
-    )
-    parser.arg(
-        "--deep-supervision-heads",
-        type=positive_int,
-        default=2,
-        help="Number of deep supervision heads to use"
+        help="Use deep supervision for nnUNet, FMG-Net, W-Net, or MedNeXt"
     )
 
     # Regularization parameters.
@@ -409,9 +390,6 @@ def get_main_args():
             "cldice"
         ],
         help="Pick loss function for training"
-    )
-    parser.arg(
-        "--class-weights", nargs="+", type=float, help="Specify class weights"
     )
     parser.boolean_flag(
         "--exclude-background",
@@ -496,7 +474,7 @@ def get_main_args():
         "--metrics",
         nargs="+",
         default=["dice", "haus95"],
-        choices=["dice", "surf_dice", "haus95", "avg_surf"],
+        choices=list_registered_metrics(),
         help="List of metrics to use for evaluation"
     )
     parser.arg(

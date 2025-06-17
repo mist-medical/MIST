@@ -298,11 +298,11 @@ MIST-compatible data.
 The ```mist_convert_dataset``` command and its arguments are described below:
 
 * ```mist_convert_dataset```: Converts either MSD or CSV formatted datasets into MIST-compatible data
-	- ```--format```: (required: default: ```msd```) The format of the given dataset, which can be either ```msd``` or ```csv```
-    - At least one of the following are required:
+	- ```--format```: (required) The format of the given dataset, which can be either ```msd``` or ```csv```
+  - ```--output```: (required) Full path to the new MIST formatted dataset
+    - At least one of the following are required depending on the chosen format:
       	- ```--msd-source```: Full path to the MSD dataset, if that is what you are converting
       	- ```--train-csv```: Full path to the CSV file containing training data, if that is what you are using
-	- ```--dest```: (required) Full path to the new MIST formatted dataset
     - ```--test-csv```: (optional) Full path to CSV file containing test data
 
 !!! note	
