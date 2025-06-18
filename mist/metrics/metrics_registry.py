@@ -15,6 +15,7 @@ import numpy as np
 
 # MIST imports.
 from mist.metrics import segmentation_metrics
+from mist.metrics import lesion_wise_metrics
 
 
 class Metric(ABC):
@@ -123,3 +124,58 @@ class AverageSurfaceDistance(Metric):
             truth, pred, spacing
         )
         return segmentation_metrics.compute_average_surface_distance(distances)
+
+
+@register_metric
+class LesionWiseDice(Metric):
+    """Lesion-wise Dice coefficient metric."""
+    name = "lesion_wise_dice"
+    best = 1.0
+    worst = 0.0
+
+    def __call__(self, truth, prediction, spacing, **kwargs):
+        result = lesion_wise_metrics.compute_lesion_wise_metrics(
+            prediction,
+            truth,
+            spacing=spacing,
+            metrics=["dice"],
+            reduction="mean",
+        )
+        return result.get("lesion_wise_dice", self.worst)
+
+
+@register_metric
+class LesionWiseHausdorff95(Metric):
+    """Lesion-wise 95th percentile Hausdorff distance metric."""
+    name = "lesion_wise_haus95"
+    best = 0.0
+    worst = float("inf") # Will be dynamically overridden.
+
+    def __call__(self, truth, prediction, spacing, **kwargs):
+        result = lesion_wise_metrics.compute_lesion_wise_metrics(
+            prediction,
+            truth,
+            spacing=spacing,
+            metrics=["haus95"],
+            reduction="mean",
+        )
+        return result.get("lesion_wise_haus95", self.worst)
+
+@register_metric
+class LesionWiseSurfaceDice(Metric):
+    """Lesion-wise surface Dice metric at configurable tolerance."""
+    name = "lesion_wise_surf_dice"
+    best = 1.0
+    worst = 0.0
+
+    def __call__(self, truth, prediction, spacing, **kwargs):
+        tolerance = kwargs.get("tolerance", 1.0)
+        result = lesion_wise_metrics.compute_lesion_wise_metrics(
+            prediction,
+            truth,
+            spacing=spacing,
+            metrics=["surface_dice"],
+            surface_dice_tolerance_mm=tolerance,
+            reduction="mean",
+        )
+        return result.get("lesion_wise_surf_dice", self.worst)
