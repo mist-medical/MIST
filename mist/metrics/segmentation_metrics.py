@@ -1,3 +1,13 @@
+# Copyright (c) MIST Imaging LLC.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """Modified module exposing surface distance based measures."""
 from __future__ import absolute_import
 from __future__ import division
@@ -9,6 +19,7 @@ import numpy as np
 import numpy.typing as npt
 from scipy import ndimage
 
+# MIST imports.
 from mist.metrics import lookup_tables
 
 
@@ -256,10 +267,10 @@ def compute_surface_distances(
     # Compute the neighbour code (local binary pattern) for each voxel
     # the resulting arrays are spatially shifted by minus half a voxel in each
     # axis. (i.e. the points are located at the corners of the original voxels).
-    neighbour_code_map_gt = ndimage.filters.correlate( # type: ignore
+    neighbour_code_map_gt = ndimage.correlate(
         cropmask_gt.astype(np.uint8), kernel, mode="constant", cval=0
     )
-    neighbour_code_map_pred = ndimage.filters.correlate( # type: ignore
+    neighbour_code_map_pred = ndimage.correlate(
         cropmask_pred.astype(np.uint8), kernel, mode="constant", cval=0
     )
 
@@ -276,18 +287,18 @@ def compute_surface_distances(
     # Compute the distance transform (closest distance of each voxel to the
     # surface voxels).
     if borders_gt.any():
-        distmap_gt = ndimage.morphology.distance_transform_edt( # type: ignore
+        distmap_gt = ndimage.distance_transform_edt(
             ~borders_gt, sampling=spacing_mm
         )
     else:
-        distmap_gt = np.Inf * np.ones(borders_gt.shape) # type: ignore
+        distmap_gt = np.inf * np.ones(borders_gt.shape)
 
     if borders_pred.any():
-        distmap_pred = ndimage.morphology.distance_transform_edt( # type: ignore
+        distmap_pred = ndimage.distance_transform_edt(
             ~borders_pred, sampling=spacing_mm
         )
     else:
-        distmap_pred = np.Inf * np.ones(borders_pred.shape) # type: ignore
+        distmap_pred = np.inf * np.ones(borders_pred.shape)
 
     # Compute the area of each surface element.
     surface_area_map_gt = neighbour_code_to_surface_area[neighbour_code_map_gt]
@@ -296,8 +307,8 @@ def compute_surface_distances(
     ]
 
     # Create a list of all surface elements with distance and area.
-    distances_gt_to_pred = distmap_pred[borders_gt]
-    distances_pred_to_gt = distmap_gt[borders_pred]
+    distances_gt_to_pred = distmap_pred[borders_gt] # type: ignore
+    distances_pred_to_gt = distmap_gt[borders_pred] # type: ignore
     surfel_areas_gt = surface_area_map_gt[borders_gt]
     surfel_areas_pred = surface_area_map_pred[borders_pred]
 
@@ -385,7 +396,7 @@ def compute_robust_hausdorff(
             min(idx.astype("int"), len(distances_gt_to_pred) - 1)
         ]
     else:
-        perc_distance_gt_to_pred = np.Inf # type: ignore
+        perc_distance_gt_to_pred = np.inf
 
     if len(distances_pred_to_gt) > 0:
         surfel_areas_cum_pred = (
@@ -396,11 +407,11 @@ def compute_robust_hausdorff(
             min(idx.astype("int"), len(distances_pred_to_gt) - 1)
         ]
     else:
-        perc_distance_pred_to_gt = np.Inf # type: ignore
+        perc_distance_pred_to_gt = np.inf
 
     # Return max of the two one-sided Hausdorff distances.
-    return np.max(
-        [perc_distance_gt_to_pred, perc_distance_pred_to_gt]
+    return np.max( # type: ignore
+        [perc_distance_gt_to_pred, perc_distance_pred_to_gt] # type: ignore
     ).astype("float")
 
 
@@ -497,14 +508,14 @@ def compute_dice_coefficient(
 
     Returns:
         The dice coefficient as float. If both masks are empty, the result is
-        NaN.
+        nan.
     """
     # Compute the intersection and the sum of the volumes.
     volume_sum = mask_gt.sum() + mask_pred.sum()
 
-    # Return a NaN if both masks are empty.
+    # Return a nan if both masks are empty.
     if volume_sum == 0:
-        return np.NaN # type: ignore
+        return np.nan
 
     # Compute intersection and return the dice coefficient.
     volume_intersect = (mask_gt & mask_pred).sum()
