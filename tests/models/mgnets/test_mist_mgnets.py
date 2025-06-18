@@ -1,0 +1,121 @@
+# Copyright (c) MIST Imaging LLC.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Unit tests for the MGNet model implementation."""
+import pytest
+import torch
+
+# MIST imports.
+from mist.models.mgnets.mist_mgnets import MGNet
+
+
+@pytest.mark.parametrize("mg_type", ["wnet", "fmgnet"])
+@pytest.mark.parametrize("depth", [1, 3, 5])
+def test_mgnet_forward_eval(mg_type, depth):
+    """Test MGNet forward pass in eval mode (inference only)."""
+    model = MGNet(
+        mg_net=mg_type,
+        n_channels=1,
+        n_classes=3,
+        depth=depth,
+        use_res_block=False,
+        deep_supervision=False,
+    )
+    model.eval()
+    x = torch.randn(1, 1, 64, 64, 64)
+    y = model(x)
+    assert isinstance(y, torch.Tensor)
+    assert y.shape[0] == 1
+    assert y.shape[1] == 3
+
+
+@pytest.mark.parametrize("mg_type", ["wnet", "fmgnet"])
+@pytest.mark.parametrize("depth", [2, 4])
+def test_mgnet_forward_train_without_deep_supervision(mg_type, depth):
+    """Test MGNet forward pass in training mode without deep supervision."""
+    model = MGNet(
+        mg_net=mg_type,
+        n_channels=1,
+        n_classes=3,
+        depth=depth,
+        use_res_block=True,
+        deep_supervision=False,
+    )
+    model.train()
+    x = torch.randn(1, 1, 64, 64, 64)
+    output = model(x)
+    assert isinstance(output, dict)
+    assert "prediction" in output
+    assert isinstance(output["prediction"], torch.Tensor)
+    assert output.get("deep_supervision") is None
+
+
+@pytest.mark.parametrize("mg_type", ["wnet", "fmgnet"])
+def test_mgnet_forward_train_with_deep_supervision(mg_type):
+    """Test MGNet forward pass in training mode with deep supervision."""
+    model = MGNet(
+        mg_net=mg_type,
+        n_channels=1,
+        n_classes=2,
+        depth=4,
+        use_res_block=False,
+        deep_supervision=True,
+        deep_supervision_heads=2,
+    )
+    model.train()
+    x = torch.randn(1, 1, 64, 64, 64)
+    output = model(x)
+    assert isinstance(output, dict)
+    assert "prediction" in output
+    assert "deep_supervision" in output
+    assert isinstance(output["deep_supervision"], tuple)
+    for ds in output["deep_supervision"]:
+        assert isinstance(ds, torch.Tensor)
+        assert ds.shape[0] == 1
+        assert ds.shape[1] == 2
+
+
+def test_invalid_depth_raises():
+    """Test that invalid MGNet depth raises ValueError."""
+    with pytest.raises(ValueError, match="Depth must be between 1 and 5"):
+        MGNet("wnet", n_channels=1, n_classes=2, depth=0)
+
+
+def test_invalid_mgnet_type_raises():
+    """Test that invalid MG architecture name raises ValueError."""
+    with pytest.raises(ValueError, match="Invalid MG architecture"):
+        MGNet("badnet", n_channels=1, n_classes=2, depth=2)
+
+
+def test_invalid_supervision_heads_raises():
+    """Test that deep supervision heads exceeding depth raises ValueError."""
+    with pytest.raises(ValueError, match="Deep supervision heads must be less"):
+        MGNet(
+            "wnet",
+            n_channels=1,
+            n_classes=2,
+            depth=2,
+            deep_supervision=True,
+            deep_supervision_heads=3
+        )
+
+
+def test_get_in_decoder_channels_invalid_architecture():
+    """_get_in_decoder_channels raises ValueError for invalid architecture."""
+    model = MGNet(
+        mg_net="wnet",  # Use valid init so constructor passes.
+        n_channels=1,
+        n_classes=3,
+        depth=2,
+    )
+    model.mg_net = "invalid"  # Manually override to an invalid string.
+
+    with pytest.raises(ValueError, match="Invalid MG architecture"):
+        model._get_in_decoder_channels(2)

@@ -89,7 +89,7 @@ def test_back_to_original_space(
     original_image.new_image_like.assert_called_once_with("mock_numpy_data")
 
 
-@patch("mist.inference.inference_utils.get_model.load_model_from_config")
+@patch("mist.models.model_loader.load_model_from_config")
 @patch("mist.inference.inference_utils.utils.listdir_with_no_hidden_files")
 @patch("os.path.isfile")
 @patch("os.path.isdir")
@@ -133,7 +133,7 @@ def test_load_test_time_models_success(
     ], any_order=False)
 
 
-@patch("mist.inference.inference_utils.get_model.load_model_from_config")
+@patch("mist.models.model_loader.load_model_from_config")
 @patch("mist.inference.inference_utils.utils.listdir_with_no_hidden_files")
 @patch("os.path.isfile")
 @patch("os.path.isdir")
