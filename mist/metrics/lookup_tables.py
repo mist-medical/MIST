@@ -1,3 +1,13 @@
+# Copyright (c) MIST Imaging LLC.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """Modified lookup tables used by surface distance metrics."""
 from __future__ import absolute_import
 from __future__ import division
@@ -301,7 +311,7 @@ def create_table_neighbour_code_to_surface_area(
         normals = np.array(_NEIGHBOUR_CODE_TO_NORMALS[code])
         sum_area = 0
         for normal_idx in range(normals.shape[0]):
-            # normal vector
+            # Normal vector.
             n = np.zeros([3])
             n[0] = normals[normal_idx, 0] * spacing_mm[1] * spacing_mm[2]
             n[1] = normals[normal_idx, 1] * spacing_mm[0] * spacing_mm[2]

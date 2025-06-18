@@ -14,7 +14,7 @@ from typing import Dict, Tuple, Optional, List
 import numpy as np
 
 # MIST imports.
-from mist.metrics import metrics
+from mist.metrics import segmentation_metrics
 
 
 class Metric(ABC):
@@ -42,7 +42,7 @@ class Metric(ABC):
         Returns:
             Computed metric value, or None if not computable.
         """
-        pass # pylint: disable=unnecessary-pass
+        pass # pylint: disable=unnecessary-pass # pragma: no cover
 
 
 # Global registry for metrics.
@@ -76,7 +76,7 @@ class DiceCoefficient(Metric):
     worst = 0.0
 
     def __call__(self, truth, pred, spacing, **kwargs):
-        return metrics.compute_dice_coefficient(truth, pred)
+        return segmentation_metrics.compute_dice_coefficient(truth, pred)
 
 
 @register_metric
@@ -87,8 +87,12 @@ class Hausdorff95(Metric):
     worst = float("inf") # Will be dynamically overridden.
 
     def __call__(self, truth, pred, spacing, **kwargs):
-        distances = metrics.compute_surface_distances(truth, pred, spacing)
-        return metrics.compute_robust_hausdorff(distances, percent=95)
+        distances = segmentation_metrics.compute_surface_distances(
+            truth, pred, spacing
+        )
+        return segmentation_metrics.compute_robust_hausdorff(
+            distances, percent=95
+        )
 
 
 @register_metric
@@ -99,8 +103,10 @@ class SurfaceDice(Metric):
     worst = 0.0
 
     def __call__(self, truth, pred, spacing, **kwargs):
-        distances = metrics.compute_surface_distances(truth, pred, spacing)
-        return metrics.compute_surface_dice_at_tolerance(
+        distances = segmentation_metrics.compute_surface_distances(
+            truth, pred, spacing
+        )
+        return segmentation_metrics.compute_surface_dice_at_tolerance(
             distances, tolerance_mm=kwargs.get("tolerance", 1.0)
         )
 
@@ -113,5 +119,7 @@ class AverageSurfaceDistance(Metric):
     worst = float("inf") # Will be dynamically overridden.
 
     def __call__(self, truth, pred, spacing, **kwargs):
-        distances = metrics.compute_surface_distances(truth, pred, spacing)
-        return metrics.compute_average_surface_distance(distances)
+        distances = segmentation_metrics.compute_surface_distances(
+            truth, pred, spacing
+        )
+        return segmentation_metrics.compute_average_surface_distance(distances)
