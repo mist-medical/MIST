@@ -76,7 +76,7 @@ class LinearScheduler:
         return max(0.0, 1.0 - progress)
 
 
-def get_scheduler(name: str, **kwargs):
+def get_alpha_scheduler(name: str, **kwargs):
     """Factory to get alpha scheduler by name.
 
     Args:

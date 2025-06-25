@@ -32,7 +32,7 @@ class SegmentationLoss(nn.Module, ABC):
             excluded from the loss computation.
         spatial_dims: Tuple indicating the spatial dimensions for 3D data.
     """
-    def __init__(self, exclude_background: bool=False,):
+    def __init__(self,exclude_background: bool=False):
         """Initialize the SegmentationLoss.
 
         Args:
@@ -44,9 +44,9 @@ class SegmentationLoss(nn.Module, ABC):
         self.spatial_dims = (2, 3, 4)  # Default for 3D.
 
     def preprocess(
-            self,
-            y_true: torch.Tensor,
-            y_pred: torch.Tensor,
+        self,
+        y_true: torch.Tensor,
+        y_pred: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Preprocesses loss inputs for segmentation tasks.
 

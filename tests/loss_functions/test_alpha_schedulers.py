@@ -51,14 +51,14 @@ def test_linear_scheduler_decays_to_zero():
 
 def test_get_scheduler_constant():
     """Test factory returns ConstantScheduler."""
-    sched = alpha_schedulers.get_scheduler("constant", value=0.3)
+    sched = alpha_schedulers.get_alpha_scheduler("constant", value=0.3)
     assert isinstance(sched, alpha_schedulers.ConstantScheduler)
     assert sched(0) == 0.3
 
 
 def test_get_scheduler_linear():
     """Test factory returns LinearScheduler."""
-    sched = alpha_schedulers.get_scheduler("linear", num_epochs=10)
+    sched = alpha_schedulers.get_alpha_scheduler("linear", num_epochs=10)
     assert isinstance(sched, alpha_schedulers.LinearScheduler)
     assert sched(0) == 1.0
 
@@ -66,4 +66,4 @@ def test_get_scheduler_linear():
 def test_get_scheduler_invalid_name_raises():
     """Test that unknown scheduler name raises ValueError."""
     with pytest.raises(ValueError, match="Unknown scheduler:"):
-        alpha_schedulers.get_scheduler("cosine", num_epochs=10)
+        alpha_schedulers.get_alpha_scheduler("cosine", num_epochs=10)
