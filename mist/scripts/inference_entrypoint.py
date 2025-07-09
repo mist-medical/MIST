@@ -101,7 +101,7 @@ def main(args):
     utils.set_warning_levels()
 
     # Set device.
-    if args.device != "cpu" or args.device != "cuda":
+    if args.device != "cpu" and args.device != "cuda":
         os.environ["CUDA_VISIBLE_DEVICES"] = args.device
         device = torch.device(int(args.device))
     else:
