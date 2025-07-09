@@ -17,6 +17,7 @@ from mist.runtime.args import ArgParser
 from mist.runtime.utils import set_warning_levels
 from mist.evaluation.evaluator import Evaluator
 from mist.runtime import utils
+from mist.metrics.metrics_registry import list_registered_metrics
 
 
 def get_eval_args():
@@ -40,7 +41,7 @@ def get_eval_args():
         "--metrics",
         nargs="+",
         default=["dice", "haus95"],
-        choices=["dice", "surf_dice", "haus95", "avg_surf"],
+        choices=list_registered_metrics(),
         help="List of metrics to use for evaluation"
     )
     parser.arg(
