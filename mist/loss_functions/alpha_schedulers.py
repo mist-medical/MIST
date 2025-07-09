@@ -66,7 +66,7 @@ class LinearScheduler:
 
         Args:
             epoch: Current epoch number (0-indexed).
-        
+
         Returns:
             The alpha value for the current epoch.
         """
