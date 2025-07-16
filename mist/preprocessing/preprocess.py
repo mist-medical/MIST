@@ -11,7 +11,7 @@ import rich
 import SimpleITK as sitk
 
 from mist.runtime import utils
-from mist.preprocess_data import preprocessing_constants
+from mist.preprocessing import preprocessing_constants
 import pdb
 
 console = rich.console.Console()

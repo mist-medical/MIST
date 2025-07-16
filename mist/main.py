@@ -17,7 +17,7 @@ from rich.console import Console
 
 # Import MIST modules.
 from mist.analyze_data.analyzer import Analyzer
-from mist.preprocess_data.preprocess import preprocess_dataset
+from mist.preprocessing.preprocess import preprocess_dataset
 from mist.runtime import args
 from mist.runtime.run import Trainer
 from mist.evaluation.evaluator import Evaluator

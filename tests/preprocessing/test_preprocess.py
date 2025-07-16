@@ -8,7 +8,7 @@ import pytest
 import ants
 import SimpleITK as sitk
 
-from mist.preprocess_data import preprocess
+from mist.preprocessing import preprocess
 from mist.runtime import utils
 
 
