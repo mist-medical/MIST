@@ -12,7 +12,6 @@ import SimpleITK as sitk
 
 from mist.runtime import utils
 from mist.preprocessing import preprocessing_constants
-import pdb
 
 console = rich.console.Console()
 
@@ -290,7 +289,7 @@ def compute_dtm(
                 if ext_max == 0:
                     # Avoid division by zero; this effectively leaves dtm_ext
                     # unchanged.
-                    ext_max = 1 
+                    ext_max = 1
                 if int_min == 0:
                     # Avoid division by zero; this effectively leaves dtm_int
                     # unchanged.
@@ -501,7 +500,7 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
     # Check if training paths file exists and read it.
     if not os.path.exists(os.path.join(args.results, "train_paths.csv")):
         raise FileNotFoundError(
-            "Training paths file not found in {args.results}."
+            f"Training paths file not found in {args.results}."
         )
     df = pd.read_csv(os.path.join(args.results, "train_paths.csv"))
 
