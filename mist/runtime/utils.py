@@ -6,7 +6,7 @@ import random
 import argparse
 import subprocess
 import warnings
-from typing import Any, Dict, Tuple, List, Callable
+from typing import Any, Dict, Tuple, List
 
 import ants
 import numpy as np
@@ -18,7 +18,6 @@ import torch
 from torch import nn
 from rich.progress import (BarColumn, MofNCompleteColumn, Progress, TextColumn,
                            TimeElapsedColumn)
-from scipy import ndimage
 from sklearn.model_selection import KFold
 
 
@@ -140,6 +139,7 @@ def set_warning_levels() -> None:
     warnings.simplefilter(action="ignore", category=FutureWarning)
     warnings.simplefilter(action="ignore", category=RuntimeWarning)
     warnings.simplefilter(action="ignore", category=UserWarning)
+    warnings.simplefilter(action="ignore", category=DeprecationWarning)
 
 
 def create_empty_dir(path: str) -> None:
@@ -219,7 +219,10 @@ def has_test_data(dataset_json_path: str) -> bool:
         True if test data is present in the dataset json file.
     """
     dataset_information = read_json_file(dataset_json_path)
-    return "test-data" in dataset_information.keys()
+    if "test-data" in dataset_information.keys():
+        if dataset_information["test-data"] is not None:
+            return True
+    return False
 
 
 def get_numpy_file_paths_list(
@@ -410,13 +413,15 @@ def convert_dict_to_df(patients: Dict[str, Dict[str, str]]) -> pd.DataFrame:
 
 def get_lr_schedule(
         mist_arguments: argparse.Namespace,
-        optimizer: torch.optim.Optimizer # type: ignore
+        optimizer: torch.optim.Optimizer, # type: ignore
+        epochs: int,
     ) -> torch.optim.lr_scheduler.LRScheduler:
     """Get learning rate schedule based on user input.
 
     Args:
         mist_arguments: Command line arguments.
         optimizer: Optimizer for which the learning rate schedule is created.
+        epochs: Number of epochs for training.
 
     Returns:
         lr_scheduler: Learning rate scheduler.
@@ -431,23 +436,19 @@ def get_lr_schedule(
     if mist_arguments.lr_scheduler == "polynomial":
         return torch.optim.lr_scheduler.PolynomialLR(
             optimizer,
-            total_iters=mist_arguments.steps_per_epoch * mist_arguments.epochs,
+            total_iters=epochs,
             power=0.9
         )
-    if mist_arguments.lr_scheduler == "cosine_warm_restarts":
+    if mist_arguments.lr_scheduler == "cosine-warm-restarts":
         return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
             optimizer,
-            T_0=mist_arguments.cosine_first_steps,
+            T_0=int(np.ceil(0.1 * epochs)),
             T_mult=2
         )
     if mist_arguments.lr_scheduler == "cosine":
         return torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer,
-            T_max=mist_arguments.steps_per_epoch * mist_arguments.epochs
-        )
-    if mist_arguments.lr_scheduler == "exponential":
-        return torch.optim.lr_scheduler.ExponentialLR(
-            optimizer, gamma=mist_arguments.exp_decay
+            T_max=epochs
         )
     raise ValueError(
         "Received invalid learning rate scheduler type "
@@ -473,6 +474,8 @@ def get_optimizer(
         optimizer, add a new if statement and add the corresponding
         optimizer name to runtime/args.py.
     """
+    # Increase epsilon for AMP to avoid NaNs.
+    eps = 1e-4 if mist_arguments.amp else 1e-8
     if mist_arguments.optimizer == "sgd":
         return torch.optim.SGD( # type: ignore
             params=model.parameters(),
@@ -481,11 +484,15 @@ def get_optimizer(
     )
     if mist_arguments.optimizer == "adam":
         return torch.optim.Adam( # type: ignore
-            params=model.parameters(), lr=mist_arguments.learning_rate
+            params=model.parameters(),
+            lr=mist_arguments.learning_rate,
+            eps=eps,
         )
     if mist_arguments.optimizer == "adamw":
         return torch.optim.AdamW( # type: ignore
-            params=model.parameters(), lr=mist_arguments.learning_rate
+            params=model.parameters(),
+            lr=mist_arguments.learning_rate,
+            eps=eps,
         )
     raise ValueError(
         f"Received invalid optimizer type {mist_arguments.optimizer}."
@@ -581,14 +588,16 @@ def get_flip_axes() -> List[List[int]]:
     return [[2], [3], [4], [2, 3], [2, 4], [3, 4], [2, 3, 4]]
 
 
-def init_results_df(
-        config: Dict[str, Any],
+def initialize_results_dataframe(
+        evaluation_classes: Dict[str, List[int]],
         metrics: List[str]
 ) -> pd.DataFrame:
     """Initialize results dataframe.
 
     Args:
-        config: Configuration dictionary.
+        evaluation_classes: Dictionary with class names as keys and lists of
+            labels. This can be found in the MIST configuration file under
+            the "final_classes" key.
         metrics: List of metrics to be included in the results.
 
     Returns:
@@ -598,7 +607,7 @@ def init_results_df(
     # Initialize new results dataframe
     results_cols = ["id"]
     for metric in metrics:
-        for key in config["final_classes"].keys():
+        for key in evaluation_classes.keys():
             results_cols.append(f"{key}_{metric}")
 
     results_df = pd.DataFrame(columns=results_cols)
@@ -698,154 +707,6 @@ def sitk_to_ants(img_sitk: sitk.Image) -> ants.core.ants_image.ANTsImage:
     img_ants.set_origin(origin)
     img_ants.set_direction(direction)
     return img_ants
-
-
-def remove_small_objects(
-        mask_npy: npt.NDArray[Any],
-        **kwargs
-) -> npt.NDArray[Any]:
-    """
-    Removes small connected objects in the mask based on a threshold.
-
-    Args:
-        mask_npy: Input binary mask as a numpy array.
-        **kwargs: Additional keyword arguments. Requires
-            'small_object_threshold' to specify the minimum size for objects to
-            retain.
-
-    Returns:
-        mask_npy: Updated mask with small objects removed.
-    """
-    # Get connected components.
-    labels = skimage.measure.label(mask_npy)
-
-    # Assume at least one component.
-    if labels.max() > 0: # type: ignore
-        # Remove small objects smaller than the threshold.
-        mask_npy = skimage.morphology.remove_small_objects(
-            mask_npy.astype(bool),
-            min_size=kwargs["small_object_threshold"]
-        )
-    return mask_npy
-
-
-def get_top_k_components(
-        mask_npy: npt.NDArray[Any],
-        **kwargs
-) -> npt.NDArray[Any]:
-    """Get the top k largest connected components from a binary mask.
-
-    Args:
-        mask_npy: Input binary mask as a numpy array.
-        **kwargs: Additional keyword arguments. Requires
-            'top_k' to specify the number of largest components to retain. Other
-            optional arguments include 'morph_cleanup' and
-            'morph_cleanup_iterations' for morphological operations. If
-            'morph_cleanup' is True, 'morph_cleanup_iterations' iterations of
-            binary erosion will be applied before taking the top k components.
-            After that, the same number of iterations of dilation will be
-            applied to the remaining components in the binary mask.
-
-    Returns:
-        mask_npy: Updated mask with only the top k components.
-    """
-    # Morphological cleaning.
-    if kwargs["morph_cleanup"]:
-        mask_npy = ndimage.binary_erosion(
-            mask_npy, iterations=kwargs["morph_cleanup_iterations"]
-        )
-
-    # Get connected components
-    labels = skimage.measure.label(mask_npy)
-    label_bin_cnts = list(np.bincount(labels.flat)[1:]) # type: ignore
-    label_bin_cnts_sort = sorted(label_bin_cnts, reverse=True)
-
-    # Assume at least one component
-    if labels.max() > 0 and len(label_bin_cnts) >= kwargs["top_k"]: # type: ignore
-        temp = np.zeros(mask_npy.shape)
-        for i in range(kwargs["top_k"]):
-            temp += labels == np.where(
-                label_bin_cnts == label_bin_cnts_sort[i]
-            )[0][0] + 1
-        mask_npy = temp
-
-    if kwargs["morph_cleanup"]:
-        mask_npy = ndimage.binary_dilation(
-            mask_npy, iterations=kwargs["morph_cleanup_iterations"]
-        )
-    return mask_npy
-
-
-def get_holes(
-        mask_npy: npt.NDArray[Any],
-        **kwargs
-) -> npt.NDArray[Any]:
-    """Get holes in a binary mask and apply a label to them.
-
-    This function is an intermediate step for filling holes in multi-label
-    segmentation masks. It identifies holes in the binary mask and returns an
-    image where the holes are the non-zero values. The holes are multiplied by
-    the specified fill label.
-
-    Args:
-        mask_npy: Input binary mask as a numpy array.
-        **kwargs: Additional keyword arguments. Requires 'fill_label' to specify
-            the label to fill the holes with.
-
-    Returns:
-        holes: A numpy array where the non-zero values represent the holes in
-            the input mask. The holes are multiplied by the fill label.
-    """
-    labels = skimage.measure.label(mask_npy)
-
-    if labels.max() > 0: # type: ignore
-        # Fill holes with specified label
-        mask_npy_binary = (mask_npy != 0).astype("uint8")
-        holes = ndimage.binary_fill_holes(mask_npy_binary) - mask_npy_binary
-        holes *= kwargs["fill_label"]
-    else:
-        holes = np.zeros(mask_npy.shape)
-
-    return holes
-
-
-def group_labels(
-        mask_npy: npt.NDArray[Any],
-        labels_list: List[int]
-) -> npt.NDArray[Any]:
-    """Extract a group of labels from a multi-label mask.
-
-    Args:
-        mask_npy: Input multi-label mask as a numpy array.
-        labels_list: List of labels to group.
-
-    Returns:
-        grouped_labels: A mask with only the specified labels.
-    """
-    # Create a mask where the values in mask_npy match any in labels_list.
-    mask = np.isin(mask_npy, labels_list)
-
-    # Assign corresponding labels to the grouped mask.
-    grouped_labels = mask_npy * mask
-    return grouped_labels
-
-
-def get_transform(transform: str) -> Callable:
-    """Get the appropriate transformation function based on the input string.
-
-    Args:
-        transform: Name of the transformation to apply. Valid options are
-            "fill_holes", "remove_small_objects", and "top_k_cc".
-
-    Returns:
-        Corresponding transformation function.
-    """
-    transform_dictionary = {
-        "fill_holes": get_holes,
-        "remove_small_objects": remove_small_objects,
-        "top_k_cc": get_top_k_components
-    }
-    return transform_dictionary[transform]
 
 
 def get_fg_mask_bbox(
@@ -1306,3 +1167,80 @@ class AlphaSchedule:
         if self.schedule == "cosine":
             return float(self.cosine(epoch))
         raise ValueError(f"Received invalid schedule type {self.schedule}.")
+
+
+def get_epochs_and_validation_params(
+        mist_arguments: argparse.Namespace,
+        num_train_examples: int,
+        num_optimization_steps: int,
+        validate_every_n_steps: int,
+) -> Dict[str, int]:
+    """Get number of epochs and validation parameters based on user input.
+
+    Args:
+        mist_arguments: Command line arguments.
+        num_train_examples: Number of training examples.
+        num_optimization_steps: Number of optimization steps.
+        validate_every_n_steps: Number of steps between each validation.
+
+    Returns:
+        Dictionary containing the following key-value pairs:
+            steps_per_epoch: Number of steps per epoch.
+            epochs: Number of epochs.
+            validate_every_n_epochs: Number of epochs between each validation.
+            validate_after_n_epochs: Number of epochs before starting
+                validation.
+
+    Raises:
+        ValueError: If validate_after_n_epochs is greater than epochs or a
+            negative value other than -1.
+    """
+    # Get steps per epoch if not given by user.
+    if mist_arguments.steps_per_epoch is None:
+        steps_per_epoch = num_train_examples // mist_arguments.batch_size
+    else:
+        steps_per_epoch = mist_arguments.steps_per_epoch
+
+    # Get default number of epochs per fold. This is defined as
+    # 250000 / steps_per_epoch.
+    if mist_arguments.epochs is None:
+        epochs = num_optimization_steps // steps_per_epoch
+    else:
+        epochs = mist_arguments.epochs
+
+    # Get number of epochs between each validation. We validate every
+    # 250 steps by default.
+    if mist_arguments.validate_every_n_epochs is None:
+        validate_every_n_epochs = validate_every_n_steps // steps_per_epoch
+
+        # Ensure that we validate at most once per epoch.
+        validate_every_n_epochs = max(1, validate_every_n_epochs)
+    else:
+        validate_every_n_epochs = mist_arguments.validate_every_n_epochs
+
+    # Get number of epochs before starting validation. By default, we start
+    # validation after the first epoch. Otherwise, we start validation after
+    # some user-specified number of epochs.
+    validate_after_n_epochs = mist_arguments.validate_after_n_epochs
+    if validate_after_n_epochs > epochs and epochs > 0:
+        raise ValueError(
+            "validate_after_n_epochs must be less than or equal to epochs. Got "
+            f"validate_after_n_epochs = {validate_after_n_epochs} and epochs = "
+            f"{epochs}."
+        )
+
+    if validate_after_n_epochs < 0 and epochs > 0:
+        if validate_after_n_epochs != -1:
+            raise ValueError(
+                "The only valid negative value for validate_after_n_epochs is "
+                f"-1. Got {validate_after_n_epochs}."
+            )
+        validate_after_n_epochs = epochs
+
+    # Format output as dictionary.
+    return {
+        "steps_per_epoch": steps_per_epoch,
+        "epochs": epochs,
+        "validate_every_n_epochs": validate_every_n_epochs,
+        "validate_after_n_epochs": validate_after_n_epochs,
+    }

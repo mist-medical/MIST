@@ -1,3 +1,13 @@
+# Copyright (c) MIST Imaging LLC.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """Converts medical segmentation decathlon dataset to MIST dataset."""
 import os
 from typing import Dict, Any
@@ -7,18 +17,19 @@ import rich
 import numpy as np
 import SimpleITK as sitk
 
+# MIST imports.
 from mist.runtime import utils
 
 console = rich.console.Console()
 
 
 def copy_msd_data(
-        source: str,
-        dest: str,
-        msd_json: Dict[str, Any],
-        modalities: Dict[int, str],
-        mode: str,
-        progress_bar_message: str,
+    source: str,
+    dest: str,
+    msd_json: Dict[str, Any],
+    modalities: Dict[int, str],
+    mode: str,
+    progress_bar_message: str,
 ) -> None:
     """Copy MSD data to destination in MIST format.
 
@@ -127,8 +138,8 @@ def copy_msd_data(
 
 
 def convert_msd(
-        source: str,
-        dest: str,
+    source: str,
+    dest: str,
 ) -> None:
     """Converts medical segmentation decathlon dataset to MIST dataset.
 

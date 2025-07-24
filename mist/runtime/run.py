@@ -11,16 +11,17 @@ import torch.multiprocessing as mp
 from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.tensorboard import SummaryWriter
-from monai.inferers import sliding_window_inference
+from torch.utils.tensorboard import SummaryWriter # type: ignore
+from monai.inferers import sliding_window_inference # type: ignore
 
 # Import MIST modules.
 from mist.data_loading import dali_loader
-from mist.models import get_model
+from mist.models.model_loader import get_model
 from mist.runtime import exceptions
 from mist.runtime import loss_functions
 from mist.runtime import progress_bar
 from mist.runtime import utils
+from mist.runtime.runtime_constants import RuntimeConstants as constants
 
 
 # Define console for rich.
@@ -36,10 +37,10 @@ class Trainer:
             model configuration file.
         data_structures: Data structures like dataset description and
             configuration data.
-        class_weights: Class weights for weighted loss functions.
         boundary_loss_weighting_schedule: Weighting schedule for boundary loss
             functions.
-        fixed_loss_functions: Loss functions for validation and VAE loss.
+        fixed_loss_functions: Loss function for validation and possibly others
+            in the future.
     """
 
     def __init__(self, mist_arguments):
@@ -61,29 +62,13 @@ class Trainer:
         # Set up model configuration. The model configuration saves parameters
         # like the model name, number of channels, number of classes, deep
         # supervision, deep supervision heads, pocket, patch size, target
-        # spacing, VAE regularization, and use of residual blocks. We use these
-        # parameters to build the model during training and for inference.
+        # spacing, and use of residual blocks. We use these parameters to build
+        # the model during training and for inference.
         self._create_model_configuration()
-
-        # Set class weights.
-        self.class_weights = (
-            self.data_structures["mist_configuration"]["class_weights"]
-            if self.mist_arguments.use_config_class_weights else None
-        )
-
-        # Initialize boundary loss weighting schedule.
-        self.boundary_loss_weighting_schedule = utils.AlphaSchedule(
-            n_epochs=self.mist_arguments.epochs,
-            schedule=self.mist_arguments.boundary_loss_schedule,
-            constant=self.mist_arguments.loss_schedule_constant,
-            init_pause=self.mist_arguments.linear_schedule_pause,
-            step_length=self.mist_arguments.step_schedule_step_length
-        )
 
         # Initialize fixed loss functions.
         self.fixed_loss_functions = {
-            "validation": loss_functions.DiceCELoss(),
-            "vae": loss_functions.VAELoss(),
+            "validation": loss_functions.DiceLoss(exclude_background=True),
         }
 
     def _initialize_file_paths(self):
@@ -146,72 +131,47 @@ class Trainer:
             self.data_structures["dataset_description"]["labels"]
         )
 
-        if self.mist_arguments.model != "pretrained":
-            # If the model is not pretrained, create a new model configuration.
-            # Update the patch size if the user overrides it.
-            if self.mist_arguments.patch_size is not None:
-                self.data_structures["mist_configuration"]["patch_size"] = (
-                    self.mist_arguments.patch_size
-                )
+        # Save model blend mode and patch overlap in MIST configuration.
+        self.data_structures["mist_configuration"]["patch_overlap"] = (
+            self.mist_arguments.sw_overlap
+        )
+        self.data_structures["mist_configuration"]["patch_blend_mode"] = (
+            self.mist_arguments.blend_mode
+        )
 
-            # Create a new model configuration based on user arguments.
-            self.data_structures["model_configuration"] = {
-                "model_name": self.mist_arguments.model,
-                "n_channels": number_of_channels,
-                "n_classes": number_of_classes,
-                "deep_supervision": self.mist_arguments.deep_supervision,
-                "deep_supervision_heads": (
-                    self.mist_arguments.deep_supervision_heads
-                ),
-                "pocket": self.mist_arguments.pocket,
-                "patch_size": (
-                    self.data_structures["mist_configuration"]["patch_size"]
-                ),
-                "target_spacing": (
-                    self.data_structures["mist_configuration"]["target_spacing"]
-                ),
-                "vae_reg": self.mist_arguments.vae_reg,
-                "use_res_block": self.mist_arguments.use_res_block,
-            }
-        else:
-            # If the model is pretrained, read the model configuration from the
-            # pretrained model configuration file.
-            # Path to the pretrained model configuration file.
-            pretrained_model_config_path = os.path.join(
-                self.mist_arguments.pretrained_model_path, "model_config.json"
-            )
-
-            # Check if the pretrained model configuration file exists.
-            if not os.path.exists(pretrained_model_config_path):
-                raise FileNotFoundError(
-                    f"Pretrained model configuration file not found: "
-                    f"{pretrained_model_config_path}"
-                )
-
-            # Load the pretrained model configuration from file.
-            self.data_structures["model_configuration"] = utils.read_json_file(
-                pretrained_model_config_path
-            )
-
-            # Update the number of channels and classes from the current
-            # dataset description.
-            self.data_structures["model_configuration"].update(
-                {
-                    "n_channels": number_of_channels,
-                    "n_classes": number_of_classes,
-                }
-            )
-
-            # Update the patch size in the MIST configuration based on the
-            # patch size from the pretrained model configuration.
+        # If the model is not pretrained, create a new model configuration.
+        # Update the patch size if the user overrides it.
+        if self.mist_arguments.patch_size is not None:
             self.data_structures["mist_configuration"]["patch_size"] = (
-                self.data_structures["model_configuration"]["patch_size"]
+                self.mist_arguments.patch_size
             )
+
+        # Create a new model configuration based on user arguments.
+        self.data_structures["model_configuration"] = {
+            "model_name": self.mist_arguments.model,
+            "n_channels": number_of_channels,
+            "n_classes": number_of_classes,
+            "deep_supervision": self.mist_arguments.deep_supervision,
+            "pocket": self.mist_arguments.pocket,
+            "patch_size": (
+                self.data_structures["mist_configuration"]["patch_size"]
+            ),
+            "target_spacing": (
+                self.data_structures["mist_configuration"]["target_spacing"]
+            ),
+            "use_res_block": self.mist_arguments.use_res_block,
+        }
 
         # Save the model configuration to file.
         utils.write_json_file(
             self.file_paths["model_configuration"],
             self.data_structures["model_configuration"],
+        )
+
+        # Update the MIST configuration file with the inference parameters.
+        utils.write_json_file(
+            self.file_paths["mist_configuration"],
+            self.data_structures["mist_configuration"],
         )
 
     # Set up for distributed training
@@ -246,7 +206,7 @@ class Trainer:
 
         # Display the start of training message.
         if rank == 0:
-            text = rich.text.Text("\nStarting training\n")
+            text = rich.text.Text("\nStarting training\n") # type: ignore
             text.stylize("bold")
             console.print(text)
 
@@ -257,6 +217,14 @@ class Trainer:
                 self.data_structures["training_paths_dataframe"].loc[
                     self.data_structures["training_paths_dataframe"]["fold"]
                     != fold
+                ]["id"]
+            )
+
+            # Get test ids from dataframe.
+            test_ids = list(
+                self.data_structures["training_paths_dataframe"].loc[
+                    self.data_structures["training_paths_dataframe"]["fold"]
+                    == fold
                 ]["id"]
             )
 
@@ -271,37 +239,55 @@ class Trainer:
                 folder="labels",
                 patient_ids=train_ids,
             )
+
+            # Get list of validation images and labels.
+            val_images = utils.get_numpy_file_paths_list(
+                base_dir=self.mist_arguments.numpy,
+                folder="images",
+                patient_ids=test_ids,
+            )
+            val_labels = utils.get_numpy_file_paths_list(
+                base_dir=self.mist_arguments.numpy,
+                folder="labels",
+                patient_ids=test_ids,
+            )
+
+            # If we are using distance transform maps, get the list of training
+            # distance transform maps.
             if self.mist_arguments.use_dtms:
-                # Get list of training distance transform maps.
                 train_dtms = utils.get_numpy_file_paths_list(
                     base_dir=self.mist_arguments.numpy,
                     folder="dtms",
                     patient_ids=train_ids,
                 )
+            else:
+                train_dtms = None
 
-                # Split into training and validation sets with distance
-                # transform maps.
-                train_images, val_images, train_labels_dtms, val_labels_dtms = train_test_split(
+            # Split training data into training and validation sets if the
+            # validation percentage is greater than zero. The idea here is to
+            # leave the original validation set as an unseen test set and use
+            # the smaller partition of the training dataset as the validation
+            # set to pick the best model.
+            if self.mist_arguments.val_percent > 0:
+                (
                     train_images,
-                    list(zip(train_labels, train_dtms)),
+                    val_images,
+                    train_labels,
+                    val_labels,
+                ) = train_test_split(
+                    train_images,
+                    train_labels,
                     test_size=self.mist_arguments.val_percent,
                     random_state=self.mist_arguments.seed_val,
                 )
 
-                # Unpack labels and distance transform maps.
-                train_labels, train_dtms = zip(*train_labels_dtms)
-                val_labels, _ = zip(*val_labels_dtms)
-            else:
-                # Split data into training and validation sets without DTMs
-                train_images, val_images, train_labels, val_labels = train_test_split(
-                    train_images,
-                    train_labels,
-                    test_size=self.mist_arguments.val_percent,
-                    random_state=self.mist_arguments.seed_val
-                )
-
-                # No DTMs in this case.
-                train_dtms = None
+                # If we are using distance transform maps, split them as well.
+                if self.mist_arguments.use_dtms:
+                    train_dtms, _ = train_test_split(
+                        train_dtms,
+                        test_size=self.mist_arguments.val_percent,
+                        random_state=self.mist_arguments.seed_val,
+                    )
 
             # The number of validation images must be greater than or equal to
             # the number of GPUs used for training.
@@ -315,44 +301,81 @@ class Trainer:
             val_steps = len(val_images) // world_size
 
             # Get training data loader.
+            # The training labels are different from what's specified in the
+            # dataset description. The preprocessed masks have labels 0,1,...,N.
+            # We exclude the background label (0) from the training labels and
+            # pass the rest in as the labels for the training data loader.
+            training_labels = list(range(len(
+                self.data_structures["mist_configuration"]["labels"]
+            )))[1:]
             train_loader = dali_loader.get_training_dataset(
-                imgs=train_images,
-                lbls=train_labels,
-                dtms=train_dtms,
+                image_paths=train_images,
+                label_paths=train_labels,
+                dtm_paths=train_dtms,
                 batch_size=self.mist_arguments.batch_size // world_size,
                 oversampling=self.mist_arguments.oversampling,
-                patch_size=(
+                labels=training_labels,
+                roi_size=(
                     self.data_structures["mist_configuration"]["patch_size"]
                 ),
                 seed=self.mist_arguments.seed_val,
                 num_workers=self.mist_arguments.num_workers,
                 rank=rank,
                 world_size=world_size,
+                extract_patches=True,
+                use_augmentation=not self.mist_arguments.no_augmentation,
+                use_flips=not self.mist_arguments.augmentation_no_flips,
+                use_blur=not self.mist_arguments.augmentation_no_blur,
+                use_noise=not self.mist_arguments.augmentation_no_noise,
+                use_brightness=(
+                    not self.mist_arguments.augmentation_no_brightness
+                ),
+                use_contrast=not self.mist_arguments.augmentation_no_contrast,
+                use_zoom=not self.mist_arguments.augmentation_no_zoom,
             )
 
             # Get validation data loader.
             validation_loader = dali_loader.get_validation_dataset(
-                imgs=val_images,
-                lbls=val_labels,
+                image_paths=val_images,
+                label_paths=val_labels,
                 seed=self.mist_arguments.seed_val,
                 num_workers=self.mist_arguments.num_workers,
                 rank=rank,
                 world_size=world_size
             )
 
-            # Get steps per epoch if not given by user
-            if self.mist_arguments.steps_per_epoch is None:
-                self.mist_arguments.steps_per_epoch = (
-                    len(train_images) // self.mist_arguments.batch_size
+            # Get steps per epoch, number of epochs, and validation parameters
+            # like validate after n epochs and validate every n epochs.
+            epochs_and_validation_params = (
+                utils.get_epochs_and_validation_params(
+                    mist_arguments=self.mist_arguments,
+                    num_train_examples=len(train_images),
+                    num_optimization_steps=constants.TOTAL_OPTIMIZATION_STEPS,
+                    validate_every_n_steps=constants.VALIDATE_EVERY_N_STEPS,
                 )
-            else:
-                self.mist_arguments.steps_per_epoch = (
-                    self.mist_arguments.steps_per_epoch
-                )
+            )
+            steps_per_epoch = epochs_and_validation_params["steps_per_epoch"]
+            epochs = epochs_and_validation_params["epochs"]
+            validate_every_n_epochs = (
+                epochs_and_validation_params["validate_every_n_epochs"]
+            )
+            validate_after_n_epochs = (
+                epochs_and_validation_params["validate_after_n_epochs"]
+            )
 
-            # Get loss function
-            loss_fn = loss_functions.get_loss(
-                self.mist_arguments, class_weights=self.class_weights
+            # Initialize boundary loss weighting schedule.
+            boundary_loss_weighting_schedule = utils.AlphaSchedule(
+                n_epochs=epochs,
+                schedule=self.mist_arguments.boundary_loss_schedule,
+                constant=self.mist_arguments.loss_schedule_constant,
+                init_pause=self.mist_arguments.linear_schedule_pause,
+                step_length=self.mist_arguments.step_schedule_step_length,
+            )
+
+            # Get loss function based on user arguments.
+            loss_fn = loss_functions.get_loss(self.mist_arguments)
+            loss_fn_with_deep_supervision = (
+                loss_functions.DeepSupervisionLoss(loss_fn)
             )
 
             # Make sure we are using/have DTMs for boundary-based loss
@@ -364,7 +387,7 @@ class Trainer:
                         "--use-dtms flag must be enabled."
                     )
 
-                if isinstance(train_dtms, list):
+                if train_dtms:
                     # Check if the number of training images, labels, and
                     # distance transforms match. If not, raise an error.
                     if not(
@@ -383,17 +406,7 @@ class Trainer:
                         )
 
             # Define the model from the model configuration file.
-            if self.mist_arguments.model != "pretrained":
-                # Create new model from the model configuration.
-                model = get_model.get_model(
-                    **self.data_structures["model_configuration"]
-                )
-            else:
-                model = get_model.configure_pretrained_model(
-                    self.mist_arguments.pretrained_model_path,
-                    self.data_structures["model_configuration"]["n_channels"],
-                    self.data_structures["model_configuration"]["n_classes"],
-                )
+            model = get_model(**self.data_structures["model_configuration"])
 
             # Make batch normalization compatible with DDP.
             model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
@@ -412,7 +425,7 @@ class Trainer:
             # Get optimizer and lr scheduler
             optimizer = utils.get_optimizer(self.mist_arguments, model)
             learning_rate_scheduler = utils.get_lr_schedule(
-                self.mist_arguments, optimizer
+                self.mist_arguments, optimizer, epochs
             )
 
             # Float16 inputs during the forward pass produce float16 gradients
@@ -423,7 +436,7 @@ class Trainer:
             # underflow. Gradients must be unscaled before the optimizer updates
             # the parameters to ensure the learning rate is unaffected.
             if self.mist_arguments.amp:
-                amp_gradient_scaler = torch.amp.GradScaler("cuda")
+                amp_gradient_scaler = torch.amp.GradScaler("cuda") # type: ignore
 
             # Only log metrics on first process (i.e., rank 0).
             if rank == 0:
@@ -432,14 +445,14 @@ class Trainer:
                 running_loss_validation = utils.RunningMean()
 
                 # Initialize best validation loss to infinity.
-                best_validation_loss = np.Inf
+                best_validation_loss = np.inf # type: ignore
 
                 # Set up tensorboard summary writer.
                 writer = SummaryWriter(
                     os.path.join(
                         self.mist_arguments.results, "logs", f"fold_{fold}"
-                        )
                     )
+                )
 
                 # Path and name for best model for this fold.
                 best_model_name = os.path.join(
@@ -474,98 +487,28 @@ class Trainer:
                         loss: Loss value for the batch.
                     """
                     # Make predictions for the batch.
-                    output = model(image)
+                    output = model(image) # pylint: disable=cell-var-from-loop
 
-                    # Compute loss for the batch. The inputs to the loss
-                    # function depend on the loss function being used.
-                    if self.mist_arguments.use_dtms:
-                        # Use distance transform maps for boundary-based loss
-                        # functions.
-                        loss = loss_fn(label, output["prediction"], dtm, alpha)
-                    elif self.mist_arguments.loss in ["cldice"]:
-                        # Use the alpha parameter to weight the cldice and
-                        # dice with cross entropy loss functions.
-                        loss = loss_fn(label, output["prediction"], alpha)
-                    else:
-                        # Use only the image and label for other loss functions
-                        # like dice with cross entropy.
-                        loss = loss_fn(label, output["prediction"])
-
-                    # If deep supervision is enabled, compute the additional
-                    # losses from the deep supervision heads. Deep supervision
-                    # provides additional output layers that guide the model
-                    # during training by supplying intermediate supervision
-                    # signals at various stages of the model.
-
-                    # We scale the loss from each deep supervision head by a
-                    # factor of (0.5 ** (k + 1)), where k is the index of the
-                    # deep supervision head. This creates a geometric series
-                    # that gives decreasing weight to deeper (later) supervision
-                    # heads. The idea is to ensure that the loss from earlier
-                    # heads (closer to the final output) contributes more to the
-                    # total loss, while still incorporating the information from
-                    # later heads.
-
-                    # After summing the losses from all deep supervision heads,
-                    # we normalize the total loss using a correction factor
-                    # (c_norm). This factor is derived from the sum of the
-                    # geometric series (1 / (2 - 2 ** -(n+1))), where n is the
-                    # number of deep supervision heads. The normalization
-                    # ensures that the total loss isn't biased or dominated by
-                    # the deep supervision losses.
-                    if self.mist_arguments.deep_supervision:
-                        for k, p in enumerate(output["deep_supervision"]):
-                            # Apply the loss function based on the model's
-                            # configuration. If distance transform maps
-                            # are used, pass them to the loss function.
-                            if self.mist_arguments.use_dtms:
-                                loss += 0.5 ** (k + 1) * loss_fn(
-                                    label, p, dtm, alpha
-                                )
-                            # If cldice loss is used, pass alpha to the loss
-                            # function.
-                            elif self.mist_arguments.loss in ["cldice"]:
-                                loss += 0.5 ** (k + 1) * loss_fn(
-                                    label, p, alpha
-                                )
-                            # Otherwise, compute the loss normally.
-                            else:
-                                loss += 0.5 ** (k + 1) * loss_fn(label, p)
-
-                        # Normalize the total loss from deep supervision heads
-                        # using a correction factor to prevent it from
-                        # dominating the main loss.
-                        c_norm = 1 / (2 - 2 ** -(
-                            len(output["deep_supervision"]) + 1
-                            )
-                        )
-                        loss *= c_norm
-
-                    # Check if Variational Autoencoder (VAE) regularization
-                    # is enabled. VAE regularization encourages the model to
-                    # learn a latent space that follows a normal
-                    # distribution, which helps the model generalize better.
-                    # This term adds a penalty to the loss, based on how much
-                    # the learned latent space deviates from the expected
-                    # distribution (usually Gaussian). We then sample from this
-                    # latent space to reconstruct the input image. The total VAE
-                    # loss is the sum of the Kullback-Leibler (KL) divergence
-                    # and the reconstruction loss.
-                    if self.mist_arguments.vae_reg:
-                        vae_loss = self.fixed_loss_functions["vae"](
-                            image, output["vae_reg"]
-                        )
-                        # Multiply the computed VAE loss by a scaling
-                        # factor, vae_penalty, which controls the strength of
-                        # the regularization.
-                        loss += self.mist_arguments.vae_penalty * vae_loss
-
+                    # Compute loss based on the output and ground truth label.
+                    # Apply deep supervision if enabled.
+                    y_supervision = (
+                        output["deep_supervision"]
+                        if self.mist_arguments.deep_supervision
+                        else None
+                    )
+                    loss = loss_fn_with_deep_supervision( # pylint: disable=cell-var-from-loop
+                        y_true=label,
+                        y_pred=output["prediction"],
+                        y_supervision=y_supervision,
+                        alpha=alpha,
+                        dtm=dtm,
+                    )
 
                     # L2 regularization term. This term adds a penalty to the
                     # loss based on the L2 norm of the model's parameters.
                     if self.mist_arguments.l2_reg:
                         l2_norm_of_model_parameters = 0.0
-                        for param in model.parameters():
+                        for param in model.parameters(): # pylint: disable=cell-var-from-loop
                             l2_norm_of_model_parameters += (
                                 torch.norm(param, p=2)
                             )
@@ -581,7 +524,7 @@ class Trainer:
                     # loss based on the L1 norm of the model's parameters.
                     if self.mist_arguments.l1_reg:
                         l1_norm_of_model_parameters = 0.0
-                        for param in model.parameters():
+                        for param in model.parameters(): # pylint: disable=cell-var-from-loop
                             l1_norm_of_model_parameters += (
                                 torch.norm(param, p=1)
                             )
@@ -598,7 +541,7 @@ class Trainer:
                 # Gradients accumulate by default in PyTorch, so it's important
                 # to reset them at the start of each training iteration to avoid
                 # interference from prior batches.
-                optimizer.zero_grad()
+                optimizer.zero_grad() # pylint: disable=cell-var-from-loop
 
                 # Check if automatic mixed precision (AMP) is enabled for this
                 # training step.
@@ -626,7 +569,7 @@ class Trainer:
                     # (become zero) during training. The scaler multiplies the
                     # loss by a large factor before computing the gradients to
                     # mitigate underflow.
-                    amp_gradient_scaler.scale(loss).backward()
+                    amp_gradient_scaler.scale(loss).backward() # pylint: disable=cell-var-from-loop
 
                     # If gradient clipping is enabled, apply it after unscaling
                     # the gradients. Gradient clipping prevents exploding
@@ -635,25 +578,25 @@ class Trainer:
                     if self.mist_arguments.clip_norm:
                         # Unscale the gradients before clipping, as they were
                         # previously scaled.
-                        amp_gradient_scaler.unscale_(optimizer)
+                        amp_gradient_scaler.unscale_(optimizer) # pylint: disable=cell-var-from-loop
 
                         # Clip gradients to the maximum norm (clip_norm_max) to
                         # stabilize training.
                         torch.nn.utils.clip_grad_norm_(
-                            model.parameters(),
+                            model.parameters(), # pylint: disable=cell-var-from-loop
                             self.mist_arguments.clip_norm_max
                         )
 
                     # Perform the optimizer step to update the model parameters.
                     # This step adjusts the model's weights based on the
                     # computed gradients.
-                    amp_gradient_scaler.step(optimizer)
+                    amp_gradient_scaler.step(optimizer) # pylint: disable=cell-var-from-loop
 
                     # Update the scaler after each iteration. This adjusts the
                     # scale factor used to prevent underflows or overflows in
                     # the future. The scaler increases or decreases the scaling
                     # factor dynamically based on whether gradients overflow.
-                    amp_gradient_scaler.update()
+                    amp_gradient_scaler.update() # pylint: disable=cell-var-from-loop
                 else:
                     # If AMP is not enabled, perform the forward pass and
                     # compute the loss using float32 precision.
@@ -665,12 +608,12 @@ class Trainer:
                     # Apply gradient clipping if enabled.
                     if self.mist_arguments.clip_norm:
                         torch.nn.utils.clip_grad_norm_(
-                            model.parameters(),
+                            model.parameters(), # pylint: disable=cell-var-from-loop
                             self.mist_arguments.clip_norm_max
                         )
 
                     # Perform the optimizer step to update the model parameters.
-                    optimizer.step()
+                    optimizer.step() # pylint: disable=cell-var-from-loop
                 return loss
 
             def val_step(
@@ -695,35 +638,34 @@ class Trainer:
                     ),
                     overlap=self.mist_arguments.val_sw_overlap,
                     sw_batch_size=1,
-                    predictor=model,
+                    predictor=model, # pylint: disable=cell-var-from-loop
                     device=torch.device("cuda")
                 )
 
                 return self.fixed_loss_functions["validation"](label, pred)
 
             # Train the model for the specified number of epochs.
-            for epoch in range(self.mist_arguments.epochs):
+            for epoch in range(epochs):
                 # Make sure gradient tracking is on, and do a pass over the
                 # training data.
                 model.train(True)
 
+                # Compute alpha for boundary loss functions. The alpha parameter
+                # is used to weight the boundary loss function with a region-
+                # based loss function like dice or cross entropy.
+                alpha = boundary_loss_weighting_schedule(epoch)
                 # Only log metrics on first process (i.e., rank 0).
                 if rank == 0:
                     with progress_bar.TrainProgressBar(
                         epoch + 1,
                         fold,
-                        self.mist_arguments.epochs,
-                        self.mist_arguments.steps_per_epoch
+                        epochs,
+                        steps_per_epoch,
                     ) as pb:
-                        for _ in range(self.mist_arguments.steps_per_epoch):
+                        for _ in range(steps_per_epoch):
                             # Get data from training loader.
                             data = train_loader.next()[0]
 
-                            # Compute alpha for boundary loss functions. The
-                            # alpha parameter is used to weight the boundary
-                            # loss function with a region-based loss function
-                            # like dice or cross entropy.
-                            alpha = self.boundary_loss_weighting_schedule(epoch)
                             if self.mist_arguments.use_dtms:
                                 # Use distance transform maps for boundary-based
                                 # loss functions. In this case, we pass them
@@ -746,9 +688,6 @@ class Trainer:
                                 else:
                                     loss = train_step(image, label, None, None)
 
-                            # Update update the learning rate scheduler.
-                            learning_rate_scheduler.step()
-
                             # Send all training losses to device 0 to add them.
                             dist.reduce(loss, dst=0)
 
@@ -758,15 +697,19 @@ class Trainer:
                             # Update the running loss for the progress bar.
                             running_loss = running_loss_train(current_loss)
 
-                            # Update the progress bar with the running loss.
-                            pb.update(loss=running_loss)
+                            # Update the progress bar with the running loss and
+                            # learning rate.
+                            pb.update(
+                                loss=running_loss,
+                                lr=optimizer.param_groups[0]["lr"]
+                            )
                 else:
                     # For all other processes, do not display the progress bar.
                     # Repeat the training steps shown above for the other GPUs.
-                    for _ in range(self.mist_arguments.steps_per_epoch):
+                    for _ in range(steps_per_epoch):
                         # Get data from training loader.
                         data = train_loader.next()[0]
-                        alpha = self.boundary_loss_weighting_schedule(epoch)
+
                         if self.mist_arguments.use_dtms:
                             image, label, dtm = (
                                 data["image"], data["label"], data["dtm"]
@@ -785,17 +728,85 @@ class Trainer:
                         # Send the loss on the current GPU to device 0.
                         dist.reduce(loss, dst=0)
 
+                # Update the learning rate scheduler.
+                learning_rate_scheduler.step()
+
                 # Wait for all processes to finish the epoch.
                 dist.barrier()
 
                 # Start validation. We don't need gradients on to do reporting.
-                model.eval()
-                with torch.no_grad():
-                    # Only log metrics on first process (i.e., rank 0).
-                    if rank == 0:
-                        with progress_bar.ValidationProgressBar(
-                            val_steps
-                        ) as pb:
+                # Only validate on the first and last epochs or periodically
+                # after validate_after_n_epochs.
+                validate = (
+                    epoch == 0 or epoch == epochs - 1 or
+                    (
+                        epoch >= validate_after_n_epochs and
+                        epoch % validate_every_n_epochs == 0
+                    )
+                )
+                if validate:
+                    model.eval()
+                    with torch.no_grad():
+                        # Only log metrics on first process (i.e., rank 0).
+                        if rank == 0:
+                            with progress_bar.ValidationProgressBar(
+                                val_steps
+                            ) as val_pb:
+                                for _ in range(val_steps):
+                                    # Get data from validation loader.
+                                    data = validation_loader.next()[0]
+                                    image, label = data["image"], data["label"]
+
+                                    # Compute loss for single validation step.
+                                    val_loss = val_step(image, label)
+
+                                    # Send all validation losses to device 0 to
+                                    # add them.
+                                    dist.reduce(val_loss, dst=0)
+
+                                    # Average the loss across all GPUs.
+                                    current_val_loss = (
+                                        val_loss.item() / world_size
+                                    )
+
+                                    # Update the running loss for the progress
+                                    # bar.
+                                    running_val_loss = running_loss_validation(
+                                        current_val_loss
+                                    )
+
+                                    # Update the progress bar with the running
+                                    # loss.
+                                    val_pb.update(loss=running_val_loss)
+
+                            # Check if validation loss is lower than the current
+                            # best validation loss. If so, save the model.
+                            if running_val_loss < best_validation_loss: # type: ignore
+                                text = rich.text.Text( # type: ignore
+                                    "Validation loss IMPROVED from "
+                                    f"{best_validation_loss:.4} "
+                                    f"to {running_val_loss:.4}\n"
+                                )
+                                text.stylize("bold")
+                                console.print(text)
+
+                                # Update the current best validation loss.
+                                best_validation_loss = running_val_loss
+
+                                # Save the model with the best validation loss.
+                                torch.save(model.state_dict(), best_model_name)
+                            else:
+                                # Otherwise, log that the validation loss did
+                                # not improve and display the best validation
+                                # loss. Continue training with current model.
+                                text = rich.text.Text( # type: ignore
+                                    "Validation loss did NOT improve from "
+                                    f"{best_validation_loss:.4}\n"
+                                )
+                                console.print(text)
+                        else:
+                            # Repeat the validation steps for the other GPUs. Do
+                            # not display the progress bar for these GPUs.
                             for _ in range(val_steps):
                                 # Get data from validation loader.
                                 data = validation_loader.next()[0]
@@ -804,63 +815,12 @@ class Trainer:
                                 # Compute loss for single validation step.
                                 val_loss = val_step(image, label)
 
-                                # Send all validation losses to device 0 to add
-                                # them.
+                                # Send the loss on the current GPU to device 0.
                                 dist.reduce(val_loss, dst=0)
 
-                                # Average the loss across all GPUs.
-                                current_val_loss = val_loss.item() / world_size
-
-                                # Update the running loss for the progress bar.
-                                running_val_loss = running_loss_validation(
-                                    current_val_loss
-                                )
-
-                                # Update the progress bar with the running loss.
-                                pb.update(loss=running_val_loss)
-
-                        # Check if validation loss is lower than the current
-                        # best validation loss. If so, save the model.
-                        if running_val_loss < best_validation_loss:
-                            text = rich.text.Text(
-                                "Validation loss IMPROVED from "
-                                f"{best_validation_loss:.4} "
-                                f"to {running_val_loss:.4}\n"
-                            )
-                            text.stylize("bold")
-                            console.print(text)
-
-                            # Update the current best validation loss.
-                            best_validation_loss = running_val_loss
-
-                            # Save the model with the best validation loss.
-                            torch.save(model.state_dict(), best_model_name)
-                        else:
-                            # Otherwise, log that the validation loss did not
-                            # improve and display the best validation loss.
-                            # Continue training with the current model.
-                            text = rich.text.Text(
-                                "Validation loss did NOT improve from "
-                                f"{best_validation_loss:.4}\n"
-                            )
-                            console.print(text)
-                    else:
-                        # Repeat the validation steps for the other GPUs. Do
-                        # not display the progress bar for these GPUs.
-                        for _ in range(val_steps):
-                            # Get data from validation loader.
-                            data = validation_loader.next()[0]
-                            image, label = data["image"], data["label"]
-
-                            # Compute loss for single validation step.
-                            val_loss = val_step(image, label)
-
-                            # Send the loss on the current GPU to device 0.
-                            dist.reduce(val_loss, dst=0)
-
-                # Reset training and validation loaders after each epoch.
-                train_loader.reset()
+                # Reset training and validation loader after each epoch.
                 validation_loader.reset()
+                train_loader.reset()
 
                 # Log the running loss for training and validation after each
                 # epoch. Only log metrics on first process (i.e., rank 0).
@@ -899,15 +859,15 @@ class Trainer:
         It uses the `torch.multiprocessing.spawn` function to create multiple
         instances of the training function, each on a separate GPU.
         """
-        # Train model
+        # Train model.
         world_size = torch.cuda.device_count()
         if world_size > 1:
-            mp.spawn(
+            mp.spawn( # type: ignore
                 self.train,
                 args=(world_size,),
                 nprocs=world_size,
                 join=True,
             )
-        # To enable pdb do not spawn multiprocessing for world_size = 1 
+        # To enable pdb do not spawn multiprocessing for world_size = 1.
         else:
-            self.train(0,world_size)
+            self.train(0, world_size)
