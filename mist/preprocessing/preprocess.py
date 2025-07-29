@@ -1,3 +1,13 @@
+# Copyright (c) MIST Imaging LLC.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """Preprocessing functions for medical images and masks."""
 import os
 import argparse
@@ -575,29 +585,18 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
                 )
 
             # Save images and masks as numpy arrays.
+            patient_npy = f"{patient['id']}.npy"
             np.save(
-                os.path.join(
-                    args.numpy,
-                    output_directories["images"],
-                    f"{patient['id']}.npy"
-                ),
+                os.path.join(output_directories["images"], patient_npy),
                 current_preprocessed_example["image"].astype("float32") # type: ignore
             )
             np.save(
-                os.path.join(
-                    args.numpy,
-                    output_directories["labels"],
-                    f"{patient['id']}.npy"
-                ),
+                os.path.join(output_directories["labels"], patient_npy),
                 current_preprocessed_example["mask"].astype("uint8") # type: ignore
             )
 
             if args.use_dtms:
                 np.save(
-                    os.path.join(
-                        args.numpy,
-                        output_directories["dtms"],
-                        f"{patient['id']}.npy"
-                    ),
+                    os.path.join(output_directories["dtms"], patient_npy),
                     current_preprocessed_example["dtm"].astype("float32") # type: ignore
                 )
