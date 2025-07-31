@@ -9,10 +9,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Preprocessing functions for medical images and masks."""
+from typing import Dict, List, Tuple, Any, Optional, Union
 import os
 import argparse
-from typing import Dict, List, Tuple, Any, Optional, Union
-
 import ants
 import numpy as np
 import numpy.typing as npt
@@ -20,16 +19,15 @@ import pandas as pd
 import rich
 import SimpleITK as sitk
 
+# MIST imports.
 from mist.runtime import utils
 from mist.preprocessing import preprocessing_constants
 
-console = rich.console.Console()
-
 
 def resample_image(
-        img_ants: ants.core.ants_image.ANTsImage,
-        target_spacing: Tuple[float, float, float],
-        new_size: Optional[Tuple[int, int, int]]=None,
+    img_ants: ants.core.ants_image.ANTsImage,
+    target_spacing: Tuple[float, float, float],
+    new_size: Optional[Tuple[int, int, int]]=None,
 ) -> ants.core.ants_image.ANTsImage:
     """Resample an image to a target spacing.
 
@@ -92,10 +90,10 @@ def resample_image(
 
 
 def resample_mask(
-        mask_ants: ants.core.ants_image.ANTsImage,
-        labels: List[int],
-        target_spacing: Tuple[float, float, float],
-        new_size: Optional[Tuple[int, int, int]]=None,
+    mask_ants: ants.core.ants_image.ANTsImage,
+    labels: List[int],
+    target_spacing: Tuple[float, float, float],
+    new_size: Optional[Tuple[int, int, int]]=None,
 ) -> ants.core.ants_image.ANTsImage:
     """Resample a mask to a target spacing.
 
@@ -168,8 +166,8 @@ def resample_mask(
 
 
 def window_and_normalize(
-        image: npt.NDArray[Any],
-        config: Dict[str, Any],
+    image: npt.NDArray[Any],
+    config: Dict[str, Any],
 ) -> npt.NDArray[Any]:
     """Window and normalize an image.
 
@@ -322,10 +320,11 @@ def compute_dtm(
                     diagonal_distance * all_ones_mask
                 )
 
-            dtm_i = sitk.Cast(dtm_i, sitk.sitkFloat32)
-            dtm_i.SetSpacing(mask.GetSpacing())
-            dtm_i.SetOrigin(mask.GetOrigin())
-            dtm_i.SetDirection(mask.GetDirection())
+        # Set the pixel type and spacing for the DTM.
+        dtm_i = sitk.Cast(dtm_i, sitk.sitkFloat32)
+        dtm_i.SetSpacing(mask.GetSpacing())
+        dtm_i.SetOrigin(mask.GetOrigin())
+        dtm_i.SetDirection(mask.GetDirection())
 
         # Append the current DTM to the final list.
         dtms_sitk.append(dtm_i)
@@ -450,9 +449,9 @@ def preprocess_example(
 
 
 def convert_nifti_to_numpy(
-        image_list: List[str],
-        mask: Optional[str]=None,
-    ) -> Dict[str, Union[npt.NDArray[Any], None]]:
+    image_list: List[str],
+    mask: Optional[str]=None,
+) -> Dict[str, Union[npt.NDArray[Any], None]]:
     """Convert NIfTI images to numpy arrays.
 
     Args:
@@ -464,8 +463,8 @@ def convert_nifti_to_numpy(
             image: Numpy array of images.
             mask: Numpy array of mask.
     """
-    dims = ants.image_header_info(image_list[0])
-    dims = dims["dimensions"]
+    dims = list(ants.image_header_info(image_list[0])["dimensions"])
+    dims = [int(dim) for dim in dims]  # Convert dimensions to integers.
 
     # Convert images.
     image_npy = np.zeros((*dims, len(image_list)))
@@ -500,6 +499,9 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
         FileNotFoundError: If configuration file, training paths file, or
             foreground bounding box file is not found.
     """
+    # Initialize console for rich text output.
+    console = rich.console.Console()
+
     # Check if configuration file exists and read it.
     if not os.path.exists(os.path.join(args.results, "config.json")):
         raise FileNotFoundError(
