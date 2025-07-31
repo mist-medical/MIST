@@ -10,6 +10,7 @@
 # limitations under the License.
 """Command line tool MIST inference on a given dataset."""
 import os
+import warnings
 from argparse import ArgumentDefaultsHelpFormatter
 import pandas as pd
 import torch
@@ -52,11 +53,6 @@ def get_inference_args():
     )
 
     # Optional parameters.
-    p.boolean_flag(
-        "--fast",
-        default=False,
-        help="Only use first model in ensemble for faster inference"
-    )
     p.arg(
         "--device",
         type=str,
@@ -84,15 +80,44 @@ def get_inference_args():
         default="gaussian",
         help="How to blend patch predictions from overlapping windows"
     )
-    p.boolean_flag("--tta", default=False, help="Use test time augmentation")
+
+    # Turn off certain parameters like preprocessing (in the case that the
+    # input NIfTI files are already preprocessed), ensembling (for faster
+    # inference), and test time augmentation (for faster inference).
     p.boolean_flag(
         "--no-preprocess",
         default=False,
         help="Turn off preprocessing if raw input files are already preprocessed"
     )
+    p.boolean_flag(
+        "--no-ensemble",
+        default=False,
+        help="Only use first model in ensemble for faster inference"
+    )
+    p.boolean_flag(
+        "--no-tta", default=False, help="Turn off test time augmentation"
+    )
 
     args = p.parse_args()
     return args
+
+
+def resolve_device(device_str: str) -> torch.device:
+    """Resolve a device string (i.e., 'cuda', '0') into a torch.device."""
+    if device_str == "cpu":
+        return torch.device("cpu")
+    if device_str == "cuda":
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    try:
+        gpu_index = int(device_str)
+        if torch.cuda.is_available() and gpu_index < torch.cuda.device_count():
+            return torch.device(f"cuda:{gpu_index}")
+        warnings.warn(
+            f"CUDA device {gpu_index} not available, falling back to CPU."
+        )
+        return torch.device("cpu")
+    except ValueError as e:
+        raise ValueError(f"Invalid device specification: {device_str}") from e
 
 
 def main(args):
@@ -100,12 +125,8 @@ def main(args):
     # Set warning levels.
     utils.set_warning_levels()
 
-    # Set device.
-    if args.device != "cpu" and args.device != "cuda":
-        os.environ["CUDA_VISIBLE_DEVICES"] = args.device
-        device = torch.device(int(args.device))
-    else:
-        device = torch.device(args.device)
+    # Resolve and set the device.
+    device = resolve_device(args.device)
 
     # Validate the input paths CSV file. This should contain an 'id' column
     # and at least one other column pointing to valid NIfTI files.
@@ -128,8 +149,8 @@ def main(args):
             output_directory=args.output,
             mist_configuration=mist_configuration,
             models_directory=args.models_dir,
-            ensemble_models=not args.fast,
-            test_time_augmentation=args.tta,
+            ensemble_models=not args.no_ensemble,
+            test_time_augmentation=not args.no_tta,
             skip_preprocessing=args.no_preprocess,
             postprocessing_strategy_filepath=args.postprocess_strategy,
             device=device,
