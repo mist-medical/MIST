@@ -33,7 +33,7 @@ from mist.inference.predictor import Predictor
 from mist.data_loading import dali_loader
 from mist.models import model_loader
 from mist.postprocessing.postprocessor import Postprocessor
-from mist.preprocess_data import preprocess
+from mist.preprocessing import preprocess
 from mist.runtime import utils
 from mist.inference.ensemblers.ensembler_registry import get_ensembler
 from mist.inference.tta.strategies import get_strategy

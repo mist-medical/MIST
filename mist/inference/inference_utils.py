@@ -22,7 +22,7 @@ import numpy.typing as npt
 import pandas as pd
 
 # MIST imports.
-from mist.preprocess_data import preprocess
+from mist.preprocessing import preprocess
 from mist.runtime import utils
 from mist.inference.inference_constants import InferenceConstants as ic
 from mist.models import model_loader

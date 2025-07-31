@@ -223,6 +223,9 @@ class MGNet(nn.Module):
 
     def forward(self, x: torch.Tensor) -> dict:
         """Forward pass of the MGNet model."""
+        # Save input shape for deep supervision.
+        input_shape = x.shape[2:]
+
         # First convolution.
         x = self.first_conv(x)
 
@@ -276,7 +279,7 @@ class MGNet(nn.Module):
             # If deep supervision is enabled, add the output to the list.
             if self.deep_supervision and self.training:
                 if self.deep_supervision_heads >= current_depth >= 1:
-                    head = interpolate(x, size=x.shape[2:])
+                    head = interpolate(x, size=input_shape)
                     output_deep_supervision.append(self.heads[cnt](head))
                     cnt += 1
 
@@ -295,6 +298,8 @@ class MGNet(nn.Module):
             if self.deep_supervision:
                 output_deep_supervision.reverse()
                 output["deep_supervision"] = tuple(output_deep_supervision)
+            else:
+                output["deep_supervision"] = None
         else:
             output = self.out(x)
 
