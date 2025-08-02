@@ -8,24 +8,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Analyzer class for creating MIST configuration file."""
-import os
-import json
-from importlib import metadata
+"""Analyzer class for MIST.
 
+This module contains the Analyzer class, which is responsible for analyzing
+the dataset and preparing the configuration file for MIST. It checks the
+dataset information, validates the dataset, checks if cropping to the
+foreground bounding box is beneficial, checks the non-zero ratio of the images,
+determines the target spacing, checks the resampled dimensions, and computes
+the normalization parameters for CT images if applicable. It also saves the
+configuration file and the paths dataframe to the results directory, which will
+be used for preprocessing and training models.
+"""
+import os
+from importlib import metadata
 import ants
 import pandas as pd
 import numpy as np
-
-# Rich console and text.
 import rich
 
 # MIST imports.
 from mist.runtime import utils
 from mist.analyze_data.analyzer_constants import AnalyzeConstants as constants
-
-# Set up console for rich text.
-console = rich.console.Console()
 
 
 class Analyzer:
@@ -33,36 +36,70 @@ class Analyzer:
 
     Attributes:
         mist_arguments: MIST arguments.
-        dataset_information: Dataset information from MIST arguments.
+        dataset_info: Dataset information from MIST arguments.
         config: Configuration dictionary.
-        file_paths: Paths to save configuration, foreground bounding boxes, and
-            image/mask paths files.
-        paths_dataframe: Dataframe containing paths to images and masks.
+        paths_df: Dataframe containing paths to images and masks.
+        console: Rich console for printing messages.
     """
     def __init__(self, mist_arguments):
-        self.mist_arguments = mist_arguments
-        self.dataset_information = utils.read_json_file(
-            self.mist_arguments.data
-        )
-        self._check_dataset_information()
-        self.config = {}
-        self.file_paths = {
-            "configuration": (
-                os.path.join(self.mist_arguments.results, "config.json")
-            ),
-            "foreground_bounding_boxes": (
-                os.path.join(self.mist_arguments.results, "fg_bboxes.csv")
-            ),
-            "image_mask_paths": (
-                os.path.join(self.mist_arguments.results, "train_paths.csv")
-            ),
-        }
-        self.paths_dataframe = utils.get_files_df(
-            mist_arguments.data, "train"
-        )
+        # Initialize the rich console for printing messages.
+        self.console = rich.console.Console()
 
-    def _check_dataset_information(self):
-        """Check if the dataset description file is in the correct format."""
+        # Get MIST command line arguments.
+        self.mist_arguments = mist_arguments
+
+        # Read the dataset information from the JSON file and validate it.
+        self.dataset_info = utils.read_json_file(self.mist_arguments.data)
+        self._check_dataset_info()
+
+        # Load the base configuration file.
+        self.config = utils.read_json_file("base_config.json")
+
+        # Initialize the dataframe with the file paths for the images and masks.
+        self.paths_df = utils.get_files_df(self.mist_arguments.data, "train")
+
+        # Set file paths for saving files like the training paths,
+        # foreground bounding boxes, and configuration file.
+        self.results_dir = self.mist_arguments.results
+        self.paths_csv = os.path.join(self.results_dir, "train_paths.csv")
+        self.fg_bboxes_csv = os.path.join(self.results_dir, "fg_bboxes.csv")
+        self.config_json = os.path.join(self.results_dir, "config.json")
+
+        # If the config.json file already exists, we will overwrite it and print
+        # a warning to the console. This is to ensure that the user is aware
+        # that the configuration file is being overwritten and that they should
+        # check the new configuration file for any changes.
+        if os.path.exists(self.config_json) and self.mist_arguments.overwrite:
+            self.console.print(
+                "[yellow]Overwriting existing configuration at "
+                f"{self.config_json}[/yellow]"
+            )
+
+    def _check_dataset_info(self):
+        """Check if the dataset description file is in the correct format.
+
+        This function checks that the dataset description JSON file contains
+        all the required fields and that they are in the correct format. It
+        raises an error if any of the required fields are missing or if they
+        are in the wrong format. The required fields are:
+            - task: The name of the task to be performed, this could be
+                something like 'brats-2025' or 'lits-tumor'.
+            - modality: The modality of the images, i.e., 'ct', 'mr',
+                or 'other'.
+            - train-data: The path to the training data folder.
+            - mask: The list of strings that identify the masks files in the
+                training data folder.
+            - images: A dictionary of the format {'image_type': [list of
+                strings that identify the image files in the training data
+                folder]}. The image_type can be anything like 'ct', 'mr',
+                't1', 't2', etc.
+            - labels: A list of integers that represent the labels in the
+                dataset. This list must contain zero as a label.
+            - final_classes: A dictionary of the format {class_name: [list of
+                labels]}. The class_name can be anything like 'tumor', 'edema',
+                'necrosis', etc. The list of labels can contain multiple labels
+                for a single class, i.e., {'tumor': [1, 2, 3], 'edema': [4]}.
+        """
         required_fields = [
             "task",
             "modality",
@@ -74,14 +111,14 @@ class Analyzer:
         ]
         for field in required_fields:
             # Check that the required fields are in the JSON file.
-            if field not in self.dataset_information:
+            if field not in self.dataset_info:
                 raise KeyError(
                     f"Dataset description JSON file must contain a "
                     f"entry '{field}'. There is no '{field}' in the JSON file."
                 )
 
             # Check that the required fields are not None.
-            if self.dataset_information[field] is None:
+            if self.dataset_info[field] is None:
                 raise ValueError(
                     f"Dataset description JSON file must contain a "
                     f"entry '{field}'. Got None for '{field}' in the JSON file."
@@ -89,29 +126,29 @@ class Analyzer:
 
             # Check that the train data folder exists and is not empty.
             if field == "train-data":
-                if not os.path.exists(self.dataset_information[field]):
+                if not os.path.exists(self.dataset_info[field]):
                     raise FileNotFoundError(
                         "In the 'train-data' entry, the directory does not "
                         "exist. No such file or directory: "
-                        f"{self.dataset_information[field]}"
+                        f"{self.dataset_info[field]}"
                     )
 
-                if not os.listdir(self.dataset_information[field]):
+                if not os.listdir(self.dataset_info[field]):
                     raise FileNotFoundError(
                         "In the 'train-data' entry, the directory is empty: "
-                        f"{self.dataset_information[field]}"
+                        f"{self.dataset_info[field]}"
                     )
 
             # Check that the mask entry is a list and not empty.
             if field == "mask":
-                if not isinstance(self.dataset_information[field], list):
+                if not isinstance(self.dataset_info[field], list):
                     raise TypeError(
                         "The 'mask' entry must be a list of mask names in the "
                         "dataset description JSON file. Found the following "
-                        f"entry instead: {self.dataset_information[field]}."
+                        f"entry instead: {self.dataset_info[field]}."
                     )
 
-                if not self.dataset_information[field]:
+                if not self.dataset_info[field]:
                     raise ValueError(
                         "The 'mask' entry is empty. Please provide a list of "
                         "mask names in the dataset description JSON file."
@@ -119,14 +156,14 @@ class Analyzer:
 
             # Check that the images entry is a dictionary and not empty.
             if field == "images":
-                if not isinstance(self.dataset_information[field], dict):
+                if not isinstance(self.dataset_info[field], dict):
                     raise TypeError(
                         "The 'images' entry must be a dictionary of the format "
                         "'image_type': [list of image names] in the dataset "
                         "description JSON file."
                     )
 
-                if not self.dataset_information[field]:
+                if not self.dataset_info[field]:
                     raise ValueError(
                         "The 'images' entry is empty. Please provide a "
                         "dictionary of the format "
@@ -137,22 +174,22 @@ class Analyzer:
             # Check that the labels entry is a list and not empty. Also check
             # that zero is an entry in the labels list.
             if field == "labels":
-                if not isinstance(self.dataset_information[field], list):
+                if not isinstance(self.dataset_info[field], list):
                     raise TypeError(
                         "The 'labels' entry must be a list of labels in the "
                         "dataset. This list must contain zero as a label. "
                         "Found the following entry instead: "
-                        f"{self.dataset_information[field]}."
+                        f"{self.dataset_info[field]}."
                     )
 
-                if not self.dataset_information[field]:
+                if not self.dataset_info[field]:
                     raise ValueError(
                         "The 'labels' entry must be a list of labels in the "
                         "dataset. This list must contain zero as a label. The "
                         "list is empty."
                     )
 
-                if 0 not in self.dataset_information[field]:
+                if 0 not in self.dataset_info[field]:
                     raise ValueError(
                         "The 'labels' entry must be a list of labels in the "
                         "dataset. This list must contain zero as a label. No "
@@ -161,15 +198,15 @@ class Analyzer:
 
             # Check that the final classes entry is a dictionary and not empty.
             if field == "final_classes":
-                if not isinstance(self.dataset_information[field], dict):
+                if not isinstance(self.dataset_info[field], dict):
                     raise TypeError(
                         "The 'final_classes' entry must be a dictionary of the "
                         "format {class_name: [list of labels]}. Found the "
                         "following entry instead: "
-                        f"{self.dataset_information[field]}."
+                        f"{self.dataset_info[field]}."
                     )
 
-                if not self.dataset_information[field]:
+                if not self.dataset_info[field]:
                     raise ValueError(
                         "The 'final_classes' entry must be a dictionary of the "
                         "format {class_name: [list of labels]}. The dictionary "
@@ -177,10 +214,23 @@ class Analyzer:
                     )
 
     def check_crop_fg(self):
-        """Check if cropping to foreground reduces image volume by 20%."""
+        """Check if cropping to foreground reduces image volume by at least 20%.
+
+        This function checks if cropping the images to the foreground bounding
+        box reduces the image volume by at least 20%. It computes the bounding
+        box for the foreground mask of each image and calculates the volume
+        reduction. If the average volume reduction is greater than or equal to
+        20%, it returns True, indicating that cropping to the foreground is
+        beneficial. It also saves the bounding box information to a CSV file.
+
+        To compute the foreground bounding box, it uses the `get_fg_mask_bbox`,
+        which uses an Otsu threshold method to find the foreground mask and then
+        computes the bounding box around the non-zero voxels of the foreground
+        mask.
+        """
         progress = utils.get_progress_bar("Checking FG vol. reduction")
 
-        bbox_df = pd.DataFrame(
+        fg_bboxes_df = pd.DataFrame(
             columns=[
                 "id",
                 "x_start",
@@ -196,10 +246,10 @@ class Analyzer:
         )
 
         vol_reduction = []
-        cropped_dims = np.zeros((len(self.paths_dataframe), 3))
+        cropped_dims = np.zeros((len(self.paths_df), 3))
         with progress as pb:
-            for i in pb.track(range(len(self.paths_dataframe))):
-                patient = self.paths_dataframe.iloc[i].to_dict()
+            for i in pb.track(range(len(self.paths_df))):
+                patient = self.paths_df.iloc[i].to_dict()
                 image_list = list(patient.values())[3:len(patient)]
 
                 # Read original images.
@@ -221,14 +271,12 @@ class Analyzer:
 
                 # Update bounding box dataframe with foreground bounding box.
                 fg_bbox["id"] = patient["id"]
-                bbox_df = pd.concat(
-                    [bbox_df, pd.DataFrame(fg_bbox, index=[0])],
+                fg_bboxes_df = pd.concat(
+                    [fg_bboxes_df, pd.DataFrame(fg_bbox, index=[0])],
                     ignore_index=True
                 )
 
-        bbox_df.to_csv(
-            self.file_paths["foreground_bounding_boxes"], index=False
-        )
+        fg_bboxes_df.to_csv(self.fg_bboxes_csv, index=False)
         crop_to_fg = (
             np.mean(vol_reduction) >=
             constants.MIN_AVERAGE_VOLUME_REDUCTION_FRACTION
@@ -236,13 +284,20 @@ class Analyzer:
         return crop_to_fg, cropped_dims
 
     def check_nz_ratio(self):
-        """Check if ratio of nonzeros vs entire image is less than 0.2."""
+        """Check if 20% or less of the image is non-zero.
+
+        This function checks the fraction of non-zero voxels in the images to
+        zero-valued voxels. If, on average, less than 20% of the voxels in an
+        image are non-zero, then the dataset is considered sparse, and
+        preprocessing will compute normalization parameters (for non CT cases)
+        and apply the normalization scheme only to the non-zero voxels.
+        """
         progress = utils.get_progress_bar("Checking non-zero ratio")
 
         nz_ratio = []
         with progress as pb:
-            for i in pb.track(range(len(self.paths_dataframe))):
-                patient = self.paths_dataframe.iloc[i].to_dict()
+            for i in pb.track(range(len(self.paths_df))):
+                patient = self.paths_df.iloc[i].to_dict()
                 image_list = list(patient.values())[3:len(patient)]
 
                 # Read original images.
@@ -259,15 +314,23 @@ class Analyzer:
         return use_nz_mask
 
     def get_target_spacing(self):
-        """Get target spacing for preprocessing."""
+        """Get target spacing for preprocessing.
+
+        Compute the target spacing for the dataset based on the median spacing
+        along each axis for the images in the dataset. If this median-based
+        spacing is anisotropic (i.e., the ratio of the maximum to minimum
+        spacing is greater than a threshold), then adjust the coarsest
+        resolution to bring the ratio down. This is done to ensure that we still
+        have a reasonable resolution when we preprocess the data.
+        """
         progress = utils.get_progress_bar("Getting target spacing")
 
         # If data is anisotropic, get median image spacing.
-        original_spacings = np.zeros((len(self.paths_dataframe), 3))
+        original_spacings = np.zeros((len(self.paths_df), 3))
 
         with progress as pb:
-            for i in pb.track(range(len(self.paths_dataframe))):
-                patient = self.paths_dataframe.iloc[i].to_dict()
+            for i in pb.track(range(len(self.paths_df))):
+                patient = self.paths_df.iloc[i].to_dict()
 
                 # Reorient masks to RAI to collect target spacing. We do this
                 # to make sure that all of the axes in the spacings match up.
@@ -294,26 +357,41 @@ class Analyzer:
                     constants.ANISOTROPIC_LOW_RESOLUTION_AXIS_PERCENTILE
                 )
             )
-
         return target_spacing
 
     def check_resampled_dims(self, cropped_dims):
-        """Determine dimensions of resampled data."""
+        """Determine dimensions of resampled data.
 
+        After we've determined the target spacing, we can compute the
+        dimensions of the resampled data. This gives us a median image size
+        which we can use to determine the patch size for training. We also
+        check if the resampled image size is larger than the recommended memory
+        size. If it is, we warn the user and suggest that they coarsen the
+        resolution or remove the example from the dataset. This is done to avoid
+        running out of memory during training, as the resampled image size can
+        be quite large, especially for 3D images with multiple channels.
+
+        Additionally, if we determine that we crop to the foreground
+        bounding box, we use the cropped dimensions to compute the resampled
+        dimensions. If we do not crop to the foreground, we use the original
+        mask dimensions to compute the resampled dimensions. This is because
+        cropping to the foreground can significantly reduce the size of the
+        resampled image, which can help with memory usage during training.
+        """
         # Check the resampled dimensions of the data. If an image/mask pair
         # is larger than the recommended memory size, then warn the user.
-        resampled_dims = np.zeros((len(self.paths_dataframe), 3))
+        resampled_dims = np.zeros((len(self.paths_df), 3))
 
         progress = utils.get_progress_bar("Checking resampled dimensions")
         messages = ""
 
         with progress as pb:
-            for i in pb.track(range(len(self.paths_dataframe))):
-                patient = self.paths_dataframe.iloc[i].to_dict()
+            for i in pb.track(range(len(self.paths_df))):
+                patient = self.paths_df.iloc[i].to_dict()
                 mask_header = ants.image_header_info(patient["mask"])
                 image_list = list(patient.values())[3:len(patient)]
 
-                if self.config["use_nz_mask"]:
+                if self.config["preprocessing"]["crop_to_foreground"]:
                     current_dims = cropped_dims[i, :]
                 else:
                     current_dims = mask_header["dimensions"]
@@ -322,14 +400,15 @@ class Analyzer:
 
                 # Compute resampled dimensions.
                 new_dims = utils.get_resampled_image_dimensions(
-                    current_dims, current_spacing, self.config["target_spacing"]
+                    current_dims, current_spacing,
+                    self.config["preprocessing"]["target_spacing"]
                 )
 
                 # Compute memory size of resampled image.
                 image_memory_size = utils.get_float32_example_memory_size(
                     new_dims,
                     len(image_list),
-                    len(self.dataset_information["labels"])
+                    len(self.dataset_info["labels"])
                 )
 
                 # If image memory size is larger than the max recommended size
@@ -351,18 +430,28 @@ class Analyzer:
 
         if len(messages) > 0:
             text = rich.text.Text(messages) # type: ignore
-            console.print(text)
+            self.console.print(text)
 
         median_resampled_dims = list(np.median(resampled_dims, axis=0))
         return median_resampled_dims
 
     def get_ct_normalization_parameters(self):
-        """Get windowing and normalization parameters for CT images."""
+        """Get windowing and normalization parameters for CT images.
+
+        CT images are treated differently than other modalities since the voxel
+        intensities in CT images are physically meaningful (i.e., Hounsfield
+        units). Therefore, we compute the normalization parameters
+        (global z-score mean and standard deviation) based on the foreground
+        intensities in the CT images. We also compute the global window range
+        based on the foreground intensities. This is done to ensure that the
+        CT images are normalized correctly and that the windowing is applied
+        correctly to the foreground intensities.
+        """
         progress = utils.get_progress_bar("Getting CT norm. params.")
         fg_intensities = []
         with progress as pb:
-            for i in pb.track(range(len(self.paths_dataframe))):
-                patient = self.paths_dataframe.iloc[i].to_dict()
+            for i in pb.track(range(len(self.paths_df))):
+                patient = self.paths_df.iloc[i].to_dict()
                 image_list = list(patient.values())[3:len(patient)]
 
                 # Read original image.
@@ -379,94 +468,118 @@ class Analyzer:
 
         global_z_score_mean = np.mean(fg_intensities)
         global_z_score_std = np.std(fg_intensities)
-        global_window_range = [
-            np.percentile(
-                fg_intensities, constants.CT_GLOBAL_CLIP_MIN_PERCENTILE
-            ),
-            np.percentile(
-                fg_intensities, constants.CT_GLOBAL_CLIP_MAX_PERCENTILE
-            ),
-        ]
-
+        global_window_range_min = np.percentile(
+            fg_intensities, constants.CT_GLOBAL_CLIP_MIN_PERCENTILE
+        )
+        global_window_range_max = np.percentile(
+            fg_intensities, constants.CT_GLOBAL_CLIP_MAX_PERCENTILE
+        )
         return {
-            "ct_global_z_score_mean": global_z_score_mean,
-            "ct_global_z_score_std": global_z_score_std,
-            "ct_global_clip_min": global_window_range[0],
-            "ct_global_clip_max": global_window_range[1],
+            "window_min": float(global_window_range_min),
+            "window_max": float(global_window_range_max),
+            "z_score_mean": float(global_z_score_mean),
+            "z_score_std": float(global_z_score_std),
         }
-
-    def config_if_no_preprocess(self):
-        """Create basic config file if we don't use preprocessing."""
-        configuration_with_no_preprocessing = {
-            "modality": self.dataset_information["modality"],
-            "labels": self.dataset_information["labels"],
-            "final_classes": self.dataset_information["final_classes"],
-            "crop_to_fg": None,
-            "use_nz_mask": None,
-            "target_spacing": None,
-            "window_range": None,
-            "global_z_score_mean": None,
-            "global_z_score_std": None,
-            "median_image_size": None,
-            "mist_version": metadata.version("mist-medical"),
-        }
-        self.config.update(configuration_with_no_preprocessing)
 
     def analyze_dataset(self):
-        """Analyze dataset to get configuration file."""
-        use_nz_mask = self.check_nz_ratio()
-        crop_to_fg, cropped_dims = self.check_crop_fg()
-        target_spacing = self.get_target_spacing()
+        """Analyze dataset and prepare configuration file.
 
-        if self.dataset_information["modality"] == "ct":
+        This function analyzes the dataset to prepare the configuration file
+        for training. It checks if the dataset is sparse, if cropping to the
+        foreground bounding box is beneficial, and which target spacing to use,
+        and the normalization parameters for CT images if applicable. It updates
+        the configuration dictionary with these parameters and saves it to a
+        JSON file. It also sets the number of channels and classes based on the
+        dataset information. The configuration file is used by for preprocessing
+        and training the model.
+        """
+        # Add current MIST version to the configuration.
+        self.config["mist_version"] = metadata.version("mist-medical")
+
+        # Update the dataset information in the configuration.
+        self.config["dataset_info"]["task"] = self.dataset_info["task"]
+        self.config["dataset_info"]["modality"] = (
+            self.dataset_info["modality"].lower()
+        )
+        # Store the names of the images for more robust inference later. This
+        # allows us to ensure that the order of the images is correct for new
+        # test data.
+        self.config["dataset_info"]["images"] = (
+            list(self.dataset_info["images"].keys())
+        )
+        self.config["dataset_info"]["labels"] = self.dataset_info["labels"]
+
+        # Update the preprocessing section in the configuration.
+        # If the user has specified that they want to skip preprocessing, then
+        # update this in the configuration. However, this pipeline will still
+        # compute the preprocessing parameters, but it will not apply them to
+        # the images later during the preprocessing step.
+        self.config["preprocessing"]["skip"] = (
+            bool(self.mist_arguments.no_preprocess)
+        )
+
+        # Get the target spacing for the dataset.
+        target_spacing = self.get_target_spacing()
+        self.config["preprocessing"]["target_spacing"] = [
+            float(spacing) for spacing in target_spacing
+        ]
+
+        # Check if cropping to the foreground bounding box is beneficial.
+        crop_to_fg, cropped_dims = self.check_crop_fg()
+        self.config["preprocessing"]["crop_to_foreground"] = bool(crop_to_fg)
+
+        # Get the resampled and possible cropped dimensions of the images.
+        median_dims = self.check_resampled_dims(cropped_dims)
+        self.config["preprocessing"]["median_resampled_image_size"] = [
+            int(dim) for dim in median_dims
+        ]
+
+        # Check if the images are sparse, i.e., if 20% or less of the image is
+        # non-zero.
+        normalize_with_nz_mask = self.check_nz_ratio()
+        self.config["preprocessing"]["normalize_with_nonzero_mask"] = (
+            bool(normalize_with_nz_mask)
+        )
+
+        # If we are using CT images, we need to get the normalization
+        # parameters for CT images and update the configuration.
+        if self.config["dataset_info"]["modality"] == "ct":
             # Get CT normalization parameters.
-            ct_normalization_parameters = (
-                self.get_ct_normalization_parameters()
+            ct_normalization_parameters = self.get_ct_normalization_parameters()
+            self.config["preprocessing"]["ct_normalization"].update(
+                ct_normalization_parameters
             )
 
-            configuration_with_ct_parameters = {
-                "modality": "ct",
-                "window_range": [
-                    float(ct_normalization_parameters["ct_global_clip_min"]),
-                    float(ct_normalization_parameters["ct_global_clip_max"]),
-                ],
-                "global_z_score_mean": float(
-                    ct_normalization_parameters["ct_global_z_score_mean"]
-                ),
-                "global_z_score_std": float(
-                    ct_normalization_parameters["ct_global_z_score_std"]
-                ),
-            }
-            self.config.update(configuration_with_ct_parameters)
-        else:
-            configuration_no_ct_parameters = {
-                "modality": self.dataset_information["modality"],
-            }
-            self.config.update(configuration_no_ct_parameters)
-
-        self.config["labels"] = self.dataset_information["labels"]
-        self.config["final_classes"] = self.dataset_information["final_classes"]
-        self.config["crop_to_fg"] = bool(crop_to_fg)
-        self.config["use_nz_mask"] = bool(use_nz_mask)
-        self.config["target_spacing"] = [
-            float(target_spacing[i]) for i in range(3)
-        ]
-        median_dims = self.check_resampled_dims(cropped_dims)
-        self.config["median_image_size"] = [
-            int(median_dims[i]) for i in range(3)
-        ]
+        # If the region of interest (ROI) size is not specified by the user,
+        # we compute the best ROI size based on the median dimensions of the
+        # resampled images. If the ROI size is specified by the user, we use
+        # that ROI size.
         if self.mist_arguments.patch_size is None:
             patch_size = utils.get_best_patch_size(
                 median_dims, self.mist_arguments.max_patch_size
             )
-            self.config["patch_size"] = [int(patch_size[i]) for i in range(3)]
+            self.config["model"]["params"]["patch_size"] = [
+                int(size) for size in patch_size
+            ]
         else:
-            self.config["patch_size"] = [
-                int(self.mist_arguments.patch_size[i]) for i in range(3)
+            self.config["model"]["params"]["patch_size"] = [
+                int(size) for size in self.mist_arguments.patch_size
             ]
 
-        # Add MIST version to configuration file.
-        self.config["mist_version"] = metadata.version("mist-medical")
+        # Update the number of channels and classes in the model section of the
+        # configuration.
+        self.config["model"]["params"]["in_channels"] = len(
+            self.config["dataset_info"]["images"]
+        )
+        self.config["model"]["params"]["out_channels"] = len(
+            self.config["dataset_info"]["labels"]
+        )
+
+        # Add the evaluation classes to the evaluation section of the
+        # configuration.
+        self.config["evaluation"]["final_classes"] = self.dataset_info[
+            "final_classes"
+        ]
 
     def validate_dataset(self):
         """Check if headers match, images are 3D, and create paths dataframe.
@@ -479,14 +592,14 @@ class Analyzer:
         If any of these checks fail, the patient is excluded from training.
         """
         progress = utils.get_progress_bar("Verifying dataset")
-        dataset_labels_set = set(self.dataset_information["labels"])
+        dataset_labels_set = set(self.dataset_info["labels"])
 
-        bad_data = []
+        bad_data = set()
         messages = ""
         with progress as pb:
-            for i in pb.track(range(len(self.paths_dataframe))):
+            for i in pb.track(range(len(self.paths_df))):
                 # Get patient information.
-                patient = self.paths_dataframe.iloc[i].to_dict()
+                patient = self.paths_df.iloc[i].to_dict()
 
                 # Get list of images, mask, labels in mask, and the header.
                 try:
@@ -497,7 +610,7 @@ class Analyzer:
                     image_header = ants.image_header_info(image_list[0])
                 except RuntimeError as e:
                     messages += f"In {patient['id']}: {e}\n"
-                    bad_data.append(i)
+                    bad_data.add(i)
                     continue
 
                 # Check if labels are correct.
@@ -506,7 +619,7 @@ class Analyzer:
                         f"In {patient['id']}: Labels in mask do not match those"
                         f" specified in {self.mist_arguments.data}\n"
                     )
-                    bad_data.append(i)
+                    bad_data.add(i)
                     continue
 
                 # Check that the mask is 3D.
@@ -515,7 +628,7 @@ class Analyzer:
                         f"In {patient['id']}: Got 4D mask, make sure all"
                         "images are 3D\n"
                     )
-                    bad_data.append(i)
+                    bad_data.add(i)
                     continue
 
                 # Check that the mask and image headers match and that each
@@ -529,7 +642,7 @@ class Analyzer:
                             f"In {patient['id']}: Mismatch between image and"
                             " mask header information\n"
                         )
-                        bad_data.append(i)
+                        bad_data.add(i)
                         break
 
                     if not utils.is_image_3d(image_header):
@@ -537,7 +650,7 @@ class Analyzer:
                             f"In {patient['id']}: Got 4D image, make"
                             " sure all images are 3D\n"
                         )
-                        bad_data.append(i)
+                        bad_data.add(i)
                         break
 
                 # Check that all images have the same header information as
@@ -553,53 +666,59 @@ class Analyzer:
                             anchor_header, image_header
                         ):
                             messages += (
-                                f"In {patient['id']}: Mismatch between images"
+                                f"In {patient['id']}: Mismatch between images' "
                                 "header information\n"
                             )
-                            bad_data.append(i)
+                            bad_data.add(i)
                             break
 
         # If there are any bad examples, print their ids.
         if len(messages) > 0:
             messages += "Excluding these from training\n"
             text = rich.text.Text(messages) # type: ignore
-            console.print(text)
+            self.console.print(text)
 
         # If all of the data is bad, then raise an error.
-        assert len(bad_data) < len(self.paths_dataframe), (
+        assert len(bad_data) < len(self.paths_df), (
             "All examples were excluded from training. Please check your data."
         )
 
         # Drop bad data from paths dataframe and reset index.
-        rows_to_drop = self.paths_dataframe.index[bad_data]
-        self.paths_dataframe.drop(rows_to_drop, inplace=True)
-        self.paths_dataframe.reset_index(drop=True, inplace=True)
+        rows_to_drop = self.paths_df.index[list(bad_data)]
+        self.paths_df.drop(rows_to_drop, inplace=True)
+        self.paths_df.reset_index(drop=True, inplace=True)
 
     def run(self):
         """Run the analyzer to get configuration file."""
         text = rich.text.Text("\nAnalyzing dataset\n") # type: ignore
         text.stylize("bold")
-        console.print(text)
+        self.console.print(text)
 
-        # Run basic checks on the dataset.
+        # Step 1: Run the dataset validation checks to clean up the paths
+        # dataframe and ensure that the dataset is valid for training.
         self.validate_dataset()
 
-        # Add folds to paths dataframe.
-        self.paths_dataframe = utils.add_folds_to_df(
-            self.paths_dataframe, n_splits=self.mist_arguments.nfolds
+        # Step 2: Add folds to the paths dataframe and update the configuration
+        # with the number of folds that we are using for training.
+        self.paths_df = utils.add_folds_to_df(
+            self.paths_df, n_splits=self.mist_arguments.nfolds
         )
+        self.config["training"]["nfolds"] = int(self.mist_arguments.nfolds)
 
-        # Get configuration file.
-        if self.mist_arguments.no_preprocess:
-            self.config_if_no_preprocess()
+        # By default, we assume that we are running all folds for training.
+        # This can be overridden by the user in the MIST arguments.
+        if self.mist_arguments.folds is not None:
+            self.config["training"]["folds"] = [
+                int(fold) for fold in self.mist_arguments.folds
+            ]
         else:
-            self.analyze_dataset()
+            self.config["training"]["folds"] = (
+                list(range(self.config["training"]["nfolds"]))
+            )
 
-        # Save files.
-        self.paths_dataframe.to_csv(
-            self.file_paths["image_mask_paths"], index=False
-        )
-        with open(
-            self.file_paths["configuration"], "w", encoding="utf-8"
-        ) as outfile:
-            json.dump(self.config, outfile, indent=2)
+        # Step 3: Analyze the dataset to prepare the configuration file.
+        self.analyze_dataset()
+
+        # Step 4: Save the configuration file and the paths dataframe.
+        self.paths_df.to_csv(self.paths_csv, index=False)
+        utils.write_json_file(self.config_json, self.config)
