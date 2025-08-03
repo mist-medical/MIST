@@ -515,8 +515,7 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
         # If we are using DTMs, create the directory for them.
         os.makedirs(output_directories["dtms"], exist_ok=True)
 
-        # Next, we update the configuration file to reflect that we are
-        # using DTMs.
+        # Update the configuration file to reflect that we are using DTMs.
         config["preprocessing"]["compute_dtms"] = True
 
         # Write the updated configuration file back to disk.
