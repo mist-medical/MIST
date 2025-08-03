@@ -21,10 +21,13 @@ import SimpleITK as sitk
 # MIST imports.
 from mist.preprocessing import preprocess
 from mist.runtime import utils
+from mist.preprocessing.preprocessing_constants import (
+    PreprocessingConstants as pc
+)
 
 
 def fake_ants_to_sitk(
-        ants_img: ants.core.ants_image.ANTsImage
+    ants_img: ants.core.ants_image.ANTsImage
 ) -> sitk.Image:
     """Fake conversion from ANTs to SimpleITK image.
 
@@ -44,9 +47,9 @@ def fake_ants_to_sitk(
 
 
 def fake_get_resampled_image_dimensions(
-        size: Tuple[int, int, int],
-        spacing: Tuple[float, float, float],
-        target_spacing: Tuple[float, float, float],
+    size: Tuple[int, int, int],
+    spacing: Tuple[float, float, float],
+    target_spacing: Tuple[float, float, float],
 ) -> Tuple[int, int, int]:
     """Fake function to compute resampled image dimensions.
 
@@ -67,9 +70,9 @@ def fake_check_anisotropic(sitk_img: sitk.Image) -> Dict:
 
 
 def fake_aniso_intermediate_resample(
-        sitk_img: sitk.Image,
-        new_size: Tuple[int, int, int],
-        target_spacing, low_res_axis
+    sitk_img: sitk.Image,
+    new_size: Tuple[int, int, int],
+    target_spacing, low_res_axis,
 ) -> sitk.Image:
     """Fake function to handle anisotropic resampling."""
     return sitk_img
@@ -94,8 +97,8 @@ def fake_sitk_to_ants(sitk_img: sitk.Image) -> ants.core.ants_image.ANTsImage:
 
 
 def fake_make_onehot(
-        ants_img: ants.core.ants_image.ANTsImage,
-        labels: List[int]
+    ants_img: ants.core.ants_image.ANTsImage,
+    labels: List[int],
 ) -> List[sitk.Image]:
     """Fake function to create one-hot encoded images for given labels."""
     # Return a list (one per label) of a fake SITK image.
@@ -115,16 +118,14 @@ def fake_sitk_get_min_max(sitk_img: sitk.Image) -> Tuple[float, float]:
     return np.min(arr), np.max(arr)
 
 
-def fake_get_fg_mask_bbox(
-        ants_img: ants.core.ants_image.ANTsImage
-) -> Dict[str, int]:
+def fake_get_fg_mask_bbox(ants_img: ants.core.ants_image.ANTsImage) -> Dict:
     """Fake function to get the bounding box of the foreground mask."""
     return {"x": 0, "y": 0, "z": 0, "width": 10, "height": 10, "depth": 10}
 
 
 def fake_crop_to_fg(
-        ants_img: ants.core.ants_image.ANTsImage,
-        bbox: Dict[str, int]
+    ants_img: ants.core.ants_image.ANTsImage,
+    bbox: Dict[str, int]
 ) -> ants.core.ants_image.ANTsImage:
     """Fake function to crop an ANTs image to the foreground bounding box."""
     return ants_img
@@ -149,16 +150,31 @@ def fake_get_progress_bar(text):
 
 def fake_read_json_file(filepath: str) -> Dict:
     """Fake function to read JSON file and return a configuration."""
-    return {
-        "crop_to_fg": False,
-        "target_spacing": (1.0, 1.0, 1.0),
-        "labels": [0, 1],
-        "use_nz_mask": False,
-        "modality": "ct",
-        "window_range": [0, 100],
-        "global_z_score_mean": 50.0,
-        "global_z_score_std": 10.0,
+    config = {
+        "mist_version": "0.1.0",
+        "dataset_info": {
+            "task": "segmentation",
+            "modality": "ct",
+            "images": ["ct"],
+            "labels": [0, 1],
+        },
+        "preprocessing": {
+            "skip": False,
+            "target_spacing": [1.0, 1.0, 1.0],
+            "crop_to_foreground": False,
+            "median_resampled_image_size": [128, 128, 128],
+            "normalize_with_nonzero_mask": False,
+            "ct_normalization": {
+                "window_min": 0,
+                "window_max": 100,
+                "z_score_mean": 50.0,
+                "z_score_std": 10.0,
+            },
+            "compute_dtms": False,
+            "normalize_dtms": False,
+        }
     }
+    return config
 
 
 @pytest.fixture(autouse=True)
@@ -244,11 +260,16 @@ def test_window_and_normalize_ct():
     """Test the window_and_normalize function for CT modality."""
     image = np.linspace(0, 200, num=100).reshape(10, 10)
     config = {
-        "use_nz_mask": False,
-        "modality": "ct",
-        "window_range": [50, 150],
-        "global_z_score_mean": 100,
-        "global_z_score_std": 20,
+        "dataset_info": {"modality": "ct"},
+        "preprocessing": {
+            "normalize_with_nonzero_mask": False,
+            "ct_normalization": {
+                "window_min": 50,
+                "window_max": 150,
+                "z_score_mean": 100,
+                "z_score_std": 20,
+            }
+        }
     }
     norm_img = preprocess.window_and_normalize(image, config)
     assert norm_img.min() >= -3
@@ -260,11 +281,16 @@ def test_window_and_normalize_non_ct():
     """Test the window_and_normalize function for non-CT modalities."""
     image = np.linspace(0, 200, num=100).reshape(10, 10)
     config = {
-        "use_nz_mask": True,
-        "modality": "mr",
-        "window_range": [0, 0],
-        "global_z_score_mean": 0,
-        "global_z_score_std": 1,
+        "dataset_info": {"modality": "mr"},
+        "preprocessing": {
+            "normalize_with_nonzero_mask": False,
+            "ct_normalization": {
+                "window_min": 50,
+                "window_max": 150,
+                "z_score_mean": 100,
+                "z_score_std": 20,
+            }
+        }
     }
     norm_img = preprocess.window_and_normalize(image, config)
     # For non-CT, we simply verify that the output is a float32 numpy array.
@@ -369,7 +395,7 @@ def test_preprocess_example_non_training(monkeypatch):
 def test_preprocess_example_training(monkeypatch):
     """Test preprocess_example in training mode."""
     config = fake_read_json_file("dummy")
-    config["crop_to_fg"] = True
+    config["preprocessing"]["crop_to_foreground"] = True
     dummy_image = ants.from_numpy(np.random.rand(10, 10, 10))
     monkeypatch.setattr(ants, "image_read", lambda path: dummy_image)
     monkeypatch.setattr(ants, "reorient_image2", lambda img, orient: img)
@@ -408,18 +434,128 @@ def test_preprocess_dataset(tmp_path, monkeypatch):
     # Create dummy config.json.
     config_file = results_dir / "config.json"
     config_file.write_text(
-        '{"crop_to_fg": false, "target_spacing": [1.0,1.0,1.0], '
-        '"labels": [0, 1], "use_nz_mask": false, "modality": "ct", '
-        '"window_range": [0,100], "global_z_score_mean": 50.0, '
-        '"global_z_score_std": 10.0}'
+        '{"mist_version": "0.1.0", "dataset_info": {"task": "segmentation", '
+        '"modality": "ct", "images": ["ct"], "labels": [0, 1]}, '
+        '"preprocessing": {"skip": false, "target_spacing": [1.0, 1.0, 1.0], '
+        '"crop_to_foreground": false, '
+        '"median_resampled_image_size": [128, 128, 128], '
+        '"normalize_with_nonzero_mask": false, "ct_normalization": {'
+        '"window_min": 50, "window_max": 150, "z_score_mean": 100, '
+        '"z_score_std": 20}, "compute_dtms": false, "normalize_dtms": false}}'
     )
 
     # Create dummy train_paths.csv.
     df = pd.DataFrame({
         "id": [1],
         "mask": ["dummy_mask"],
-        "image1": ["dummy_path1"],
-        "image2": ["dummy_path2"],
+        "ct": ["dummy_path1"],
+    })
+    train_paths_file = results_dir / "train_paths.csv"
+    df.to_csv(train_paths_file, index=False)
+
+    # Create dummy fg_bboxes.csv.
+    fg_df = pd.DataFrame({
+        "id": [1],
+        "x": [0],
+        "y": [0],
+        "z": [0],
+        "width": [10],
+        "height": [10],
+        "depth": [10],
+    })
+    fg_file = results_dir / "fg_bboxes.csv"
+    fg_df.to_csv(fg_file, index=False)
+
+    # Monkeypatch functions to use our dummy files and images.
+    dummy_image = ants.from_numpy(np.random.rand(10, 10, 10))
+    monkeypatch.setattr(ants, "image_read", lambda path: dummy_image)
+    monkeypatch.setattr(ants, "reorient_image2", lambda img, orient: img)
+    monkeypatch.setattr(utils, "crop_to_fg", fake_crop_to_fg)
+    monkeypatch.setattr(
+        utils, "read_json_file", lambda path: fake_read_json_file(path)
+    )
+    monkeypatch.setattr(utils, "get_progress_bar", fake_get_progress_bar)
+
+    args = argparse.Namespace(
+        results=str(results_dir),
+        numpy=str(numpy_dir),
+        use_dtms=False,
+        normalize_dtms=False,
+        no_preprocess=False,
+    )
+
+    preprocess.preprocess_dataset(args)
+
+    images_dir = os.path.join(args.numpy, "images")
+    labels_dir = os.path.join(args.numpy, "labels")
+    assert os.path.exists(images_dir)
+    assert os.path.exists(labels_dir)
+
+    images_files = [f for f in os.listdir(images_dir) if f.endswith(".npy")]
+    labels_files = [f for f in os.listdir(labels_dir) if f.endswith(".npy")]
+    assert len(images_files) == 1
+    assert len(labels_files) == 1
+
+
+def test_preprocess_dataset_with_multi_channel(tmp_path, monkeypatch):
+    """Test the preprocess_dataset function."""
+    # Create dummy directories and files.
+    results_dir = tmp_path / "results"
+    numpy_dir = tmp_path / "numpy"
+    results_dir.mkdir()
+    numpy_dir.mkdir()
+
+    # Patch a new fake_read_json_file to include multi-channel images.
+    def fake_read_json_file(filepath: str) -> Dict:
+        """Fake function to read JSON file and return a configuration."""
+        config = {
+            "mist_version": "0.1.0",
+            "dataset_info": {
+                "task": "segmentation",
+                "modality": "mr",
+                "images": ["t1", "t2", "tc", "fl"],
+                "labels": [0, 1],
+            },
+            "preprocessing": {
+                "skip": False,
+                "target_spacing": [1.0, 1.0, 1.0],
+                "crop_to_foreground": True,
+                "median_resampled_image_size": [128, 128, 128],
+                "normalize_with_nonzero_mask": True,
+                "ct_normalization": {
+                    "window_min": None,
+                    "window_max": None,
+                    "z_score_mean": None,
+                    "z_score_std": None,
+                },
+                "compute_dtms": False,
+                "normalize_dtms": False,
+            }
+        }
+        return config
+
+    # Create dummy config.json.
+    config_file = results_dir / "config.json"
+    config_file.write_text(
+        '{"mist_version": "0.1.0", "dataset_info": {"task": "segmentation", '
+        '"modality": "ct", "images": ["t1", "t2", "tc", "fl"], '
+        '"labels": [0, 1]}, '
+        '"preprocessing": {"skip": false, "target_spacing": [1.0, 1.0, 1.0], '
+        '"crop_to_foreground": false, '
+        '"median_resampled_image_size": [128, 128, 128], '
+        '"normalize_with_nonzero_mask": false, "ct_normalization": {'
+        '"window_min": 50, "window_max": 150, "z_score_mean": 100, '
+        '"z_score_std": 20}, "compute_dtms": false, "normalize_dtms": false}}'
+    )
+
+    # Create dummy train_paths.csv.
+    df = pd.DataFrame({
+        "id": [1],
+        "mask": ["dummy_mask"],
+        "t1": ["dummy_path1"],
+        "t2": ["dummy_path2"],
+        "tc": ["dummy_path3"],
+        "fl": ["dummy_path4"],
     })
     train_paths_file = results_dir / "train_paths.csv"
     df.to_csv(train_paths_file, index=False)
@@ -487,7 +623,8 @@ def test_resample_image_with_anisotropy(monkeypatch):
     # For testing, simply return the input image from
     # aniso_intermediate_resample.
     monkeypatch.setattr(
-        utils, "aniso_intermediate_resample", lambda img, new_size, ts, lra: img
+        utils, "aniso_intermediate_resample",
+        lambda img, new_size, ts, lra: img
     )
     resampled = preprocess.resample_image(img, target_spacing)
 
@@ -504,9 +641,9 @@ def test_resample_mask_with_anisotropy(monkeypatch):
     mask = ants.from_numpy(arr)
     labels = [0, 1]
     target_spacing = (2.0, 2.0, 2.0)
-    monkeyatch_aniso = {"is_anisotropic": True, "low_resolution_axis": 0}
+    monkeypatch_aniso = {"is_anisotropic": True, "low_resolution_axis": 0}
     monkeypatch.setattr(
-        utils, "check_anisotropic", lambda img: monkeyatch_aniso
+        utils, "check_anisotropic", lambda img: monkeypatch_aniso
     )
     monkeypatch.setattr(
         utils, "aniso_intermediate_resample", lambda img, new_size, ts, lra: img
@@ -526,11 +663,28 @@ def test_window_and_normalize_ct_with_nz_mask():
     # Introduce some zeros.
     image[0, :5] = 0
     config = {
-        "use_nz_mask": True,
-        "modality": "ct",
-        "window_range": [50, 150],
-        "global_z_score_mean": 100,
-        "global_z_score_std": 20,
+        "mist_version": "0.1.0",
+        "dataset_info": {
+            "task": "segmentation",
+            "modality": "ct",
+            "images": ["ct"],
+            "labels": [0, 1],
+        },
+        "preprocessing": {
+            "skip": False,
+            "target_spacing": [1.0, 1.0, 1.0],
+            "crop_to_foreground": False,
+            "median_resampled_image_size": [128, 128, 128],
+            "normalize_with_nonzero_mask": True,
+            "ct_normalization": {
+                "window_min": 0.0,
+                "window_max": 100.0,
+                "z_score_mean": 0.0,
+                "z_score_std": 100.0,
+            },
+            "compute_dtms": False,
+            "normalize_dtms": False,
+        }
     }
     norm_img = preprocess.window_and_normalize(image, config)
 
@@ -546,16 +700,31 @@ def test_window_and_normalize_ct_with_nz_mask():
 def test_preprocess_example_missing_fg_bbox(monkeypatch):
     """Test if ValueError is raised when crop_to_fg is True, fg_bbox is None."""
     config = {
-        "crop_to_fg": True,
-        "target_spacing": (1.0, 1.0, 1.0),
-        "labels": [0, 1],
-        "use_nz_mask": False,
-        "modality": "ct",
-        "window_range": [0, 100],
-        "global_z_score_mean": 50.0,
-        "global_z_score_std": 10.0,
+        "mist_version": "0.1.0",
+        "dataset_info": {
+            "task": "segmentation",
+            "modality": "mr",
+            "images": ["t1", "t2", "tc", "fl"],
+            "labels": [0, 1],
+        },
+        "preprocessing": {
+            "skip": False,
+            "target_spacing": [1.0, 1.0, 1.0],
+            "crop_to_foreground": True,
+            "median_resampled_image_size": [128, 128, 128],
+            "normalize_with_nonzero_mask": False,
+            "ct_normalization": {
+                "window_min": 0.0,
+                "window_max": 100.0,
+                "z_score_mean": 0.0,
+                "z_score_std": 100.0,
+            },
+            "compute_dtms": False,
+            "normalize_dtms": False,
+        }
     }
 
+    # Create a dummy ANTs image to simulate the image loading.
     dummy_image = ants.from_numpy(np.ones((10, 10, 10), dtype=np.float32))
 
     # Patch ANTs image loading and downstream methods
@@ -586,8 +755,6 @@ def test_preprocess_example_missing_fg_bbox(monkeypatch):
             image_paths_list=["dummy_path1"],
             mask_path="dummy_mask_path",
             fg_bbox=None,
-            use_dtm=False,
-            normalize_dtm=False,
         )
 
 
@@ -655,13 +822,28 @@ def test_preprocess_dataset_missing_train_paths(tmp_path):
     numpy_dir.mkdir()
     # Create config.json but do not create train_paths.csv.
     config = {
-        "crop_to_fg": False, "target_spacing": [1.0, 1.0, 1.0],
-        "labels": [0, 1],
-        "use_nz_mask": False,
-        "modality": "ct",
-        "window_range": [0, 100],
-        "global_z_score_mean": 50.0,
-        "global_z_score_std": 10.0
+        "mist_version": "0.1.0",
+        "dataset_info": {
+            "task": "segmentation",
+            "modality": "mr",
+            "images": ["t1", "t2", "tc", "fl"],
+            "labels": [0, 1],
+        },
+        "preprocessing": {
+            "skip": False,
+            "target_spacing": [1.0, 1.0, 1.0],
+            "crop_to_foreground": True,
+            "median_resampled_image_size": [128, 128, 128],
+            "normalize_with_nonzero_mask": False,
+            "ct_normalization": {
+                "window_min": 0.0,
+                "window_max": 100.0,
+                "z_score_mean": 0.0,
+                "z_score_std": 100.0,
+            },
+            "compute_dtms": False,
+            "normalize_dtms": False,
+        }
     }
     (results_dir / "config.json").write_text(str(config))
     fg_df = pd.DataFrame({
@@ -695,13 +877,28 @@ def test_preprocess_dataset_missing_fg_bboxes(tmp_path):
     numpy_dir.mkdir()
     # Create config.json and train_paths.csv but not fg_bboxes.csv.
     config = {
-        "crop_to_fg": False, "target_spacing": [1.0, 1.0, 1.0],
-        "labels": [0, 1],
-        "use_nz_mask": False,
-        "modality": "ct",
-        "window_range": [0, 100],
-        "global_z_score_mean": 50.0,
-        "global_z_score_std": 10.0
+        "mist_version": "0.1.0",
+        "dataset_info": {
+            "task": "segmentation",
+            "modality": "mr",
+            "images": ["t1", "t2", "tc", "fl"],
+            "labels": [0, 1],
+        },
+        "preprocessing": {
+            "skip": False,
+            "target_spacing": [1.0, 1.0, 1.0],
+            "crop_to_foreground": True,
+            "median_resampled_image_size": [128, 128, 128],
+            "normalize_with_nonzero_mask": False,
+            "ct_normalization": {
+                "window_min": 0.0,
+                "window_max": 100.0,
+                "z_score_mean": 0.0,
+                "z_score_std": 100.0,
+            },
+            "compute_dtms": False,
+            "normalize_dtms": False,
+        }
     }
     (results_dir / "config.json").write_text(str(config))
     df = pd.DataFrame({
@@ -724,30 +921,41 @@ def test_preprocess_dataset_missing_fg_bboxes(tmp_path):
 
 def test_window_and_normalize_non_ct_with_percentile_windowing(monkeypatch):
     """Test percentile-based windowing for non-CT when use_nz_mask is False."""
-    # Create synthetic image with wide intensity range
+    # Create synthetic image with wide intensity range.
     image = np.linspace(0, 1000, num=1000).reshape(10, 10, 10)
 
-    # Patch constants used in the percentile calculation
-    monkeypatch.setattr(
-        preprocess.preprocessing_constants.PreprocessingConstants,
-        "WINDOW_PERCENTILE_LOW", 0.5
-    )
-    monkeypatch.setattr(
-        preprocess.preprocessing_constants.PreprocessingConstants,
-        "WINDOW_PERCENTILE_HIGH", 99.5
-    )
-
+    # Patch constants used in the percentile calculation.
+    monkeypatch.setattr(pc, "WINDOW_PERCENTILE_LOW", 0.5)
+    monkeypatch.setattr(pc, "WINDOW_PERCENTILE_HIGH", 99.5)
     config = {
-        "use_nz_mask": False,     # Triggers the uncovered path.
-        "modality": "mr",         # Anything other than "ct".
-        "window_range": [0, 0],   # unused in this path.
-        "global_z_score_mean": 500.0,
-        "global_z_score_std": 100.0,
+        "mist_version": "0.1.0",
+        "dataset_info": {
+            "task": "segmentation",
+            "modality": "mr",
+            "images": ["t1", "t2", "tc", "fl"],
+            "labels": [0, 1],
+        },
+        "preprocessing": {
+            "skip": False,
+            "target_spacing": [1.0, 1.0, 1.0],
+            "crop_to_foreground": True,
+            "median_resampled_image_size": [128, 128, 128],
+            "normalize_with_nonzero_mask": False,
+            "ct_normalization": {
+                "window_min": 0.0,
+                "window_max": 100.0,
+                "z_score_mean": 0.0,
+                "z_score_std": 100.0,
+            },
+            "compute_dtms": False,
+            "normalize_dtms": False,
+        }
     }
 
+    # Call the window_and_normalize function.
     norm_img = preprocess.window_and_normalize(image, config)
 
-    # Check normalization output
+    # Check normalization output.
     assert norm_img.dtype == np.float32
     assert norm_img.shape == (10, 10, 10)
     assert np.all(np.isfinite(norm_img))  # Sanity check: no NaNs or infs.
@@ -786,16 +994,29 @@ def test_compute_dtm_empty_label_with_normalization(monkeypatch):
 
 def test_preprocess_example_triggers_resample(monkeypatch):
     """Test resample_image when image spacing differs from target spacing."""
-
     config = {
-        "crop_to_fg": False,
-        "target_spacing": (1.0, 1.0, 1.0),  # <- target spacing
-        "labels": [0, 1],
-        "use_nz_mask": False,
-        "modality": "ct",
-        "window_range": [0, 100],
-        "global_z_score_mean": 50.0,
-        "global_z_score_std": 10.0,
+        "mist_version": "0.1.0",
+        "dataset_info": {
+            "task": "segmentation",
+            "modality": "ct",
+            "images": ["ct"],
+            "labels": [0, 1],
+        },
+        "preprocessing": {
+            "skip": False,
+            "target_spacing": [1.0, 1.0, 1.0],
+            "crop_to_foreground": True,
+            "median_resampled_image_size": [128, 128, 128],
+            "normalize_with_nonzero_mask": False,
+            "ct_normalization": {
+                "window_min": 0.0,
+                "window_max": 100.0,
+                "z_score_mean": 0.0,
+                "z_score_std": 100.0,
+            },
+            "compute_dtms": False,
+            "normalize_dtms": False,
+        }
     }
 
     # Create a dummy image with DIFFERENT spacing.
@@ -818,8 +1039,6 @@ def test_preprocess_example_triggers_resample(monkeypatch):
         image_paths_list=["dummy_image.nii.gz"],
         mask_path=None,
         fg_bbox=None,
-        use_dtm=False,
-        normalize_dtm=False,
     )
 
     assert was_called["resample"] is True
@@ -828,16 +1047,29 @@ def test_preprocess_example_triggers_resample(monkeypatch):
 
 def test_preprocess_example_reads_mask(monkeypatch):
     """Test that image_read is called to read the mask when in training mode."""
-
     config = {
-        "crop_to_fg": False,  # Skip fg_bbox logic.
-        "target_spacing": (1.0, 1.0, 1.0),
-        "labels": [0, 1],
-        "use_nz_mask": False,
-        "modality": "ct",
-        "window_range": [0, 100],
-        "global_z_score_mean": 50.0,
-        "global_z_score_std": 10.0,
+        "mist_version": "0.1.0",
+        "dataset_info": {
+            "task": "segmentation",
+            "modality": "ct",
+            "images": ["ct"],
+            "labels": [0, 1],
+        },
+        "preprocessing": {
+            "skip": False,
+            "target_spacing": [1.0, 1.0, 1.0],
+            "crop_to_foreground": False,
+            "median_resampled_image_size": [128, 128, 128],
+            "normalize_with_nonzero_mask": False,
+            "ct_normalization": {
+                "window_min": 0.0,
+                "window_max": 100.0,
+                "z_score_mean": 0.0,
+                "z_score_std": 100.0,
+            },
+            "compute_dtms": False,
+            "normalize_dtms": False,
+        }
     }
 
     dummy_image = ants.from_numpy(np.ones((10, 10, 10), dtype=np.float32))
@@ -857,14 +1089,11 @@ def test_preprocess_example_reads_mask(monkeypatch):
     output = preprocess.preprocess_example(
         config=config,
         image_paths_list=["image1.nii.gz"],
-        mask_path="mask1.nii.gz",  # <-- training mode triggered
+        mask_path="mask1.nii.gz",  # <-- Training mode triggered.
         fg_bbox=None,
-        use_dtm=True,
-        normalize_dtm=False,
     )
 
     assert output["mask"] is not None
-    assert output["dtm"] is not None
     assert isinstance(output["mask"], np.ndarray)
 
 
@@ -877,14 +1106,28 @@ def test_preprocess_dataset_creates_dtm_dir(tmp_path, monkeypatch):
     numpy_dir.mkdir()
 
     config = {
-        "crop_to_fg": False,
-        "target_spacing": [1.0, 1.0, 1.0],
-        "labels": [0, 1],
-        "use_nz_mask": False,
-        "modality": "ct",
-        "window_range": [0, 100],
-        "global_z_score_mean": 50.0,
-        "global_z_score_std": 10.0
+        "mist_version": "0.1.0",
+        "dataset_info": {
+            "task": "segmentation",
+            "modality": "mr",
+            "images": ["image1", "image2"],
+            "labels": [0, 1],
+        },
+        "preprocessing": {
+            "skip": False,
+            "target_spacing": [1.0, 1.0, 1.0],
+            "crop_to_foreground": False,
+            "median_resampled_image_size": [128, 128, 128],
+            "normalize_with_nonzero_mask": False,
+            "ct_normalization": {
+                "window_min": 0.0,
+                "window_max": 100.0,
+                "z_score_mean": 0.0,
+                "z_score_std": 100.0,
+            },
+            "compute_dtms": True,
+            "normalize_dtms": False,
+        }
     }
 
     (results_dir / "config.json").write_text(str(config))
@@ -933,7 +1176,7 @@ def test_preprocess_dataset_creates_dtm_dir(tmp_path, monkeypatch):
 
 
 def test_preprocess_dataset_convert_nifti_called_when_no_preprocess(
-        tmp_path, monkeypatch
+    tmp_path, monkeypatch
 ):
     """Test that convert_nifti_to_numpy is called when no_preprocess is True."""
     results_dir = tmp_path / "results"
@@ -942,14 +1185,28 @@ def test_preprocess_dataset_convert_nifti_called_when_no_preprocess(
     numpy_dir.mkdir()
 
     config = {
-        "crop_to_fg": True,
-        "target_spacing": [1.0, 1.0, 1.0],
-        "labels": [0, 1],
-        "use_nz_mask": False,
-        "modality": "ct",
-        "window_range": [0, 100],
-        "global_z_score_mean": 50.0,
-        "global_z_score_std": 10.0
+        "mist_version": "0.1.0",
+        "dataset_info": {
+            "task": "segmentation",
+            "modality": "mr",
+            "images": ["image1", "image2"],
+            "labels": [0, 1],
+        },
+        "preprocessing": {
+            "skip": False,
+            "target_spacing": [1.0, 1.0, 1.0],
+            "crop_to_foreground": False,
+            "median_resampled_image_size": [128, 128, 128],
+            "normalize_with_nonzero_mask": False,
+            "ct_normalization": {
+                "window_min": 0.0,
+                "window_max": 100.0,
+                "z_score_mean": 0.0,
+                "z_score_std": 100.0,
+            },
+            "compute_dtms": True,
+            "normalize_dtms": False,
+        }
     }
     (results_dir / "config.json").write_text(str(config))
 
@@ -994,134 +1251,3 @@ def test_preprocess_dataset_convert_nifti_called_when_no_preprocess(
     preprocess.preprocess_dataset(args)
 
     assert was_called["convert"] is True
-
-
-def test_preprocess_dataset_loads_fg_bbox_when_crop_enabled(
-        tmp_path, monkeypatch
-):
-    """Test that fg_bbox is extracted from CSV.
-
-    Also check that 'id' is removed when crop_to_fg is True.
-    """
-    results_dir = tmp_path / "results"
-    numpy_dir = tmp_path / "numpy"
-    results_dir.mkdir()
-    numpy_dir.mkdir()
-
-    config = {
-        "crop_to_fg": True,  # Triggers fg_bbox loading
-        "target_spacing": [1.0, 1.0, 1.0],
-        "labels": [0, 1],
-        "use_nz_mask": False,
-        "modality": "ct",
-        "window_range": [0, 100],
-        "global_z_score_mean": 50.0,
-        "global_z_score_std": 10.0
-    }
-    (results_dir / "config.json").write_text(str(config))
-
-    # Dummy train_paths.csv.
-    df = pd.DataFrame({
-        "id": [1],
-        "mask": ["dummy_mask"],
-        "image1": ["dummy_path1"],
-        "image2": ["dummy_path2"],
-    })
-    (results_dir / "train_paths.csv").write_text(df.to_csv(index=False))
-
-    # Dummy fg_bboxes.csv.
-    fg_df = pd.DataFrame({
-        "id": [1],
-        "x": [0], "y": [1], "z": [2],
-        "width": [10], "height": [11], "depth": [12],
-    })
-    (results_dir / "fg_bboxes.csv").write_text(fg_df.to_csv(index=False))
-
-    # Patch ANTs and utility functions.
-    dummy_image = ants.from_numpy(np.ones((10, 10, 10)))
-    monkeypatch.setattr(ants, "image_read", lambda path: dummy_image)
-    monkeypatch.setattr(ants, "reorient_image2", lambda img, orient: img)
-    monkeypatch.setattr(dummy_image, "set_direction", lambda direction: None)
-    monkeypatch.setattr(utils, "crop_to_fg", fake_crop_to_fg)
-    monkeypatch.setattr(utils, "read_json_file", lambda _: config)
-    monkeypatch.setattr(utils, "get_progress_bar", fake_get_progress_bar)
-
-    # Properly patched to avoid TypeError with kwargs.
-    monkeypatch.setattr(
-        preprocess, "resample_image", lambda *args, **kwargs: args[0]
-    )
-    monkeypatch.setattr(
-        preprocess, "resample_mask", lambda *args, **kwargs: args[0]
-    )
-    monkeypatch.setattr(
-        preprocess, "compute_dtm", lambda *args, **kwargs: None
-    )
-
-    args = argparse.Namespace(
-        results=str(results_dir),
-        numpy=str(numpy_dir),
-        use_dtms=False,
-        normalize_dtms=False,
-        no_preprocess=False,  # Triggers the fg_bbox branch.
-    )
-
-    preprocess.preprocess_dataset(args)
-
-    # Check that expected output dirs were created.
-    assert (numpy_dir / "images").exists()
-    assert (numpy_dir / "labels").exists()
-
-    # Confirm output files were written.
-    image_files = list((numpy_dir / "images").glob("*.npy"))
-    label_files = list((numpy_dir / "labels").glob("*.npy"))
-    assert len(image_files) == 1
-    assert len(label_files) == 1
-
-
-def test_preprocess_example_crops_mask_when_fg_bbox_provided(monkeypatch):
-    """Test that the mask is cropped using crop_to_fg given fg_bbox."""
-
-    config = {
-        "crop_to_fg": True,  # <- triggers the cropping logic
-        "target_spacing": (1.0, 1.0, 1.0),
-        "labels": [0, 1],
-        "use_nz_mask": False,
-        "modality": "ct",
-        "window_range": [0, 100],
-        "global_z_score_mean": 50.0,
-        "global_z_score_std": 10.0,
-    }
-
-    # Dummy image and mask
-    dummy_image = ants.from_numpy(np.ones((10, 10, 10), dtype=np.float32))
-
-    monkeypatch.setattr(ants, "image_read", lambda path: dummy_image)
-    monkeypatch.setattr(ants, "reorient_image2", lambda img, orient: img)
-    monkeypatch.setattr(dummy_image, "set_direction", lambda direction: None)
-    monkeypatch.setattr(
-        preprocess, "resample_image", lambda *args, **kwargs: args[0]
-    )
-    monkeypatch.setattr(
-        preprocess, "resample_mask", lambda *args, **kwargs: args[0]
-    )
-    monkeypatch.setattr(preprocess, "compute_dtm", lambda *args, **kwargs: None)
-
-    # Spy on crop_to_fg.
-    was_called = {"crop": False}
-    def fake_crop_to_fg(img, bbox):
-        was_called["crop"] = True
-        return img
-
-    monkeypatch.setattr(utils, "crop_to_fg", fake_crop_to_fg)
-
-    output = preprocess.preprocess_example(
-        config=config,
-        image_paths_list=["img1"],
-        mask_path="mask1",  # Triggers training mode.
-        fg_bbox={"x": 0, "y": 0, "z": 0, "width": 10, "height": 10, "depth": 10},
-        use_dtm=False,
-        normalize_dtm=False,
-    )
-
-    assert was_called["crop"] is True
-    assert isinstance(output["mask"], np.ndarray)

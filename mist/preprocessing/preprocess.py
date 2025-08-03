@@ -21,7 +21,9 @@ import SimpleITK as sitk
 
 # MIST imports.
 from mist.runtime import utils
-from mist.preprocessing import preprocessing_constants
+from mist.preprocessing.preprocessing_constants import (
+    PreprocessingConstants as pc
+)
 
 
 def resample_image(
@@ -185,35 +187,29 @@ def window_and_normalize(
     # the nonzero values. Additionally, we will only use the nonzero values
     # to compute the mean and standard deviation if not already given as
     # global parameters (i.e, for CT images).
-    if config["use_nz_mask"]:
+    if config["preprocessing"]["normalize_with_nonzero_mask"]:
         nonzero_mask = (image != 0).astype(np.float32)
         nonzeros = image[nonzero_mask != 0]
 
     # Normalize the image based on the modality.
     # For CT images, we use precomputed window ranges and normalization
     # parameters.
-    if config["modality"] == "ct":
+    if config["dataset_info"]["modality"] == "ct":
         # Get window range and normalization parameters from config file.
-        lower = config["window_range"][0]
-        upper = config["window_range"][1]
+        lower = config["preprocessing"]["ct_normalization"]["window_min"]
+        upper = config["preprocessing"]["ct_normalization"]["window_max"]
 
         # Get mean and standard deviation from config file if given.
-        mean = config["global_z_score_mean"]
-        std = config["global_z_score_std"]
+        mean = config["preprocessing"]["ct_normalization"]["z_score_mean"]
+        std = config["preprocessing"]["ct_normalization"]["z_score_std"]
     else:
         # For all other modalities, we clip with the 0.5 and 99.5 percentiles
         # values of either the entire image or the nonzero values.
-        if config["use_nz_mask"]:
+        if config["preprocessing"]["normalize_with_nonzero_mask"]:
             # Compute the window range based on the 0.5 and 99.5 percentiles
             # of the nonzero values.
-            lower = np.percentile(
-                nonzeros,
-                preprocessing_constants.PreprocessingConstants.WINDOW_PERCENTILE_LOW
-            )
-            upper = np.percentile(
-                nonzeros,
-                preprocessing_constants.PreprocessingConstants.WINDOW_PERCENTILE_HIGH
-            )
+            lower = np.percentile(nonzeros, pc.WINDOW_PERCENTILE_LOW)
+            upper = np.percentile(nonzeros,pc.WINDOW_PERCENTILE_HIGH)
 
             # Compute the mean and standard deviation of the nonzero values.
             mean = np.mean(nonzeros)
@@ -221,14 +217,8 @@ def window_and_normalize(
         else:
             # Window image based on the 0.5 and 99.5 percentiles of the entire
             # image.
-            lower = np.percentile(
-                image,
-                preprocessing_constants.PreprocessingConstants.WINDOW_PERCENTILE_LOW
-            )
-            upper = np.percentile(
-                image,
-                preprocessing_constants.PreprocessingConstants.WINDOW_PERCENTILE_HIGH
-            )
+            lower = np.percentile(image, pc.WINDOW_PERCENTILE_LOW)
+            upper = np.percentile(image, pc.WINDOW_PERCENTILE_HIGH)
 
             # Get mean and standard deviation of the entire image.
             mean = np.mean(image)
@@ -241,7 +231,7 @@ def window_and_normalize(
     image = (image - mean) / std
 
     # Apply nonzero mask if necessary.
-    if config["use_nz_mask"]:
+    if config["preprocessing"]["normalize_with_nonzero_mask"]:
         image *= nonzero_mask
 
     return image.astype(np.float32)
@@ -337,13 +327,11 @@ def compute_dtm(
 
 
 def preprocess_example(
-    config: Dict[str, Any],
+    config: Dict,
     image_paths_list: List[str],
     mask_path: Optional[str]=None,
-    fg_bbox: Optional[Dict[str, int]]=None,
-    use_dtm: bool=False,
-    normalize_dtm: bool=False,
-) -> Dict[str, Union[npt.NDArray[Any], Dict[str, int], None]]:
+    fg_bbox: Optional[Dict]=None,
+) -> Dict:
     """Preprocessing function for a single example.
 
     Args:
@@ -369,57 +357,59 @@ def preprocess_example(
     images = []
     for i, image_path in enumerate(image_paths_list):
         # Load image as ants image.
-        image = ants.image_read(image_path)
+        image_i = ants.image_read(image_path)
 
         # Get foreground mask if necessary.
-        if i == 0 and config["crop_to_fg"] and fg_bbox is None:
-            fg_bbox = utils.get_fg_mask_bbox(image)
+        if (
+            i == 0
+            and config["preprocessing"]["crop_to_foreground"]
+            and fg_bbox is None
+        ):
+            fg_bbox = utils.get_fg_mask_bbox(image_i)
 
-        if config["crop_to_fg"]:
+        if config["preprocessing"]["crop_to_foreground"]:
             # Only compute foreground mask once.
             if fg_bbox is None:
                 raise ValueError(
                     "Received None for fg_bbox when cropping to foreground. "
                     "Please provide a fg_bbox."
                 )
-            image = utils.crop_to_fg(image, fg_bbox)
+            image_i = utils.crop_to_fg(image_i, fg_bbox)
 
         # Put all images into standard space.
-        image = ants.reorient_image2(image, "RAI")
-        image.set_direction(
-            preprocessing_constants.PreprocessingConstants.RAI_ANTS_DIRECTION
-        )
-        if not np.array_equal(image.spacing, config["target_spacing"]):
-            image = resample_image(
-                image, target_spacing=config["target_spacing"]
+        image_i = ants.reorient_image2(image_i, "RAI")
+        image_i.set_direction(pc.RAI_ANTS_DIRECTION)
+        if not np.array_equal(
+            image_i.spacing, config["preprocessing"]["target_spacing"]
+        ):
+            image_i = resample_image(
+                image_i,
+                target_spacing=config["preprocessing"]["target_spacing"]
             )
-
-        images.append(image)
+        images.append(image_i)
 
     if training:
         # Read mask if we are in training mode.
         mask = ants.image_read(mask_path)
 
         # Crop to foreground.
-        if config["crop_to_fg"]:
+        if config["preprocessing"]["crop_to_foreground"]:
             mask = utils.crop_to_fg(mask, fg_bbox)
 
         # Put mask into standard space.
         mask = ants.reorient_image2(mask, "RAI")
-        mask.set_direction(
-            preprocessing_constants.PreprocessingConstants.RAI_ANTS_DIRECTION
-        )
+        mask.set_direction(pc.RAI_ANTS_DIRECTION)
         mask = resample_mask(
             mask,
-            labels=config["labels"],
-            target_spacing=config["target_spacing"]
+            labels=config["dataset_info"]["labels"],
+            target_spacing=config["preprocessing"]["target_spacing"],
         )
 
-        if use_dtm:
+        if config["preprocessing"]["compute_dtms"]:
             dtm = compute_dtm(
                 mask,
-                labels=config["labels"],
-                normalize_dtm=normalize_dtm
+                labels=config["dataset_info"]["labels"],
+                normalize_dtm=config["preprocessing"]["normalize_dtms"],
             )
         else:
             dtm = None
@@ -432,14 +422,12 @@ def preprocess_example(
 
     # Apply windowing and normalization to images.
     # Get dimensions of image in standard space.
-    preprocessed_numpy_image = np.zeros((*images[0].shape, len(images)))
-    for i, image in enumerate(images):
-        preprocessed_numpy_image[..., i] = window_and_normalize(
-            image.numpy(), config
-        )
+    image = np.zeros((*images[0].shape, len(images)))
+    for i, image_i in enumerate(images):
+        image[..., i] = window_and_normalize(image_i.numpy(), config)
 
     preprocessed_output = {
-        "image": preprocessed_numpy_image,
+        "image": image,
         "mask": mask,
         "fg_bbox": fg_bbox,
         "dtm": dtm,
@@ -485,7 +473,6 @@ def convert_nifti_to_numpy(
         "fg_bbox": None,
         "dtm": None,
     }
-
     return conversion_output
 
 
@@ -525,7 +512,12 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
     os.makedirs(output_directories["images"], exist_ok=True)
     os.makedirs(output_directories["labels"], exist_ok=True)
     if args.use_dtms:
+        # If we are using DTMs, create the directory for them.
         os.makedirs(output_directories["dtms"], exist_ok=True)
+
+        # Next, we update the configuration file to reflect that we are
+        # using DTMs.
+        config["preprocessing"]["compute_dtms"] = True
 
     # Print preprocessing message and get progress bar.
     text = rich.text.Text("\nPreprocessing dataset\n") # type: ignore
@@ -545,13 +537,16 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
         )
     fg_bboxes = pd.read_csv(os.path.join(args.results, "fg_bboxes.csv"))
 
+    # Get image column names from the configuration file.
+    image_columns = config["dataset_info"]["images"]
+
     with progress as pb:
         for i in pb.track(range(len(df))):
-            # Get paths to images for single patient
+            # Get paths to images for single patient.
             patient = df.iloc[i].to_dict()
 
             # Get list of image paths and segmentation mask
-            image_list = list(patient.values())[3:len(patient)]
+            image_list = [patient[col] for col in image_columns]
             mask = patient["mask"]
 
             # If the user turns off preprocessing, simply convert NIfTI
@@ -565,10 +560,12 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
                 # Get foreground bounding box if necessary. These are already
                 # computed and saved in a separate CSV file during the analysis
                 # portion of the MIST pipeline.
-                if config["crop_to_fg"]:
-                    fg_bbox = fg_bboxes.loc[
-                        fg_bboxes["id"] == patient["id"]
-                    ].iloc[0].to_dict()
+                if config["preprocessing"]["crop_to_foreground"]:
+                    fg_bbox = (
+                        fg_bboxes.loc[
+                            fg_bboxes["id"] == patient["id"]
+                        ].iloc[0].to_dict()
+                    )
 
                     # Remove the ID key from the dictionary. We do not need it
                     # for preprocessing.
@@ -582,8 +579,6 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
                     image_paths_list=image_list,
                     mask_path=mask,
                     fg_bbox=fg_bbox,
-                    use_dtm=args.use_dtms,
-                    normalize_dtm=args.normalize_dtms,
                 )
 
             # Save images and masks as numpy arrays.
