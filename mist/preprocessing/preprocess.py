@@ -519,6 +519,10 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
         # using DTMs.
         config["preprocessing"]["compute_dtms"] = True
 
+        # Write the updated configuration file back to disk.
+        config_json = os.path.join(args.results, "config.json")
+        utils.write_json_file(config_json, config)
+
     # Print preprocessing message and get progress bar.
     text = rich.text.Text("\nPreprocessing dataset\n") # type: ignore
     text.stylize("bold")
