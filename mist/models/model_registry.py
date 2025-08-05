@@ -33,7 +33,7 @@ def register_model(name: str) -> Callable:
     return decorator
 
 
-def get_model_from_registry(name: str, **kwargs):
+def get_model_from_registry(model_name: str, **kwargs):
     """
     Construct a model from the registry.
 
@@ -47,12 +47,12 @@ def get_model_from_registry(name: str, **kwargs):
     Raises:
         ValueError: If the model name is not registered.
     """
-    if name not in MODEL_REGISTRY:
+    if model_name not in MODEL_REGISTRY:
         raise ValueError(
-            f"Model '{name}' is not registered.\n"
+            f"Model '{model_name}' is not registered.\n"
             f"Available models: {sorted(MODEL_REGISTRY.keys())}"
         )
-    return MODEL_REGISTRY[name](**kwargs)
+    return MODEL_REGISTRY[model_name](**kwargs)
 
 
 def list_registered_models() -> List[str]:

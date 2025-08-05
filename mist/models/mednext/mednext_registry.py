@@ -22,18 +22,19 @@ def create_mednext(variant: str, **kwargs) -> MedNeXt:
             medium 'M', and large 'L'.
         **kwargs: Additional keyword arguments for model configuration,
             including:
-            - n_channels: Number of input channels.
-            - n_classes: Number of output classes for segmentation.
-            - use_res_block: Whether to use residual connections in the model.
-            - deep_supervision: Whether to use deep supervision in the model.
-            - pocket: Whether to create a pocket version of the model.
+            - in_channels: Number of input channels.
+            - out_channels: Number of output classes for segmentation.
+            - use_residual_blocks: Turn on residual connections in the model.
+            - use_deep_supervision: Turn on deep supervision in the model.
+            - use_pocket_model: Use pocket version of the model.
 
     Returns:
         An instance of the requested MedNeXt variant.
     """
     # Validate presence of required keys to avoid obscure KeyErrors.
     required_keys = [
-        "n_channels", "n_classes", "use_res_block", "deep_supervision", "pocket"
+        "in_channels", "out_channels", "use_residual_blocks",
+        "use_deep_supervision", "use_pocket_model"
     ]
     for key in required_keys:
         if key not in kwargs:
@@ -43,15 +44,15 @@ def create_mednext(variant: str, **kwargs) -> MedNeXt:
 
     common_args = {
         "spatial_dims": 3,
-        "in_channels": kwargs["n_channels"],
-        "out_channels": kwargs["n_classes"],
+        "in_channels": kwargs["in_channels"],
+        "out_channels": kwargs["out_channels"],
         "kernel_size": 3,
-        "deep_supervision": kwargs["deep_supervision"],
-        "use_residual_connection": kwargs["use_res_block"],
+        "deep_supervision": kwargs["use_deep_supervision"],
+        "use_residual_connection": kwargs["use_residual_blocks"],
         "norm_type": "group",
         "global_resp_norm": False,
         "init_filters": 32,
-        "pocket": kwargs["pocket"],
+        "pocket": kwargs["use_pocket_model"],
     }
 
     variant = variant.upper()

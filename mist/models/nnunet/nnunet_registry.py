@@ -39,8 +39,8 @@ def create_nnunet(**kwargs) -> NNUNet:
     """
     # Validate presence of required keys to avoid obscure KeyErrors.
     required_keys = [
-        "n_channels", "n_classes", "patch_size", "target_spacing",
-        "use_res_block", "deep_supervision", "pocket"
+        "in_channels", "out_channels", "patch_size", "target_spacing",
+        "use_residual_blocks", "use_deep_supervision", "use_pocket_model"
     ]
     for key in required_keys:
         if key not in kwargs:
@@ -49,13 +49,13 @@ def create_nnunet(**kwargs) -> NNUNet:
             )
 
     common_args = {
-        "in_channels": kwargs["n_channels"],
-        "out_channels": kwargs["n_classes"],
+        "in_channels": kwargs["in_channels"],
+        "out_channels": kwargs["out_channels"],
         "roi_size": kwargs["patch_size"],
         "image_spacing": kwargs["target_spacing"],
-        "use_residual_blocks": kwargs["use_res_block"],
-        "use_deep_supervision": kwargs["deep_supervision"],
-        "use_pocket_model": kwargs["pocket"],
+        "use_residual_blocks": kwargs["use_residual_blocks"],
+        "use_deep_supervision": kwargs["use_deep_supervision"],
+        "use_pocket_model": kwargs["use_pocket_model"],
         "spatial_dims": 3,
     }
 
