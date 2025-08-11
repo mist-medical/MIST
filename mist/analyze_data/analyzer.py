@@ -550,10 +550,19 @@ class Analyzer:
                 ct_normalization_parameters
             )
 
-        # If the region of interest (ROI) size is not specified by the user,
-        # we compute the best ROI size based on the median dimensions of the
-        # resampled images. If the ROI size is specified by the user, we use
-        # that ROI size.
+        # Update the number of channels and classes in the model section of the
+        # configuration.
+        self.config["model"]["params"]["in_channels"] = len(
+            self.config["dataset_info"]["images"]
+        )
+        self.config["model"]["params"]["out_channels"] = len(
+            self.config["dataset_info"]["labels"]
+        )
+
+        # If the patch size size is not specified by the user, we compute a
+        # recommended patch size based on the median dimensions of the resampled
+        # images. If the patch size is specified by the user, we use that patch
+        # size.
         if self.mist_arguments.patch_size is None:
             patch_size = utils.get_best_patch_size(
                 median_dims, self.mist_arguments.max_patch_size
@@ -566,13 +575,12 @@ class Analyzer:
                 int(size) for size in self.mist_arguments.patch_size
             ]
 
-        # Update the number of channels and classes in the model section of the
-        # configuration.
-        self.config["model"]["params"]["in_channels"] = len(
-            self.config["dataset_info"]["images"]
-        )
-        self.config["model"]["params"]["out_channels"] = len(
-            self.config["dataset_info"]["labels"]
+        # Add the target spacing to the model parameters in the model section
+        # of the configuration. This is already in the preprocessing section
+        # of the configuration, but this makes loading models and keeping track
+        # of model-specific parameters easier.
+        self.config["model"]["params"]["target_spacing"] = (
+            self.config["preprocessing"]["target_spacing"]
         )
 
         # Add the evaluation classes to the evaluation section of the

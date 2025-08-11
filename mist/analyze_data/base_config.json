@@ -22,11 +22,12 @@
     "normalize_dtms": true
   },
   "model": {
-    "model_name": "nnunet",
+    "architecture": "nnunet",
     "params": {
-      "patch_size": null,
       "in_channels": null,
       "out_channels": null,
+      "patch_size": null,
+      "target_spacing": null,
       "use_deep_supervision": true,
       "use_residual_blocks": true,
       "use_pocket_model": false
@@ -36,7 +37,6 @@
     "nfolds": 5,
     "folds": [0, 1, 2, 3, 4],
     "val_percent": 0.0,
-    "val_patch_overlap": 0.25,
     "epochs": 1000,
     "min_steps_per_epoch": 250,
     "batch_size_per_gpu": 2,
@@ -45,7 +45,7 @@
       "params": {
         "exclude_background": false,
         "use_dtms": false,
-        "composite_loss_weight_scheduler": "constant"
+        "composite_loss_weighting": "constant"
       }
     },
     "optimizer": "adam",
@@ -57,20 +57,34 @@
     "clip_norm_max": 1.0,
     "amp": true,
     "augmentation": {
-      "use_augmentation": true,
-      "use_flips": true,
-      "use_zoom": true,
-      "use_noise": true,
-      "use_blur": true,
-      "use_brightness": true,
-      "use_contrast": true
+      "enabled": true,
+      "transforms": {
+        "flips": true,
+        "zoom": true,
+        "noise": true,
+        "blur": true,
+        "brightness": true,
+        "contrast": true
+      }
     }
   },
   "inference": {
-    "tta": true,
-    "ensemble": true,
-    "patch_blend_mode": "gaussian",
-    "patch_overlap": 0.5
+    "inferer": {
+      "name": "patch",
+      "params": {
+        "patch_size": null,
+        "patch_blend_mode": "gaussian",
+        "patch_overlap": 0.5
+      }
+    },
+    "tta": {
+      "enabled": true,
+      "strategy": "all_flips"
+    },
+    "ensemble": {
+      "enabled": true,
+      "strategy": "mean"
+    }
   },
   "evaluation": {
     "metrics": ["dice", "haus95"],
