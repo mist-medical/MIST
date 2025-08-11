@@ -56,7 +56,7 @@ class DynamicUNet(nn.Module):
         dropout: Optional[Union[Tuple, str, float]]=None,
         use_deep_supervision: bool=False,
         num_deep_supervision_heads: int=2,
-        use_residual_block: bool=False,
+        use_residual_blocks: bool=False,
         trans_bias: bool=False,
     ):
 
@@ -71,7 +71,7 @@ class DynamicUNet(nn.Module):
         self.act_name = act_name
         self.dropout = dropout
         self.conv_block = (
-            dynamic_unet_blocks.UnetResBlock if use_residual_block
+            dynamic_unet_blocks.UnetResBlock if use_residual_blocks
             else dynamic_unet_blocks.UnetBasicBlock
         )
         self.trans_bias = trans_bias
@@ -309,14 +309,14 @@ class DynamicUNet(nn.Module):
         )
 
     def get_module_list(
-            self,
-            in_channels: Sequence[int],
-            out_channels: Sequence[int],
-            kernel_size: Sequence[Union[Sequence[int], int]],
-            strides: Sequence[Union[Sequence[int], int]],
-            conv_block: nn.Module,
-            upsample_kernel_size: Optional[Sequence[Union[Sequence[int], int]]]=None,
-            trans_bias: bool=False,
+        self,
+        in_channels: Sequence[int],
+        out_channels: Sequence[int],
+        kernel_size: Sequence[Union[Sequence[int], int]],
+        strides: Sequence[Union[Sequence[int], int]],
+        conv_block: nn.Module,
+        upsample_kernel_size: Optional[Sequence[Union[Sequence[int], int]]]=None,
+        trans_bias: bool=False,
     ) -> nn.ModuleList:
         """Get a list of convolutional blocks for the UNet.
 

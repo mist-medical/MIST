@@ -26,13 +26,13 @@ def create_nnunet(**kwargs) -> NNUNet:
     Args:
         **kwargs: Additional keyword arguments for model configuration,
             including:
-            - n_channels: Number of input channels.
-            - n_classes: Number of output channels (classes).
+            - in_channels: Number of input channels.
+            - out_channels: Number of output channels (classes).
             - patch_size: Size of the region of interest (ROI).
             - target_spacing: Image spacing of the input.
-            - use_res_block: Whether to use residual connections.
-            - deep_supervision: Whether to use deep supervision.
-            - pocket: Whether to use the pocket model variant.
+            - use_residual_blocks: Whether to use residual connections.
+            - use_deep_supervision: Whether to use deep supervision.
+            - use_pocket_model: Whether to use the pocket model variant.
 
     Returns:
         An instance of the NNUNet model.
@@ -58,5 +58,4 @@ def create_nnunet(**kwargs) -> NNUNet:
         "use_pocket_model": kwargs["use_pocket_model"],
         "spatial_dims": 3,
     }
-
     return NNUNet(**common_args)

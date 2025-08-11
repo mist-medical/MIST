@@ -95,7 +95,7 @@ class NNUNet(nn.Module):
             filters=filters,
             act_name=constants.ACTIVATION,
             norm_name=constants.NORMALIZATION,
-            use_residual_block=use_residual_blocks,
+            use_residual_blocks=use_residual_blocks,
             use_deep_supervision=use_deep_supervision,
             trans_bias=True,
         )

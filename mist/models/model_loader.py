@@ -15,62 +15,34 @@ import torch
 
 # MIST imports.
 from mist.models.model_registry import get_model_from_registry
-from mist.runtime.utils import read_json_file
 
 
-def validate_mist_model_config(config: Dict):
-    """Validate structure of the MIST model config.
+def validate_mist_config_for_model_loading(config: Dict):
+    """Validate structure of the MIST configuration.
 
     Args:
         config: MIST configuration dictionary.
 
     Raises:
         ValueError: If required keys are missing or have incorrect types.
-        TypeError: If 'params' is not a dictionary.
     """
     if "model" not in config:
         raise ValueError("Missing required key 'model' in configuration.")
 
-    model_section = config["model"]
-    if not isinstance(model_section.get("params"), dict):
-        raise TypeError("Model 'params' must be a dictionary.")
-
-    required_model_keys = ["model_name", "params"]
+    required_model_keys = ["architecture", "params"]
     for key in required_model_keys:
-        if key not in model_section:
+        if key not in config["model"]:
             raise ValueError(f"Missing required key '{key}' in model section.")
 
     required_params_keys = [
-        "patch_size", "in_channels", "out_channels",
+        "in_channels", "out_channels", "patch_size", "target_spacing",
         "use_deep_supervision", "use_residual_blocks", "use_pocket_model"
     ]
     for key in required_params_keys:
-        if key not in model_section["params"]:
+        if key not in config["model"]["params"]:
             raise ValueError(
                 f"Missing required key '{key}' in model parameters."
             )
-
-
-def convert_mist_config_to_model_config(config: Dict) -> Dict:
-    """Convert validated MIST config to a flat model config dict.
-
-    Args:
-        config: MIST configuration dictionary.
-
-    Returns:
-        A dictionary with model parameters suitable for model instantiation.
-        This dictionary is 'flattened' to include only the necessary keys.
-    """
-    validate_mist_model_config(config)
-
-    model_section = config["model"]
-    model_params = model_section["params"]
-
-    return {
-        "model_name": model_section["model_name"],
-        "target_spacing": config["preprocessing"]["target_spacing"],
-        **model_params,
-    }
 
 
 def get_model(model_name: str, **kwargs) -> torch.nn.Module:
@@ -88,14 +60,13 @@ def get_model(model_name: str, **kwargs) -> torch.nn.Module:
 
 def load_model_from_config(
     weights_path: str,
-    mist_config_path: str
+    config: Dict,
 ) -> torch.nn.Module:
-    """
-    Load a model and its weights from a config file and checkpoint.
+    """Load a model and its weights from a config dictionary and checkpoint.
 
     Args:
         weights_path: Path to the PyTorch checkpoint file (.pt or .pth).
-        mist_config_path: Path to a JSON file with MIST configuration.
+        config: MIST configuration dictionary.
 
     Returns:
         PyTorch model with weights loaded.
@@ -105,13 +76,13 @@ def load_model_from_config(
         ValueError: If the model name is invalid or required config keys are
             missing.
     """
-    # Load and convert configuration.
-    config = read_json_file(mist_config_path)
-    model_config = convert_mist_config_to_model_config(config)
+    # Load and validate the config file.
+    validate_mist_config_for_model_loading(config)
 
     # Build model from registry.
-    model_name = model_config.pop("model_name")
-    model = get_model(model_name, **model_config)
+    model = get_model(
+        config["model"]["architecture"], **config["model"]["params"]
+    )
 
     # Load checkpoint weights.
     state_dict = torch.load(weights_path, weights_only=True)
