@@ -1,6 +1,6 @@
 [project]
 name = "mist-medical"
-version = "0.2.2-beta"
+version = "1.0.0-beta"
 requires-python = ">= 3.8"
 description = "MIST is a simple and scalable end-to-end framework for medical imaging segmentation."
 readme = "README.md"
