@@ -81,11 +81,12 @@ def mock_mist_config():
         },
     }
 
-
+# pylint: disable=unused-argument
+# pylint: disable=redefined-outer-name
+# pylint: disable=invalid-name
 # Test for predict_single_example with various configurations.
 class _DummyANTsImage:
     """Minimal stand-in for ANTsImage."""
-
     def __init__(self, array: np.ndarray | None = None):
         self._array = (
             np.array(0, dtype=np.uint8) if array is None else np.asarray(array)
@@ -94,9 +95,11 @@ class _DummyANTsImage:
         self.new_like_last_data = None
 
     def numpy(self):
+        """Return the underlying numpy array."""
         return np.asarray(self._array)
 
     def astype(self, dtype: str):
+        """Simulate ANTsImage astype method."""
         # Record and return self to simulate ANTs API style.
         self.astype_arg = dtype
         if dtype == "uint8":
@@ -104,6 +107,7 @@ class _DummyANTsImage:
         return self
 
     def new_image_like(self, data):
+        """Simulate ANTsImage new_image_like method."""
         # Simulate ANTsImage constructor from data.
         self.new_like_last_data = np.asarray(data)
         return _DummyANTsImage(self.new_like_last_data)
@@ -390,7 +394,7 @@ def test_test_on_fold_success_no_crop_tta_enabled(
     # Force CPU fallback when device=None.
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
 
-    ir.test_on_fold(mist_args=mist_args, fold_number=fold, device=None)
+    ir.test_on_fold(mist_args=mist_args, fold_number=fold, device=None) # type: ignore
 
     # Assertions: model & dataset loaded, prediction written, TTA branch taken.
     mock_get_test_dataset.assert_called_once()
@@ -490,7 +494,7 @@ def test_test_on_fold_crop_to_foreground_bbox_passed(
         raising=False,
     )
 
-    ir.test_on_fold(mist_args=mist_args, fold_number=fold, device="cpu")
+    ir.test_on_fold(mist_args=mist_args, fold_number=fold, device="cpu") # type: ignore
 
     # Foreground bbox forwarded
     assert "foreground_bounding_box" in captured
@@ -594,7 +598,7 @@ def test_test_on_fold_logs_errors_and_continues(
         raising=False,
     )
 
-    ir.test_on_fold(mist_args=mist_args, fold_number=fold, device="cpu")
+    ir.test_on_fold(mist_args=mist_args, fold_number=fold, device="cpu") # type: ignore
 
     # One error logged, one image written (for pB).
     assert any("Prediction failed for pA" in m for m in printed)
@@ -1194,7 +1198,7 @@ def test_infer_from_dataframe_logs_errors_and_continues_then_summarizes(
 )
 @patch(
     "mist.inference.inference_runners.get_inferer",
-    return_value=(lambda **_: SimpleNamespace(name="inferer"))
+    return_value=lambda **_: SimpleNamespace(name="inferer")
 )
 @patch(
     "mist.inference.inference_runners.inference_utils.load_test_time_models",
