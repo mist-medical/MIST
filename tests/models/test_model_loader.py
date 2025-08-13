@@ -16,6 +16,7 @@ import torch
 # MIST imports.
 from mist.models.model_loader import (
     validate_mist_config_for_model_loading,
+    convert_legacy_model_config,
     get_model,
     load_model_from_config
 )
@@ -24,6 +25,7 @@ from mist.models.mgnets.mist_mgnets import MGNet
 
 @pytest.fixture
 def valid_mist_config():
+    """Fixture for a valid MIST model configuration."""
     return {
         "model": {
             "architecture": "fmgnet",
@@ -37,6 +39,21 @@ def valid_mist_config():
                 "use_pocket_model": False,
             }
         }
+    }
+
+
+@pytest.fixture
+def legacy_mist_config():
+    """Fixture for a legacy MIST model configuration."""
+    return {
+        "model": "fmgnet",
+        "n_channels": 1,
+        "n_classes": 2,
+        "deep_supervision": False,
+        "pocket": False,
+        "patch_size": [64, 64, 64],
+        "target_spacing": [1.0, 1.0, 1.0],
+        "use_res_block": False,
     }
 
 
@@ -102,3 +119,25 @@ def test_load_model_from_config_success(
         assert "encoder.weight" in loaded_state_dict
         assert "encoder.bias" in loaded_state_dict
         assert model is dummy_model
+
+
+def test_convert_legacy_model_config_success(legacy_mist_config):
+    """Test conversion of legacy model config to new format."""
+    new_config = convert_legacy_model_config(legacy_mist_config)
+    assert new_config["model"]["architecture"] == "fmgnet"
+    assert new_config["model"]["params"]["in_channels"] == 1
+    assert new_config["model"]["params"]["out_channels"] == 2
+    assert new_config["model"]["params"]["patch_size"] == [64, 64, 64]
+    assert new_config["model"]["params"]["target_spacing"] == [1.0, 1.0, 1.0]
+    assert not new_config["model"]["params"]["use_residual_blocks"]
+    assert not new_config["model"]["params"]["use_deep_supervision"]
+    assert not new_config["model"]["params"]["use_pocket_model"]
+
+
+def test_convert_legacy_model_config_missing_keys(legacy_mist_config):
+    """Test conversion raises ValueError for missing keys."""
+    legacy_mist_config.pop("model")
+    with pytest.raises(
+        ValueError, match="Missing required key 'model' in legacy model config."
+    ):
+        convert_legacy_model_config(legacy_mist_config)

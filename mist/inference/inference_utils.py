@@ -13,8 +13,7 @@
 import os
 from typing import Any, Dict, Optional, Tuple, List, Union
 from collections.abc import Callable
-
-# Third-party imports.
+from pathlib import Path
 import ants
 import torch
 import numpy as np
@@ -113,20 +112,31 @@ def back_to_original_space(
 
 
 def load_test_time_models(
-    models_directory: str,
-    load_first_model_only: bool=False,
+    models_dir: str,
+    mist_config: Dict,
     device: Optional[Union[str, torch.device]]=None,
 ) -> List[Callable[[torch.Tensor], torch.Tensor]]:
     """Load one or more models for test-time inference.
 
     This function loads all models matching the pattern `fold_*.pt` in the
-    specified directory, along with the shared model config JSON.
+    specified directory, along with the shared model config JSON. For versions
+    of MIST prior to 1.0.0b0, the model directory should contain the fold
+    weights (i.e., `fold_0.pt`, `fold_1.pt`, etc.) and a model_config.json
+    file. For MIST 1.0.0b0 and later, the model directory should contain only
+    the model weights (i.e., `fold_0.pt`, `fold_1.pt`, etc.). The model
+    configuration for these newer versions is stored in the MIST configuration
+    file under the "model" key.
+
+    The function will validate the existence of the model directory and the
+    MIST configuration file. It will also ensure that at least one model
+    checkpoint file is found. If `load_first_model_only` is set to True, only
+    the first model (i.e., `fold_0.pt`) will be loaded.
 
     Args:
-        models_directory: Path to directory with `fold_*.pt` and
-            `model_config.json`.
-        load_first_model_only: If True, only the first model (i.e., `fold_0.pt`)
-            is loaded.
+        models_dir: Path to directory with `fold_*.pt` model weights.
+        mist_config: MIST configuration dictionary.
+        device: Device to load the models onto. If None, defaults to CUDA if
+            available, otherwise CPU.
 
     Returns:
         List of loaded PyTorch models, ready for inference.
@@ -135,39 +145,34 @@ def load_test_time_models(
         FileNotFoundError: If model config or model files are missing.
         ValueError: If no model checkpoint files are found.
     """
-    # Set device to CPU if not specified.
-    device = device or (
-        "cuda" if torch.cuda.is_available() else "cpu"
-    )
+    # Set the device if not provided.
+    device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
-    if not os.path.isdir(models_directory):
-        raise FileNotFoundError(
-            f"Model directory not found: {models_directory}"
-        )
+    # Ensure the models directory and config file exist.
+    models_path = Path(models_dir)
+    if not models_path.is_dir():
+        raise FileNotFoundError(f"Model directory not found: {models_path}")
 
-    model_config = os.path.join(models_directory, "model_config.json")
-    if not os.path.isfile(model_config):
-        raise FileNotFoundError(f"Missing model config: {model_config}")
+    # Find all model checkpoint files matching fold_*.pt
+    pt_files = sorted(models_path.glob("fold_*.pt"))
+    pt_files = [f for f in pt_files if not f.name.startswith(".")]
 
-    pt_files = sorted([
-        f for f in utils.listdir_with_no_hidden_files(models_directory)
-        if f.startswith("fold_") and f.endswith(".pt")
-    ])
-
+    # Raise an error if no model files are found.
     if not pt_files:
         raise ValueError(
-            f"No model checkpoints found in {models_directory} "
-            "(expected fold_*.pt)"
+            f"No model checkpoints found in {models_path}, (expected fold_*.pt)"
         )
 
-    if load_first_model_only:
-        pt_files = [pt_files[0]]
-
-    model_paths = [os.path.join(models_directory, f) for f in pt_files]
+    # Check if a legacy model config file exists.
+    config_path = models_path / "model_config.json"
+    if config_path.is_file():
+        legacy_config = utils.read_json_file(str(config_path))
+        mist_config = model_loader.convert_legacy_model_config(legacy_config)
 
     models = []
-    for path in model_paths:
-        model = model_loader.load_model_from_config(path, model_config)
+    for model_path in pt_files:
+        model_path = str(model_path)
+        model = model_loader.load_model_from_config(model_path, mist_config)
         models.append(model.to(device).eval())
     return models
 

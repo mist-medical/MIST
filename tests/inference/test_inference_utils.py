@@ -9,13 +9,73 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tests for MIST inference utilities."""
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
+from pathlib import Path
+import json
 import numpy as np
 import pandas as pd
 import pytest
 
 # MIST imports.
 from mist.inference import inference_utils as iu
+
+
+@pytest.fixture()
+def mock_mist_config():
+    """Fixture to provide a mock MIST configuration."""
+    return {
+        "dataset_info": {
+            "modality": "ct",
+        },
+        "preprocessing": {
+            "skip": False,
+            "target_spacing": [1.0, 1.0, 1.0],
+            "crop_to_foreground": False,
+            "normalize_with_nonzero_mask": False,
+            "ct_normalization": {
+            "window_min": -100.0,
+            "window_max": 100.0,
+            "z_score_mean": 0.0,
+            "z_score_std": 1.0,
+            },
+        },
+        "model": {
+            "architecture": "nnunet",
+            "params": {
+            "in_channels": 1,
+            "out_channels": 2,
+            "patch_size": [64, 64, 64],
+            "target_spacing": [1.0, 1.0, 1.0],
+            "use_deep_supervision": False,
+            "use_residual_blocks": False,
+            "use_pocket_model": False,
+            }
+        },
+        "training": {
+            "seed": 42,
+            "hardware": {
+                "num_gpus": 2,
+                "num_cpu_workers": 8
+            }
+        },
+        "inference": {
+            "inferer": {
+                "name": "sliding_window",
+                "params": {
+                    "patch_size": [64, 64, 64],
+                    "patch_blend_mode": "gaussian",
+                    "patch_overlap": 0.5
+                }
+            },
+            "ensemble": {
+                "strategy": "mean"
+            },
+            "tta": {
+                "enabled": True,
+                "strategy": "all_flips"
+            },
+        },
+    }
 
 
 @pytest.mark.parametrize("bbox", [
@@ -88,120 +148,155 @@ def test_back_to_original_space(
 
     original_image.new_image_like.assert_called_once_with("mock_numpy_data")
 
+class _DummyModel:
+    """Minimal stub for a torch.nn.Module, supporting .to(...).eval()."""
 
-@patch("mist.models.model_loader.load_model_from_config")
-@patch("mist.inference.inference_utils.utils.listdir_with_no_hidden_files")
-@patch("os.path.isfile")
-@patch("os.path.isdir")
-def test_load_test_time_models_success(
-    mock_isdir,
-    mock_isfile,
-    mock_listdir,
+    def __init__(self):
+        self.device_arg = None
+
+    def to(self, device):
+        self.device_arg = device
+        return self
+
+    def eval(self):
+        return self
+
+
+def test_load_test_time_models_missing_dir(tmp_path: Path, mock_mist_config):
+    """Raise FileNotFoundError when models_dir is missing."""
+    missing_dir = tmp_path / "nope"
+    with pytest.raises(FileNotFoundError):
+        iu.load_test_time_models(
+            str(missing_dir), mist_config=mock_mist_config, device="cpu"
+        )
+
+
+def test_load_test_time_models_no_checkpoints(tmp_path: Path, mock_mist_config):
+    """Raise ValueError when no fold_*.pt files are found."""
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    with pytest.raises(ValueError, match="No model checkpoints"):
+        iu.load_test_time_models(
+            str(models_dir), mist_config=mock_mist_config, device="cpu"
+        )
+
+
+@patch("mist.inference.inference_utils.model_loader.load_model_from_config")
+@patch("torch.cuda.is_available",return_value=False,)
+def test_load_test_time_models_loads_all_on_cpu_when_no_cuda(
+    mock_cuda_available,
     mock_load_model,
+    tmp_path: Path,
+    mock_mist_config,
 ):
-    """Test loading multiple models from a valid directory."""
-    # Input configuration.
-    model_dir = "/fake/path"
-    pt_files = ["fold_0.pt", "fold_1.pt"]
+    """Load all weights and place models on CPU when CUDA is unavailable."""
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    (models_dir / "fold_0.pt").write_bytes(b"")  # Real file path for discovery.
+    (models_dir / "fold_1.pt").write_bytes(b"")
+    (models_dir / ".fold_hidden.pt").write_bytes(b"")  # Should be ignored.
 
-    # Mock directory and file checks.
-    mock_isdir.return_value = True
-    mock_isfile.return_value = True
-    mock_listdir.return_value = pt_files
+    dummy = _DummyModel()
+    mock_load_model.return_value = dummy
 
-    # Mock model with to().eval() chain returning final model.
-    mock_model = MagicMock(name="mock_model")
-    mock_model.to.return_value = mock_model
-    mock_model.eval.return_value = mock_model
-
-    # Instead of reusing the same object, return new mock each time to track
-    # top-level calls cleanly.
-    mock_load_model.side_effect = [mock_model, mock_model]
-
-    # Call function.
-    models = iu.load_test_time_models(models_directory=model_dir)
-
-    # Assertions.
-    assert len(models) == 2
-    assert all(m is mock_model for m in models)
-
-    # Only assert direct calls to load_model_from_config, not sub-calls like
-    # .to().
-    mock_load_model.assert_has_calls([
-        call(f"{model_dir}/fold_0.pt", f"{model_dir}/model_config.json"),
-        call(f"{model_dir}/fold_1.pt", f"{model_dir}/model_config.json"),
-    ], any_order=False)
-
-
-@patch("mist.models.model_loader.load_model_from_config")
-@patch("mist.inference.inference_utils.utils.listdir_with_no_hidden_files")
-@patch("os.path.isfile")
-@patch("os.path.isdir")
-def test_load_test_time_models_single_file(
-    mock_isdir,
-    mock_isfile,
-    mock_listdir,
-    mock_load_model,
-):
-    """Test loading only the first model when load_first_model_only is True."""
-    # Input configuration.
-    model_dir = "/fake/path"
-    pt_files = ["fold_0.pt", "fold_1.pt"]
-
-    # Mocks.
-    mock_isdir.return_value = True
-    mock_isfile.return_value = True
-    mock_listdir.return_value = pt_files
-    mock_model = MagicMock()
-    mock_model.to.return_value = mock_model
-    mock_model.eval.return_value = mock_model
-    mock_load_model.return_value = mock_model
-
-    # Call function.
     models = iu.load_test_time_models(
-        models_directory=model_dir,
-        load_first_model_only=True
+        str(models_dir),
+        mist_config=mock_mist_config,
+        device=None,  # Trigger internal device resolution -> CPU.
     )
 
-    # Assertions.
-    assert len(models) == 1
-    mock_load_model.assert_called_once_with(
-        f"{model_dir}/fold_0.pt", f"{model_dir}/model_config.json"
-    )
+    assert len(models) == 2
+    assert all(m.device_arg == "cpu" for m in models)
+
+    called_paths = [c.args[0] for c in mock_load_model.call_args_list]
+    assert called_paths == [
+        str(models_dir / "fold_0.pt"),
+        str(models_dir / "fold_1.pt"),
+    ]
 
 
-@patch("os.path.isdir")
-def test_load_test_time_models_missing_dir(mock_isdir):
-    """Test FileNotFoundError when model directory is missing."""
-    mock_isdir.return_value = False
-    with pytest.raises(FileNotFoundError, match="Model directory not found"):
-        iu.load_test_time_models("/invalid/path")
-
-
-@patch("os.path.isfile")
-@patch("os.path.isdir")
-def test_load_test_time_models_missing_config(mock_isdir, mock_isfile):
-    """Test FileNotFoundError when model_config.json is missing."""
-    mock_isdir.return_value = True
-    mock_isfile.side_effect = lambda path: not path.endswith("model_config.json")
-    with pytest.raises(FileNotFoundError, match="Missing model config"):
-        iu.load_test_time_models("/some/path")
-
-
-@patch("mist.inference.inference_utils.utils.listdir_with_no_hidden_files")
-@patch("os.path.isfile")
-@patch("os.path.isdir")
-def test_load_test_time_models_no_checkpoints(
-    mock_isdir,
-    mock_isfile,
-    mock_listdir
+@patch("mist.inference.inference_utils.model_loader.load_model_from_config")
+@patch("torch.cuda.is_available")
+def test_load_test_time_models_uses_provided_device(
+    mock_cuda_available,
+    mock_load_model,
+    tmp_path: Path,
+    mock_mist_config,
 ):
-    """Test ValueError when no fold_*.pt files are found."""
-    mock_isdir.return_value = True
-    mock_isfile.return_value = True
-    mock_listdir.return_value = ["readme.txt", "model_config.json"]
-    with pytest.raises(ValueError, match="No model checkpoints found"):
-        iu.load_test_time_models("/some/path")
+    """Use provided device directly without querying CUDA availability."""
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    (models_dir / "fold_0.pt").write_bytes(b"")
+
+    dummy = _DummyModel()
+    mock_load_model.return_value = dummy
+
+    models = iu.load_test_time_models(
+        str(models_dir),
+        mist_config=mock_mist_config,
+        device="cuda:2",  # Explicitly set device.
+    )
+
+    assert len(models) == 1
+    assert models[0].device_arg == "cuda:2"
+    mock_cuda_available.assert_not_called()
+
+    # Optional: confirm correct call into loader.
+    mock_load_model.assert_called_once_with(
+        str(models_dir / "fold_0.pt"),
+        mock_mist_config,
+    )
+
+
+@patch("mist.inference.inference_utils.model_loader.load_model_from_config")
+@patch("mist.inference.inference_utils.model_loader.convert_legacy_model_config")
+@patch("mist.inference.inference_utils.utils.read_json_file")
+def test_load_test_time_models_converts_legacy_model_config(
+    mock_read_json,
+    mock_convert_legacy,
+    mock_load_model,
+    tmp_path: Path,
+    mock_mist_config,
+):
+    """Run with legacy model config, convert it, and load models."""
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    (models_dir / "fold_0.pt").write_bytes(b"")
+
+    legacy_path = models_dir / "model_config.json"
+    legacy_payload = {"model": "legacy_arch", "n_channels": 1, "n_classes": 2}
+    legacy_path.write_text(json.dumps(legacy_payload))
+
+    dummy = _DummyModel()
+    converted = {
+        "model": {
+            "architecture": "converted_arch",
+            "params": {
+                "in_channels": 1,
+                "out_channels": 2,
+                "patch_size": [64, 64, 64],
+                "target_spacing": [1.0, 1.0, 1.0],
+                "use_deep_supervision": False,
+                "use_residual_blocks": False,
+                "use_pocket_model": False,
+            },
+        }
+    }
+
+    mock_read_json.return_value = legacy_payload
+    mock_convert_legacy.return_value = converted
+    mock_load_model.return_value = dummy
+
+    _ = iu.load_test_time_models(
+        str(models_dir),
+        mist_config=mock_mist_config,
+        device="cpu",
+    )
+
+    mock_read_json.assert_called_once_with(str(legacy_path))
+    mock_convert_legacy.assert_called_once_with(legacy_payload)
+    assert mock_load_model.call_args[0][0] == str(models_dir / "fold_0.pt")
+    assert mock_load_model.call_args[0][1] == converted
 
 
 @pytest.mark.parametrize("input_mask,original_labels,expected_output", [

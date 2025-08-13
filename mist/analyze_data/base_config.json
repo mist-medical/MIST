@@ -34,6 +34,7 @@
     }
   },
   "training": {
+    "seed": 42,
     "nfolds": 5,
     "folds": [0, 1, 2, 3, 4],
     "val_percent": 0.0,
@@ -66,24 +67,27 @@
         "brightness": true,
         "contrast": true
       }
+    },
+    "hardware": {
+      "num_gpus": null,
+      "num_cpu_workers": 8
     }
   },
   "inference": {
     "inferer": {
-      "name": "patch",
+      "name": "sliding_window",
       "params": {
         "patch_size": null,
         "patch_blend_mode": "gaussian",
         "patch_overlap": 0.5
       }
     },
+    "ensemble": {
+      "strategy": "mean"
+    },
     "tta": {
       "enabled": true,
       "strategy": "all_flips"
-    },
-    "ensemble": {
-      "enabled": true,
-      "strategy": "mean"
     }
   },
   "evaluation": {
