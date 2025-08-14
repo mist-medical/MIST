@@ -58,7 +58,9 @@ def test_main_calls_evaluator_correctly(
         "prediction": ["path/to/pred.nii.gz"]
     })
     mock_read_csv.return_value = mock_df
-    mock_read_json.return_value = {"final_classes": {"liver": [1]}}
+    mock_read_json.return_value = {
+        "evaluation": {"final_classes": {"liver": [1]}}
+    }
 
     # Set up a mocked Evaluator instance with a mocked .run method.
     mock_evaluator_instance = mock.MagicMock()
