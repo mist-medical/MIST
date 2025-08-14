@@ -16,7 +16,7 @@ import pandas as pd
 import torch
 
 # MIST imports.
-from mist.runtime.args import float_0_1, ArgParser
+from mist.runtime.args import ArgParser
 from mist.runtime import utils
 from mist.inference import inference_utils
 from mist.inference import inference_runners
@@ -64,38 +64,6 @@ def get_inference_args():
         type=str,
         default=None,
         help="Path to postprocessing strategy JSON file"
-    )
-
-    # Sliding window parameters.
-    p.arg(
-        "--sw-overlap",
-        type=float_0_1,
-        default=0.5,
-        help="Amount of overlap between patches during sliding window inference"
-    )
-    p.arg(
-        "--blend-mode",
-        type=str,
-        choices=["gaussian", "constant"],
-        default="gaussian",
-        help="How to blend patch predictions from overlapping windows"
-    )
-
-    # Turn off certain parameters like preprocessing (in the case that the
-    # input NIfTI files are already preprocessed), ensembling (for faster
-    # inference), and test time augmentation (for faster inference).
-    p.boolean_flag(
-        "--no-preprocess",
-        default=False,
-        help="Turn off preprocessing if raw input files are already preprocessed"
-    )
-    p.boolean_flag(
-        "--no-ensemble",
-        default=False,
-        help="Only use first model in ensemble for faster inference"
-    )
-    p.boolean_flag(
-        "--no-tta", default=False, help="Turn off test time augmentation"
     )
 
     args = p.parse_args()
@@ -149,9 +117,6 @@ def main(args):
             output_directory=args.output,
             mist_configuration=mist_configuration,
             models_directory=args.models_dir,
-            ensemble_models=not args.no_ensemble,
-            test_time_augmentation=not args.no_tta,
-            skip_preprocessing=args.no_preprocess,
             postprocessing_strategy_filepath=args.postprocess_strategy,
             device=device,
         )
