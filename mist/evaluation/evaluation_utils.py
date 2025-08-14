@@ -15,8 +15,8 @@ import pandas as pd
 
 
 def build_evaluation_dataframe(
-        train_paths_csv: str,
-        prediction_folder: str,
+    train_paths_csv: str,
+    prediction_folder: str,
 ) -> Tuple[pd.DataFrame, Optional[str]]:
     """Get DataFrame with columns 'id', 'mask', and 'prediction' for evaluation.
 

@@ -92,6 +92,9 @@
   },
   "evaluation": {
     "metrics": ["dice", "haus95"],
-    "final_classes": null
+    "final_classes": null,
+    "params": {
+      "surf_dice_tol": 1.0
+    }
   }
 }

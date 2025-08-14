@@ -62,7 +62,8 @@ def main(args: argparse.Namespace) -> None:
 
     # Get inputs to the evaluator.
     paths_dataframe = pd.read_csv(args.paths_csv)
-    evaluation_classes = utils.read_json_file(args.config)["final_classes"]
+    config = utils.read_json_file(args.config)
+    evaluation_classes = config["evaluation"]["final_classes"]
 
     # Initialize the evaluator.
     metric_kwargs = {"surf_dice_tol": args.surf_dice_tol}
