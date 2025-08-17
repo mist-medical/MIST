@@ -36,7 +36,8 @@ jobs:
           einops \
           pytest \
           pytest-cov \
-          coverage-badge
+          coverage-badge \
+          tensorboard \
 
     - name: Run tests and generate coverage report
       run: |
