@@ -272,7 +272,10 @@ class BaseTrainer(ABC):
                 )
 
                 # Unpack while handling optional DTMs.
-                train_images, val_images, train_labels, val_labels, *maybe_dtms = splits
+                (
+                    train_images, val_images, train_labels,
+                    val_labels, *maybe_dtms
+                ) = splits
                 if self._use_dtms():
                     train_dtms, _ = maybe_dtms
 
