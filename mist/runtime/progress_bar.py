@@ -1,3 +1,13 @@
+# Copyright (c) MIST Imaging LLC.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """Progress bars for MIST training and validation loops."""
 from rich.progress import (
     BarColumn,
@@ -9,12 +19,15 @@ from rich.progress import (
 import numpy as np
 
 class TrainProgressBar(Progress):
+    """Progress bar for training loop with loss and learning rate tracking."""
     def __init__(self, current_epoch, fold, epochs, train_steps):
         super().__init__()
 
         epoch_width = len(str(epochs))
         self.progress = Progress(
-            TextColumn(f"Fold {fold}: Epoch{current_epoch: {epoch_width}}/{epochs}"),
+            TextColumn(
+                f"Fold {fold}: Epoch{current_epoch: {epoch_width}}/{epochs}"
+            ),
             BarColumn(),
             MofNCompleteColumn(),
             TextColumn("•"),
@@ -34,7 +47,7 @@ class TrainProgressBar(Progress):
         )
 
     def update(self, loss, lr):
-        # Update loss task.
+        """Update the progress bar with current loss and learning rate."""
         self.progress.update(
             self.task,
             advance=1,
@@ -51,6 +64,7 @@ class TrainProgressBar(Progress):
 
 
 class ValidationProgressBar(Progress):
+    """Progress bar for validation loop with loss tracking."""
     def __init__(self, val_steps):
         super().__init__()
 
@@ -71,6 +85,7 @@ class ValidationProgressBar(Progress):
         )
 
     def update(self, loss):
+        """Update the progress bar with current validation loss."""
         self.progress.update(self.task, advance=1, loss=f"val_loss: {loss:.4f}")
 
     def __enter__(self):

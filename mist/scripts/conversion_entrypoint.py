@@ -85,4 +85,4 @@ def conversion_entry():
 
 
 if __name__ == "__main__":
-    conversion_entry()
+    conversion_entry() # pragma: no cover

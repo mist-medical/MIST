@@ -38,17 +38,17 @@ class GenericPipeline(Pipeline):
         input_dtm: DALI Numpy reader operator for reading DTM data.
     """
     def __init__(
-            self,
-            batch_size: int,
-            num_threads: int,
-            device_id: int,
-            shard_id: int,
-            seed: int,
-            num_gpus: int,
-            shuffle_input: bool=True,
-            input_image_files: Optional[List[str]]=None,
-            input_label_files: Optional[List[str]]=None,
-            input_dtm_files: Optional[List[str]]=None,
+        self,
+        batch_size: int,
+        num_threads: int,
+        device_id: int,
+        shard_id: int,
+        seed: int,
+        num_gpus: int,
+        shuffle_input: bool=True,
+        input_image_files: Optional[List[str]]=None,
+        input_label_files: Optional[List[str]]=None,
+        input_dtm_files: Optional[List[str]]=None,
     ):
         """Initialize the pipeline with the given parameters.
 
@@ -153,23 +153,23 @@ class TrainPipeline(GenericPipeline):
             DHWC data. If 3D, the pipeline returns CDHW data.
     """
     def __init__(
-            self,
-            image_paths: List[str],
-            label_paths: List[str],
-            dtm_paths: Optional[List[str]],
-            roi_size: Tuple[int, int, int],
-            labels: Optional[List[int]],
-            oversampling: Optional[float],
-            extract_patches: bool=True,
-            use_augmentation: bool=True,
-            use_flips: bool=True,
-            use_zoom: bool=True,
-            use_noise: bool=True,
-            use_blur: bool=True,
-            use_brightness: bool=True,
-            use_contrast: bool=True,
-            dimension: int=3,
-            **kwargs,
+        self,
+        image_paths: List[str],
+        label_paths: List[str],
+        dtm_paths: Optional[List[str]],
+        roi_size: Tuple[int, int, int],
+        labels: Optional[List[int]],
+        oversampling: Optional[float],
+        extract_patches: bool=True,
+        use_augmentation: bool=True,
+        use_flips: bool=True,
+        use_zoom: bool=True,
+        use_noise: bool=True,
+        use_blur: bool=True,
+        use_brightness: bool=True,
+        use_contrast: bool=True,
+        dimension: int=3,
+        **kwargs,
     ):
         super().__init__(
             input_image_files=image_paths,
@@ -385,9 +385,9 @@ class TrainPipeline(GenericPipeline):
         return flipped_image, flipped_label
 
     def zoom_fn(
-            self,
-            image: TensorGPU,
-            label: TensorGPU
+        self,
+        image: TensorGPU,
+        label: TensorGPU,
     ) -> Tuple[TensorGPU, TensorGPU]:
         """Apply a random zoom to the input image and labels.
 
@@ -508,9 +508,9 @@ class TestPipeline(GenericPipeline):
     compatibility.
     """
     def __init__(
-            self,
-            image_paths: List[str],
-            **kwargs
+        self,
+        image_paths: List[str],
+        **kwargs,
     ):
         super().__init__(
             input_image_files=image_paths,
@@ -542,10 +542,10 @@ class EvalPipeline(GenericPipeline):
     CDHW format for PyTorch compatibility.
     """
     def __init__(
-            self,
-            image_paths: List[str],
-            label_paths: List[str],
-            **kwargs
+        self,
+        image_paths: List[str],
+        label_paths: List[str],
+        **kwargs,
     ):
         super().__init__(
             input_image_files=image_paths,
@@ -572,25 +572,25 @@ class EvalPipeline(GenericPipeline):
 
 
 def get_training_dataset(
-        image_paths: List[str],
-        label_paths: List[str],
-        dtm_paths: Optional[List[str]],
-        batch_size: int,
-        roi_size: Tuple[int, int, int],
-        labels: Optional[List[int]],
-        oversampling: Optional[float],
-        seed: int,
-        num_workers: int,
-        rank: int,
-        world_size: int,
-        extract_patches: bool=True,
-        use_augmentation: bool=True,
-        use_flips: bool=True,
-        use_zoom: bool=True,
-        use_noise: bool=True,
-        use_blur: bool=True,
-        use_brightness: bool=True,
-        use_contrast: bool=True,
+    image_paths: List[str],
+    label_paths: List[str],
+    dtm_paths: Optional[List[str]],
+    batch_size: int,
+    roi_size: Tuple[int, int, int],
+    labels: Optional[List[int]],
+    oversampling: Optional[float],
+    seed: int,
+    num_workers: int,
+    rank: int,
+    world_size: int,
+    extract_patches: bool=True,
+    use_augmentation: bool=True,
+    use_flips: bool=True,
+    use_zoom: bool=True,
+    use_noise: bool=True,
+    use_blur: bool=True,
+    use_brightness: bool=True,
+    use_contrast: bool=True,
 ) -> DALIGenericIterator:
     """Retrieve the appropriate training pipeline based on the input data.
 
@@ -677,12 +677,12 @@ def get_training_dataset(
 
 
 def get_validation_dataset(
-        image_paths: List[str],
-        label_paths: List[str],
-        seed: int,
-        num_workers: int,
-        rank: int,
-        world_size: int,
+    image_paths: List[str],
+    label_paths: List[str],
+    seed: int,
+    num_workers: int,
+    rank: int,
+    world_size: int,
 ) -> DALIGenericIterator:
     """Build a DALI validation pipeline for loading images and labels.
 
@@ -723,11 +723,11 @@ def get_validation_dataset(
 
 
 def get_test_dataset(
-        image_paths: List[str],
-        seed: int,
-        num_workers: int,
-        rank: int=0,
-        world_size: int=1,
+    image_paths: List[str],
+    seed: int,
+    num_workers: int,
+    rank: int=0,
+    world_size: int=1,
 ) -> DALIGenericIterator:
     """"Build a DALI test pipeline for loading images.
 

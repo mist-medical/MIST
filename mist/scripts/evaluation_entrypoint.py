@@ -86,4 +86,4 @@ def evaluation_entry():
 
 
 if __name__ == "__main__":
-    evaluation_entry()
+    evaluation_entry() # pragma: no cover
