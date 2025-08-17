@@ -81,10 +81,36 @@ def mock_mist_config():
         },
     }
 
-# pylint: disable=unused-argument
-# pylint: disable=redefined-outer-name
-# pylint: disable=invalid-name
-# Test for predict_single_example with various configurations.
+
+@pytest.fixture
+def noop_cuda_tensor_to(monkeypatch):
+    """Make Tensor.to('cuda' | torch.device('cuda')) a no-op.
+ 
+    This is so tests can exercise the 'cuda' code path on machines without CUDA
+    builds.
+    """
+    orig_to = torch.Tensor.to
+
+    def _safe_to(self, *args, **kwargs):
+        # Support both positional and keyword 'device' args
+        device_arg = args[0] if args else kwargs.get("device", None)
+
+        # Normalize to a device type string
+        dev_type = None
+        if isinstance(device_arg, str):
+            dev_type = device_arg
+        elif isinstance(device_arg, torch.device):
+            dev_type = device_arg.type
+
+        # If asking for CUDA, short-circuit and keep tensor on CPU
+        if dev_type == "cuda":
+            return self
+
+        # Otherwise, delegate to the real implementation
+        return orig_to(self, *args, **kwargs)
+
+    monkeypatch.setattr(torch.Tensor, "to", _safe_to, raising=True)
+
 class _DummyANTsImage:
     """Minimal stand-in for ANTsImage."""
     def __init__(self, array: np.ndarray | None = None):
@@ -667,8 +693,9 @@ def test_test_on_fold_device_resolution(
     cuda_available,
     explicit_device,
     expected,
+    noop_cuda_tensor_to,
 ):
-    """Test device selection behavior. 
+    """Test device selection behavior.
 
     More specifically, test explicit device overrides; otherwise cuda to cpu
     fallback.
@@ -1233,6 +1260,7 @@ def test_infer_from_dataframe_device_resolution(
     cuda_available,
     explicit_device,
     expected,
+    noop_cuda_tensor_to,
 ):
     """Test device selection behavior in infer_from_dataframe."""
     df = _df_single_case(tmp_path)
