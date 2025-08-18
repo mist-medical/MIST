@@ -1241,7 +1241,7 @@ def test_analyzer_run_custom_folds(monkeypatch, dummy_mist_args, tmp_path):
     assert os.path.exists(config_path)
 
     # Load config and validate structure.
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         config = json.load(f)
 
     # Check some nested keys were correctly written.
@@ -1264,6 +1264,177 @@ def test_analyzer_run_custom_folds(monkeypatch, dummy_mist_args, tmp_path):
     df = pd.read_csv(paths_csv_path)
     assert not df.empty
     assert "fold" in df.columns
+
+
+def test_run_writes_test_paths_and_calls_get_files_df_with_dataset_json(
+    dummy_mist_args, monkeypatch, tmp_path
+):
+    """run() writes test_paths.csv and calls get_files_df(..., 'test')."""
+    # Make small train/test dirs.
+    train_dir = tmp_path / "train_data"
+    test_dir = tmp_path / "test_data"
+    train_dir.mkdir()
+    test_dir.mkdir()
+    (train_dir / "placeholder.txt").write_text("x")
+
+    # Base config used for non-dataset reads.
+    base_cfg = {
+        "dataset_info": {},
+        "preprocessing": {"ct_normalization": {}},
+        "model": {"params": {}},
+        "training": {},
+        "evaluation": {},
+    }
+
+    # read_json_file: dataset JSON has both train-data and test-data.
+    def _read_json(path):
+        if "dummy_dataset" in str(path):
+            return {
+                "task": "segmentation",
+                "modality": "ct",
+                "train-data": str(train_dir),
+                "test-data": str(test_dir),
+                "mask": ["mask.nii.gz"],
+                "images": {"ct": ["image.nii.gz"]},
+                "labels": [0, 1],
+                "final_classes": {"background": [0], "foreground": [1]},
+            }
+        return base_cfg
+
+    monkeypatch.setattr(utils, "read_json_file", _read_json)
+
+    # get_files_df (train/test): return frames WITHOUT a 'fold' column.
+    calls = []
+
+    def _get_files_df(data, split):
+        calls.append((data, split))
+        return pd.DataFrame(
+            {"id": [0], "mask": ["0_mask.nii.gz"], "ct": ["0_image.nii.gz"]}
+        )
+
+    monkeypatch.setattr(utils, "get_files_df", _get_files_df)
+
+    # add_folds_to_df: avoid sklearn; just set fold sequentially.
+    def _add_folds_to_df(df, n_splits):
+        df = df.copy()
+        df["fold"] = list(range(len(df)))  # safe even for len(df)=1
+        return df
+
+    monkeypatch.setattr(utils, "add_folds_to_df", _add_folds_to_df)
+
+    # Tame progress + header/IO helpers.
+    monkeypatch.setattr(
+        utils, "get_progress_bar", lambda *_a, **_k: DummyProgressBar()
+    )
+    monkeypatch.setattr(ants, "image_header_info", fake_image_header_info)
+    monkeypatch.setattr(ants, "image_read", fake_image_read)
+    monkeypatch.setattr(utils, "compare_headers", fake_compare_headers)
+    monkeypatch.setattr(utils, "is_image_3d", fake_is_image_3d)
+    monkeypatch.setattr(
+        utils, "get_resampled_image_dimensions", lambda *_a, **_k: (10, 10, 10)
+    )
+    monkeypatch.setattr(
+        utils,
+        "get_float32_example_memory_size",
+        fake_get_float32_example_memory_size,
+    )
+    monkeypatch.setattr(utils, "get_fg_mask_bbox", fake_get_fg_mask_bbox)
+
+    # Ensure base_config.json exists.
+    (tmp_path / "base_config.json").write_text(json.dumps(base_cfg))
+    monkeypatch.chdir(tmp_path)
+
+    # Point results to tmp.
+    dummy_mist_args.results = str(tmp_path / "results")
+
+    # Run analyzer.
+    analyzer = Analyzer(dummy_mist_args)
+    analyzer.run()
+
+    # test_paths.csv should be written.
+    test_csv = os.path.join(dummy_mist_args.results, "test_paths.csv")
+    assert os.path.exists(test_csv)
+
+    # Verify train/test calls were made with the dataset JSON path.
+    assert (dummy_mist_args.data, "train") in calls
+    assert (dummy_mist_args.data, "test") in calls
+
+
+def test_run_raises_when_test_data_dir_missing(
+    dummy_mist_args, monkeypatch, tmp_path
+):
+    """run() raises if dataset JSON points to missing 'test-data' directory."""
+    train_dir = tmp_path / "train_data"
+    train_dir.mkdir()
+    (train_dir / "placeholder.txt").write_text("x")
+    missing_test_dir = tmp_path / "missing_test"  # does not exist
+
+    base_cfg = {
+        "dataset_info": {},
+        "preprocessing": {"ct_normalization": {}},
+        "model": {"params": {}},
+        "training": {},
+        "evaluation": {},
+    }
+
+    def _read_json(path):
+        if "dummy_dataset" in str(path):
+            return {
+                "task": "segmentation",
+                "modality": "ct",
+                "train-data": str(train_dir),
+                "test-data": str(missing_test_dir),
+                "mask": ["mask.nii.gz"],
+                "images": {"ct": ["image.nii.gz"]},
+                "labels": [0, 1],
+                "final_classes": {"background": [0], "foreground": [1]},
+            }
+        return base_cfg
+
+    monkeypatch.setattr(utils, "read_json_file", _read_json)
+
+    # Use a get_files_df that DOES NOT precreate 'fold'.
+    def _get_files_df(data, split):
+        return pd.DataFrame({
+            "id": [0, 1],
+            "mask": ["m0.nii.gz", "m1.nii.gz"],
+            "ct": ["i0.nii.gz", "i1.nii.gz"]
+        })
+
+    monkeypatch.setattr(utils, "get_files_df", _get_files_df)
+
+    # add_folds_to_df: simple, no sklearn, no duplicate-insert.
+    def _add_folds_to_df(df, n_splits):
+        df = df.copy()
+        df["fold"] = list(range(len(df)))
+        return df
+
+    monkeypatch.setattr(utils, "add_folds_to_df", _add_folds_to_df)
+
+    # Tame progress + header/IO helpers.
+    monkeypatch.setattr(
+        utils, "get_progress_bar", lambda *_a, **_k: DummyProgressBar()
+    )
+    monkeypatch.setattr(ants, "image_header_info", fake_image_header_info)
+    monkeypatch.setattr(ants, "image_read", fake_image_read)
+    monkeypatch.setattr(utils, "compare_headers", fake_compare_headers)
+    monkeypatch.setattr(utils, "is_image_3d", fake_is_image_3d)
+    monkeypatch.setattr(
+        utils, "get_resampled_image_dimensions", lambda *_a, **_k: (10, 10, 10)
+    )
+    monkeypatch.setattr(
+        utils,
+        "get_float32_example_memory_size",
+        fake_get_float32_example_memory_size,
+    )
+    monkeypatch.setattr(utils, "get_fg_mask_bbox", fake_get_fg_mask_bbox)
+
+    (tmp_path / "base_config.json").write_text(json.dumps(base_cfg))
+    monkeypatch.chdir(tmp_path)
+    dummy_mist_args.results = str(tmp_path / "results")
+
+    with pytest.raises(FileNotFoundError):
+        Analyzer(dummy_mist_args).run()
 
 
 def test_cleanup_generated_files():

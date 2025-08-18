@@ -20,6 +20,7 @@ configuration file and the paths dataframe to the results directory, which will
 be used for preprocessing and training models.
 """
 import os
+from pathlib import Path
 from importlib import metadata
 import ants
 import pandas as pd
@@ -730,3 +731,21 @@ class Analyzer:
         # Step 4: Save the configuration file and the paths dataframe.
         self.paths_df.to_csv(self.paths_csv, index=False)
         utils.write_json_file(self.config_json, self.config)
+
+        # Step 5: If the user specified test data in the dataset JSON file, then
+        # create a test paths dataframe and save it as CSV.
+        if self.dataset_info.get("test-data"):
+            test_data_dir = Path(
+                self.dataset_info["test-data"]
+            ).expanduser().resolve()
+            if not test_data_dir.exists():
+                raise FileNotFoundError(
+                    f"Test data directory does not exist: {test_data_dir}"
+                )
+
+            # Create a test paths dataframe from the test data directory.
+            test_paths_df = utils.get_files_df(self.mist_arguments.data, "test")
+
+            # Stay consistent with earlier string-based paths.
+            test_paths_csv = os.path.join(self.results_dir, "test_paths.csv")
+            test_paths_df.to_csv(test_paths_csv, index=False)
