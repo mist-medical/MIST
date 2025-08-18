@@ -10,6 +10,7 @@
 # limitations under the License.
 """Tests for the Analyzer class in mist.analyze_data.analyze."""
 import os
+from importlib import metadata
 import shutil
 import json
 import argparse
@@ -21,7 +22,6 @@ import ants
 # MIST imports.
 from mist.analyze_data.analyzer import Analyzer
 from mist.runtime import utils
-from importlib import metadata
 
 
 def fake_read_json_file(filepath):
