@@ -325,7 +325,6 @@ def compute_dtm(
     return dtm
 
 
-
 def preprocess_example(
     config: Dict,
     image_paths_list: List[str],
@@ -334,13 +333,24 @@ def preprocess_example(
 ) -> Dict:
     """Preprocessing function for a single example.
 
+    If config['preprocessing']['skip'] is True:
+      - Reorient images/mask to RAI
+      - (Optionally) crop to foreground (for efficiency)
+      - NO resampling
+      - NO windowing/normalization
+      - (Optionally) compute DTMs if requested
+
+    Else:
+      - Reorient to RAI
+      - (Optionally) crop to foreground
+      - Resample to target spacing
+      - Window & normalize images
+      - (Optionally) compute DTMs
+
     Args:
         config: Dictionary with information from config.json.
         image_paths_list: List containing paths to images for the example.
         mask_path: Path to segmentation mask.
-        use_dtm: Set to true to compute and output DTMs.
-        normalize_dtm: Set to true to normalize DTM to have
-            values between -1 and 1.
         fg_bbox: Information about the bounding box for the foreground.
     Returns:
         preprocessed_output: Dictionary containing the following keys:
@@ -350,8 +360,16 @@ def preprocess_example(
                 input and the config file calls for its use.
             dtm: DTM(s) as a numpy array.
     """
-    # Determine if we are in training mode.
-    training = True if mask_path else False
+    # Set the training flag based on the presence of a mask.
+    training = bool(mask_path)
+
+    # Set preprocessing flags.
+    skip = config["preprocessing"]["skip"]
+    crop = config["preprocessing"]["crop_to_foreground"]
+    target_spacing = config["preprocessing"]["target_spacing"]
+    compute_dtms = config["preprocessing"]["compute_dtms"]
+    normalize_dtms = config["preprocessing"]["normalize_dtms"]
+    labels = config["dataset_info"]["labels"]
 
     # Read all images (and mask if training).
     images = []
@@ -360,120 +378,76 @@ def preprocess_example(
         image_i = ants.image_read(image_path)
 
         # Get foreground mask if necessary.
-        if (
-            i == 0
-            and config["preprocessing"]["crop_to_foreground"]
-            and fg_bbox is None
-        ):
+        if i == 0 and crop and fg_bbox is None:
             fg_bbox = utils.get_fg_mask_bbox(image_i)
 
-        if config["preprocessing"]["crop_to_foreground"]:
-            # Only compute foreground mask once.
+        # If cropping is requested, but the foreground bounding box is not
+        # provided, raise an error. Otherwise, crop the image to the
+        # foreground bounding box.
+        if crop:
             if fg_bbox is None:
                 raise ValueError(
-                    "Received None for fg_bbox when cropping to foreground. "
-                    "Please provide a fg_bbox."
+                    "Foreground bounding box is required for cropping, but "
+                    "none was provided."
                 )
             image_i = utils.crop_to_fg(image_i, fg_bbox)
 
         # Put all images into standard space.
         image_i = ants.reorient_image2(image_i, "RAI")
         image_i.set_direction(pc.RAI_ANTS_DIRECTION)
-        if not np.array_equal(
-            image_i.spacing, config["preprocessing"]["target_spacing"]
-        ):
-            image_i = resample_image(
-                image_i,
-                target_spacing=config["preprocessing"]["target_spacing"]
-            )
+        if not skip and not np.allclose(image_i.spacing, target_spacing):
+            image_i = resample_image(image_i, target_spacing=target_spacing)
         images.append(image_i)
 
     if training:
         # Read mask if we are in training mode.
         mask = ants.image_read(mask_path)
 
-        # Crop to foreground.
-        if config["preprocessing"]["crop_to_foreground"]:
+        # Crop to foreground. We don't need to check if fg_bbox is None
+        # because we already checked it above.
+        if crop:
             mask = utils.crop_to_fg(mask, fg_bbox)
 
         # Put mask into standard space.
         mask = ants.reorient_image2(mask, "RAI")
         mask.set_direction(pc.RAI_ANTS_DIRECTION)
-        mask = resample_mask(
-            mask,
-            labels=config["dataset_info"]["labels"],
-            target_spacing=config["preprocessing"]["target_spacing"],
-        )
-
-        if config["preprocessing"]["compute_dtms"]:
-            dtm = compute_dtm(
-                mask,
-                labels=config["dataset_info"]["labels"],
-                normalize_dtm=config["preprocessing"]["normalize_dtms"],
+        if not skip:
+            mask = resample_mask(
+                mask, labels=labels, target_spacing=target_spacing
             )
+
+        # Compute DTM if requested and cast to float32.
+        if compute_dtms:
+            dtm = compute_dtm(mask, labels=labels, normalize_dtm=normalize_dtms)
+            dtm = dtm.astype(np.float32)
         else:
             dtm = None
 
-        # Add channel axis to mask.
-        mask = np.expand_dims(mask.numpy(), axis=-1)
+        # Add channel axis to mask and cast to uint8.
+        mask = np.expand_dims(mask.numpy(), axis=-1).astype(np.uint8)
     else:
         mask = None
         dtm = None
 
-    # Apply windowing and normalization to images.
     # Get dimensions of image in standard space.
     image = np.zeros((*images[0].shape, len(images)))
     for i, image_i in enumerate(images):
-        image[..., i] = window_and_normalize(image_i.numpy(), config)
+        if not skip:
+            # Apply windowing and normalization if not skipping preprocessing.
+            image[..., i] = window_and_normalize(image_i.numpy(), config)
+        else:
+            # Otherwise, just convert to numpy.
+            image[..., i] = image_i.numpy()
 
-    preprocessed_output = {
+    # Cast image to float32 for consistency.
+    # This is important for training models that expect float32 inputs.
+    image = image.astype(np.float32)
+    return {
         "image": image,
         "mask": mask,
         "fg_bbox": fg_bbox,
         "dtm": dtm,
     }
-
-    return preprocessed_output
-
-
-def convert_nifti_to_numpy(
-    image_list: List[str],
-    mask: Optional[str]=None,
-) -> Dict[str, Union[npt.NDArray[Any], None]]:
-    """Convert NIfTI images to numpy arrays.
-
-    Args:
-        image_list: List of paths to NIfTI images.
-        mask: Path to segmentation mask.
-
-    Returns:
-        conversion_output: Dictionary with the following keys:
-            image: Numpy array of images.
-            mask: Numpy array of mask.
-    """
-    dims = list(ants.image_header_info(image_list[0])["dimensions"])
-    dims = [int(dim) for dim in dims]  # Convert dimensions to integers.
-
-    # Convert images.
-    image_npy = np.zeros((*dims, len(image_list)))
-    for i, image_path in enumerate(image_list):
-        image = ants.image_read(image_path)
-        image_npy[..., i] = image.numpy()
-
-    # Convert mask if given.
-    if mask is not None:
-        mask_npy = ants.image_read(mask)
-        mask_npy = np.expand_dims(mask_npy.numpy(), axis=-1)
-    else:
-        mask_npy = None
-
-    conversion_output = {
-        "image": image_npy,
-        "mask": mask_npy,
-        "fg_bbox": None,
-        "dtm": None,
-    }
-    return conversion_output
 
 
 def preprocess_dataset(args: argparse.Namespace) -> None:
@@ -511,7 +485,11 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
     }
     os.makedirs(output_directories["images"], exist_ok=True)
     os.makedirs(output_directories["labels"], exist_ok=True)
-    if args.use_dtms:
+
+    # If the user specified to compute DTMs, we will create the directory
+    # for them and update the configuration file to reflect that we are
+    # using DTMs.
+    if args.compute_dtms:
         # If we are using DTMs, create the directory for them.
         os.makedirs(output_directories["dtms"], exist_ok=True)
 
@@ -522,12 +500,23 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
         config_json = os.path.join(args.results, "config.json")
         utils.write_json_file(config_json, config)
 
+    # If the user specified to not preprocess, we will only reorient and
+    # (optionally) crop the images and masks for their foreground bounding
+    # boxes. We will also convert the images to numpy arrays.
+    if args.no_preprocess:
+        # Update the configuration file to reflect no preprocessing.
+        config["preprocessing"]["skip"] = True
+
+        # Write the updated configuration file back to disk.
+        config_json = os.path.join(args.results, "config.json")
+        utils.write_json_file(config_json, config)
+
     # Print preprocessing message and get progress bar.
     text = rich.text.Text("\nPreprocessing dataset\n") # type: ignore
     text.stylize("bold")
     console.print(text)
 
-    if args.no_preprocess:
+    if config["preprocessing"]["skip"]:
         progress = utils.get_progress_bar("Converting nifti to npy")
     else:
         progress = utils.get_progress_bar("Preprocessing")
@@ -552,51 +541,41 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
             image_list = [patient[col] for col in image_columns]
             mask = patient["mask"]
 
-            # If the user turns off preprocessing, simply convert NIfTI
-            # images to numpy arrays.
-            if args.no_preprocess:
-                current_preprocessed_example = convert_nifti_to_numpy(
-                    image_list,
-                    mask
-                )
+            # Get foreground bounding box if necessary. These are already
+            # computed and saved in a separate CSV file during the analysis
+            # portion of the MIST pipeline.
+            if config["preprocessing"]["crop_to_foreground"]:
+                fg_bbox = fg_bboxes.loc[
+                    fg_bboxes["id"] == patient["id"]
+                ].iloc[0].to_dict()
+
+                # Remove the ID key from the dictionary. We do not need it here.
+                fg_bbox.pop("id")
             else:
-                # Get foreground bounding box if necessary. These are already
-                # computed and saved in a separate CSV file during the analysis
-                # portion of the MIST pipeline.
-                if config["preprocessing"]["crop_to_foreground"]:
-                    fg_bbox = (
-                        fg_bboxes.loc[
-                            fg_bboxes["id"] == patient["id"]
-                        ].iloc[0].to_dict()
-                    )
+                # Otherwise, set fg_bbox to None and the foreground bounding
+                # box will be computed on the fly.
+                fg_bbox = None
 
-                    # Remove the ID key from the dictionary. We do not need it
-                    # for preprocessing.
-                    fg_bbox.pop("id")
-                else:
-                    fg_bbox = None
+            # Preprocess the example.
+            current_preprocessed_example = preprocess_example(
+                config=config,
+                image_paths_list=image_list,
+                mask_path=mask,
+                fg_bbox=fg_bbox,
+            )
 
-                # Preprocess the example.
-                current_preprocessed_example = preprocess_example(
-                    config=config,
-                    image_paths_list=image_list,
-                    mask_path=mask,
-                    fg_bbox=fg_bbox,
-                )
-
-            # Save images and masks as numpy arrays.
+            # Save images, masks, and (optionally) DTMs as numpy arrays.
             patient_npy = f"{patient['id']}.npy"
             np.save(
                 os.path.join(output_directories["images"], patient_npy),
-                current_preprocessed_example["image"].astype("float32") # type: ignore
+                current_preprocessed_example["image"]
             )
             np.save(
                 os.path.join(output_directories["labels"], patient_npy),
-                current_preprocessed_example["mask"].astype("uint8") # type: ignore
+                current_preprocessed_example["mask"]
             )
-
-            if args.use_dtms:
+            if args.compute_dtms:
                 np.save(
                     os.path.join(output_directories["dtms"], patient_npy),
-                    current_preprocessed_example["dtm"].astype("float32") # type: ignore
+                    current_preprocessed_example["dtm"]
                 )

@@ -42,6 +42,8 @@ def mock_mist_config():
                 "z_score_mean": 0.0,
                 "z_score_std": 1.0,
             },
+            "compute_dtms": False,
+            "normalize_dtms": True,
         },
         "model": {
             "architecture": "nnunet",
@@ -789,8 +791,6 @@ def test_infer_from_dataframe_success_preprocess_path_tta_enabled(
     monkeypatch,
 ):
     """Test preprocessing branch (skip=False), TTA enabled, writes output."""
-    from mist.inference import inference_runners as ir
-
     # Input dataframe.
     df = _df_single_case(tmp_path)
     out_dir = str(_ensure_dir(tmp_path / "out"))
@@ -869,9 +869,9 @@ def test_infer_from_dataframe_success_preprocess_path_tta_enabled(
 @patch(
     "mist.inference.inference_runners.inference_utils.validate_inference_images"
 )
-@patch("mist.inference.inference_runners.preprocess.convert_nifti_to_numpy")
-def test_infer_from_dataframe_success_skip_path_tta_disabled(
-    mock_convert_to_numpy,
+@patch("mist.inference.inference_runners.preprocess.preprocess_example")
+def test_infer_from_dataframe_success_tta_disabled(
+    mock_preprocess_example,
     mock_validate_images,
     mock_load_models,
     mock_get_inferer,
@@ -893,7 +893,6 @@ def test_infer_from_dataframe_success_skip_path_tta_disabled(
 
     # Change config to skip preprocessing and disable TTA.
     cfg = copy.deepcopy(mock_mist_config)
-    cfg["preprocessing"]["skip"] = True
     cfg["inference"]["tta"]["enabled"] = False
 
     monkeypatch.setattr(
@@ -909,10 +908,10 @@ def test_infer_from_dataframe_success_skip_path_tta_disabled(
     anchor = _DummyANTsImage()
     mock_validate_images.return_value = (anchor, [df.iloc[0]["image"]])
 
-    # convert_nifti_to_numpy returns dict like preprocess path.
+    # preprocess_example returns dict with numpy image + bbox.
     img_np = np.zeros((2, 2, 2), dtype=np.float32)
     bbox = {"x0": 0, "x1": 1, "y0": 0, "y1": 1, "z0": 0, "z1": 1}
-    mock_convert_to_numpy.return_value = {"image": img_np, "fg_bbox": bbox}
+    mock_preprocess_example.return_value = {"image": img_np, "fg_bbox": bbox}
 
     mock_load_models.return_value = [MagicMock(name="model0")]
     mock_get_inferer.return_value = lambda **_: SimpleNamespace(name="inferer")
@@ -938,7 +937,6 @@ def test_infer_from_dataframe_success_skip_path_tta_disabled(
         device="cpu",
     )
 
-    mock_convert_to_numpy.assert_called_once()
     mock_predict_single.assert_called_once()
     mock_image_write.assert_called_once()
     # Verify 'none' invoked.

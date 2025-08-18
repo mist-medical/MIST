@@ -357,16 +357,14 @@ def infer_from_dataframe(
                     inference_utils.validate_inference_images(patient)
                 )
 
-                # Preprocess the image if necessary.
-                if mist_configuration["preprocessing"]["skip"]:
-                    preprocessed_example = preprocess.convert_nifti_to_numpy(
-                        image_paths
-                    )
-                else:
-                    preprocessed_example = preprocess.preprocess_example(
-                        config=mist_configuration,
-                        image_paths_list=image_paths,
-                    )
+                # Preprocess the input images using the MIST preprocessing
+                # pipeline. This will handle normalization, cropping, and
+                # resizing as per the MIST configuration. If the skip flag is
+                # set, normalization will not be applied.
+                preprocessed_example = preprocess.preprocess_example(
+                    config=mist_configuration,
+                    image_paths_list=image_paths,
+                )
 
                 # Convert the preprocessed image to a PyTorch tensor and move it
                 # to the device.
