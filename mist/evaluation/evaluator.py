@@ -17,6 +17,7 @@ import numpy as np
 import rich
 
 # MIST imports.
+from mist.evaluation import evaluation_utils
 from mist.runtime import utils
 from mist.metrics.metrics_registry import get_metric
 
@@ -86,7 +87,7 @@ class Evaluator:
         self.metric_kwargs = metric_kwargs
 
         # Initialize the results DataFrame.
-        self.results_dataframe = utils.initialize_results_dataframe(
+        self.results_dataframe = evaluation_utils.initialize_results_dataframe(
             self.evaluation_classes, self.selected_metrics
         )
 
@@ -198,8 +199,8 @@ class Evaluator:
         return None
 
     def _load_patient_data(
-            self,
-            patient_id: str
+        self,
+        patient_id: str
     ) -> Dict[str, ants.core.ants_image.ANTsImage]:
         """Load the ground truth and prediction paths for a given patient ID.
 
@@ -456,7 +457,7 @@ class Evaluator:
             self.console.print(rich.text.Text(full_error_text)) # type: ignore
 
         # Compute summary statistics and write results.
-        self.results_dataframe = utils.compute_results_stats(
+        self.results_dataframe = evaluation_utils.compute_results_stats(
             self.results_dataframe
         )
         self.results_dataframe.to_csv(self.output_csv_path, index=False)

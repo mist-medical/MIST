@@ -9,9 +9,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Utilities for evaluating predictions."""
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List, Dict
 import os
 import pandas as pd
+import numpy as np
 
 
 def build_evaluation_dataframe(
@@ -82,3 +83,73 @@ def build_evaluation_dataframe(
     filepaths_df = pd.DataFrame(filepaths)
 
     return filepaths_df, "\n".join(error_messages) if error_messages else None
+
+
+def initialize_results_dataframe(
+    evaluation_classes: Dict[str, List[int]],
+    metrics: List[str]
+) -> pd.DataFrame:
+    """Initialize results dataframe.
+
+    Args:
+        evaluation_classes: Dictionary with class names as keys and lists of
+            labels. This can be found in the MIST configuration file under
+            the evaluation.final_classes key.
+        metrics: List of metrics to be included in the results.
+
+    Returns:
+        results_df: Initialized results dataframe. This will have columns for
+        each metric for each class.
+    """
+    # Initialize new results dataframe.
+    results_cols = ["id"]
+    for metric in metrics:
+        for key in evaluation_classes.keys():
+            results_cols.append(f"{key}_{metric}")
+
+    results_df = pd.DataFrame(columns=results_cols)
+    return results_df
+
+
+def compute_results_stats(results_df: pd.DataFrame) -> pd.DataFrame:
+    """Compute statistics for results dataframe.
+
+    These statistics include mean, standard deviation, and percentiles for each
+    metric and class in the results dataframe. These will appear in the bottom
+    five rows of the dataframe.
+
+    Args:
+        results_df: Dataframe containing the metrics for each class for each
+            patient.
+
+    Returns:
+        results_df: Updated results dataframe with statistics added at the 
+            bottom five rows of the dataframe.
+    """
+    # Define the labels for the statistical rows.
+    stats_labels = [
+        "Mean", "Std", "25th Percentile", "Median", "75th Percentile"
+    ]
+    stats_functions = [
+        np.nanmean,
+        np.nanstd,
+        lambda x: np.nanpercentile(x, 25),
+        lambda x: np.nanpercentile(x, 50),
+        lambda x: np.nanpercentile(x, 75),
+    ]
+
+    # Compute statistics for each column and create corresponding rows.
+    stats_rows = [
+        {
+            "id": label, **{
+                col: func(results_df[col]) for col in results_df.columns[1:]
+                }
+        }
+        for label, func in zip(stats_labels, stats_functions)
+    ]
+
+    # Append all statistics rows at once.
+    results_df = pd.concat(
+        [results_df, pd.DataFrame(stats_rows)], ignore_index=True
+    )
+    return results_df

@@ -142,12 +142,6 @@ def set_warning_levels() -> None:
     warnings.simplefilter(action="ignore", category=DeprecationWarning)
 
 
-def create_empty_dir(path: str) -> None:
-    """Create directory if it does not exist."""
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-
 def get_progress_bar(task_name: str) -> Progress:
     """Set up rich progress bar.
 
@@ -169,8 +163,8 @@ def get_progress_bar(task_name: str) -> Progress:
 
 
 def copy_image_from_source_to_dest(
-        image_source: str,
-        image_destination: str,
+    image_source: str,
+    image_destination: str,
 ) -> None:
     """Copy image from source to destination.
 
@@ -183,46 +177,6 @@ def copy_image_from_source_to_dest(
     """
     cp_image_cmd = f"cp {image_source} {image_destination}"
     subprocess.call(cp_image_cmd, shell=True)
-
-
-def get_files_list(path: str) -> List[str]:
-    """Get list of files with their full path in a directory.
-
-    Args:
-        path: Path to directory.
-
-    Returns:
-        files_list: List of files in the directory with their full file path.
-    """
-    return glob.glob(os.path.join(path, '*'))
-
-
-def listdir_with_no_hidden_files(path: str) -> List[str]:
-    """Get list of files in a directory without hidden files.
-
-    Args:
-        path: Path to directory.
-
-    Returns:
-        List of files in the directory without hidden files.
-    """
-    return [f for f in os.listdir(path) if not f.startswith('.')]
-
-
-def has_test_data(dataset_json_path: str) -> bool:
-    """Check if dataset json file has test data.
-
-    Args:
-        dataset_json_path: Path to dataset json file.
-
-    Returns:
-        True if test data is present in the dataset json file.
-    """
-    dataset_information = read_json_file(dataset_json_path)
-    if "test-data" in dataset_information.keys():
-        if dataset_information["test-data"] is not None:
-            return True
-    return False
 
 
 def get_numpy_file_paths_list(
@@ -293,7 +247,7 @@ def get_files_df(path_to_dataset_json: str, train_or_test: str) -> pd.DataFrame:
     df = pd.DataFrame(columns=columns)
 
     # Get list of patient IDs.
-    patient_ids = listdir_with_no_hidden_files(base_dir)
+    patient_ids = [f for f in os.listdir(base_dir) if not f.startswith('.')]
 
     # Iterate over each patient and get the file paths for each patient.
     for patient_id in patient_ids:
@@ -302,7 +256,7 @@ def get_files_df(path_to_dataset_json: str, train_or_test: str) -> pd.DataFrame:
 
         # Path to patient data.
         patient_dir = os.path.join(base_dir, patient_id)
-        patient_files = get_files_list(patient_dir)
+        patient_files = glob.glob(os.path.join(patient_dir, '*'))
 
         # Map file paths to their respective columns.
         for image_type, identifying_strings in dataset_info["images"].items():
@@ -360,145 +314,6 @@ def add_folds_to_df(df: pd.DataFrame, n_splits: int=5) -> pd.DataFrame:
     return df
 
 
-def convert_dict_to_df(patients: Dict[str, Dict[str, str]]) -> pd.DataFrame:
-    """Converts a nested dictionary of patient data into a pandas DataFrame.
-
-    Args:
-        patients: A dictionary where each key is a patient ID, and each value
-        is another dictionary containing image keys and corresponding values.
-
-    Returns:
-        df: A DataFrame with columns for patient IDs and image data.
-
-    Raises:
-        ValueError: If the input dictionary is empty or if any patient data keys
-        do not match the keys from the first patient.
-    """
-    # Check if the patients dictionary is empty
-    if not patients:
-        raise ValueError(
-            "The 'patients' dictionary is empty. Cannot convert to DataFrame."
-        )
-
-    # Initialize columns with 'id'.
-    columns = ["id"]
-
-    # Get list of patient IDs
-    patient_ids = list(patients.keys())
-
-    # Get image keys from the first patient's data.
-    first_patient_images = set(patients[patient_ids[0]].keys())
-    columns.extend(first_patient_images)
-
-    # Create an empty DataFrame with the desired columns.
-    df = pd.DataFrame(columns=columns)
-
-    # Populate DataFrame with patient data.
-    for patient_id in patient_ids:
-        patient_data = {"id": patient_id}
-
-        # Check if the keys in the current patient's data match the expected
-        # keys.
-        current_keys = set(patient_data.keys())
-        if current_keys != set(columns):
-            raise ValueError(
-                f"Data keys for patient '{patient_id}' do not match expected"
-                " keys."
-            )
-
-        df = pd.concat([df, pd.DataFrame([patient_data])], ignore_index=True)
-
-    return df
-
-
-def get_lr_schedule(
-        mist_arguments: argparse.Namespace,
-        optimizer: torch.optim.Optimizer, # type: ignore
-        epochs: int,
-    ) -> torch.optim.lr_scheduler.LRScheduler:
-    """Get learning rate schedule based on user input.
-
-    Args:
-        mist_arguments: Command line arguments.
-        optimizer: Optimizer for which the learning rate schedule is created.
-        epochs: Number of epochs for training.
-
-    Returns:
-        lr_scheduler: Learning rate scheduler.
-
-    Raises:
-        ValueError: If the learning rate scheduler type is not recognized. To
-        add a new learning rate scheduler, add a new if statement and
-        add the corresponding scheduler name to runtime/args.py.
-    """
-    if mist_arguments.lr_scheduler == "constant":
-        return torch.optim.lr_scheduler.ConstantLR(optimizer, factor=1)
-    if mist_arguments.lr_scheduler == "polynomial":
-        return torch.optim.lr_scheduler.PolynomialLR(
-            optimizer,
-            total_iters=epochs,
-            power=0.9
-        )
-    if mist_arguments.lr_scheduler == "cosine-warm-restarts":
-        return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-            optimizer,
-            T_0=int(np.ceil(0.1 * epochs)),
-            T_mult=2
-        )
-    if mist_arguments.lr_scheduler == "cosine":
-        return torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer,
-            T_max=epochs
-        )
-    raise ValueError(
-        "Received invalid learning rate scheduler type "
-        f"{mist_arguments.lr_scheduler}."
-    )
-
-
-def get_optimizer(
-        mist_arguments: argparse.Namespace,
-        model: torch.nn.Module
-    ) -> torch.optim.Optimizer: # type: ignore
-    """Get pytorch optimizer based on user input.
-
-    Args:
-        mist_arguments: Command line arguments.
-        model: Pytorch model whose parameters will be optimized.
-
-    Returns:
-        Optimizer for the model parameters.
-
-    Raises:
-        ValueError: If the optimizer type is not recognized. To add a new
-        optimizer, add a new if statement and add the corresponding
-        optimizer name to runtime/args.py.
-    """
-    # Increase epsilon for AMP to avoid NaNs.
-    eps = 1e-4 if mist_arguments.amp else 1e-8
-    if mist_arguments.optimizer == "sgd":
-        return torch.optim.SGD( # type: ignore
-            params=model.parameters(),
-            lr=mist_arguments.learning_rate,
-            momentum=mist_arguments.sgd_momentum
-    )
-    if mist_arguments.optimizer == "adam":
-        return torch.optim.Adam( # type: ignore
-            params=model.parameters(),
-            lr=mist_arguments.learning_rate,
-            eps=eps,
-        )
-    if mist_arguments.optimizer == "adamw":
-        return torch.optim.AdamW( # type: ignore
-            params=model.parameters(),
-            lr=mist_arguments.learning_rate,
-            eps=eps,
-        )
-    raise ValueError(
-        f"Received invalid optimizer type {mist_arguments.optimizer}."
-    )
-
-
 class RunningMean(nn.Module):
     """Simple moving average module for loss tracking.
 
@@ -531,34 +346,30 @@ class RunningMean(nn.Module):
 
 
 def set_visible_devices(mist_arguments: argparse.Namespace) -> int:
-    """Set visible devices for training based on user input.
-
-    This function determines how many GPUs are available for training based on
-    the command line arguments and sets the appropriate environment variable. In
-    case no GPUs are specified, it will use all available GPUs.
-
-    Args:
-        args: Command line arguments.
-
-    Returns:
-        n_gpus: Number of GPUs available for training.
-    """
-    # Select GPU(s) for training.
-    length_of_gpu_argument = len(mist_arguments.gpus)
-    if length_of_gpu_argument > 1:
-        n_gpus = length_of_gpu_argument
-        visible_devices = ",".join(
-            [str(mist_arguments.gpus[j]) for j in range(length_of_gpu_argument)]
+    """Set visible CUDA devices from CLI args; return number of GPUs."""
+    # Total available GPUs.
+    total = torch.cuda.device_count()
+    if total == 0:
+        raise RuntimeError(
+            "No CUDA devices found; training requires at least one GPU."
         )
-    elif length_of_gpu_argument == 1 and mist_arguments.gpus[0] != -1:
-        n_gpus = length_of_gpu_argument
-        visible_devices = str(mist_arguments.gpus[0])
-    elif length_of_gpu_argument == 1 and mist_arguments.gpus[0] == -1:
-        n_gpus = torch.cuda.device_count()
-        visible_devices = ",".join([str(j) for j in range(n_gpus)])
+
+    gpus = getattr(mist_arguments, "gpus", None)
+
+    # None / [] / [-1]  -> all GPUs.
+    if gpus is None or len(gpus) == 0 or (len(gpus) == 1 and gpus[0] == -1):
+        n_gpus = total
+        visible_devices = ",".join(str(i) for i in range(total))
     else:
-        n_gpus = torch.cuda.device_count()
-        visible_devices = ",".join([str(j) for j in range(n_gpus)])
+        # Minimal validation: indices must be within 0..total-1.
+        invalid = [i for i in gpus if i < 0 or i >= total]
+        if invalid:
+            raise ValueError(
+                f"Requested GPU index/indices out of range {invalid}; "
+                f"available indices are 0..{total - 1}."
+            )
+        n_gpus = len(gpus)
+        visible_devices = ",".join(str(i) for i in gpus)
 
     os.environ["CUDA_VISIBLE_DEVICES"] = visible_devices
     return n_gpus
@@ -577,86 +388,6 @@ def set_seed(my_seed: int) -> None:
     np.random.seed(my_seed)
     torch.manual_seed(my_seed)
     torch.cuda.manual_seed(my_seed)
-
-
-def get_flip_axes() -> List[List[int]]:
-    """Get axes for flipping images during test time augmentation.
-
-    Returns:
-        List of axes for flipping.
-    """
-    return [[2], [3], [4], [2, 3], [2, 4], [3, 4], [2, 3, 4]]
-
-
-def initialize_results_dataframe(
-        evaluation_classes: Dict[str, List[int]],
-        metrics: List[str]
-) -> pd.DataFrame:
-    """Initialize results dataframe.
-
-    Args:
-        evaluation_classes: Dictionary with class names as keys and lists of
-            labels. This can be found in the MIST configuration file under
-            the "final_classes" key.
-        metrics: List of metrics to be included in the results.
-
-    Returns:
-        results_df: Initialized results dataframe. This will have columns for
-        each metric for each class.
-    """
-    # Initialize new results dataframe
-    results_cols = ["id"]
-    for metric in metrics:
-        for key in evaluation_classes.keys():
-            results_cols.append(f"{key}_{metric}")
-
-    results_df = pd.DataFrame(columns=results_cols)
-    return results_df
-
-
-def compute_results_stats(results_df: pd.DataFrame) -> pd.DataFrame:
-    """Compute statistics for results dataframe.
-
-    These statistics include mean, standard deviation, and percentiles for each
-    metric and class in the results dataframe. These will appear in the bottom
-    five rows of the dataframe.
-
-    Args:
-        results_df: Dataframe containing the metrics for each class for each
-            patient.
-
-    Returns:
-        results_df: Updated results dataframe with statistics added at the 
-            bottom five rows of the dataframe.
-    """
-    # Define the labels for the statistical rows.
-    stats_labels = [
-        "Mean", "Std", "25th Percentile", "Median", "75th Percentile"
-    ]
-    stats_functions = [
-        np.nanmean,
-        np.nanstd,
-        lambda x: np.nanpercentile(x, 25),
-        lambda x: np.nanpercentile(x, 50),
-        lambda x: np.nanpercentile(x, 75),
-    ]
-
-    # Compute statistics for each column and create corresponding rows.
-    stats_rows = [
-        {
-            "id": label, **{
-                col: func(results_df[col]) for col in results_df.columns[1:]
-                }
-        }
-        for label, func in zip(stats_labels, stats_functions)
-    ]
-
-    # Append all statistics rows at once.
-    results_df = pd.concat(
-        [results_df, pd.DataFrame(stats_rows)], ignore_index=True
-    )
-
-    return results_df
 
 
 def ants_to_sitk(img_ants: ants.core.ants_image.ANTsImage) -> sitk.Image:
@@ -772,50 +503,6 @@ def get_fg_mask_bbox(
     )
 
     return fg_bbox
-
-
-def npy_make_onehot(
-        mask_npy: npt.NDArray[Any],
-        labels_list: List[int],
-) -> npt.NDArray[Any]:
-    """Convert a multi-class Numpy mask array to one-hot encoding.
-
-    Args:
-        mask_npy: Input multi-class mask as a numpy array.
-        labels_list: List of unique labels for one-hot encoding.
-
-    Returns:
-        mask_onehot: One-hot encoded mask as a numpy array.
-    """
-    mask_onehot = np.zeros((*mask_npy.shape, len(labels_list)))
-    for i, current_label in enumerate(labels_list):
-        mask_onehot[i] = mask_npy == current_label
-    return mask_onehot
-
-
-def npy_fix_labels(
-        mask_npy: npt.NDArray[Any],
-        labels_list: List[int],
-) -> npt.NDArray[Any]:
-    """Adjust labels in a multi-class mask to match a specified list.
-
-    This function is used to correct the labels in a mask to ensure they match
-    a given list of labels. The function assumes that the input mask contains
-    integer labels starting from 0 to the length of the labels list. An example
-    of where this function is useful is for the BraTS 2020 dataset, which
-    has labels 0, 1, 2, 4. We train the model with labels 0, 1, 2, 3, and then
-    update the labels in the predicted mask to match the original labels.
-
-    Args:
-        mask_npy: Input multi-class mask as a numpy array.
-        labels_list: List of unique labels to match.
-
-    Returns:
-        mask_npy: Updated mask with adjusted labels.
-    """
-    for i, current_label in enumerate(labels_list):
-        mask_npy[mask_npy == i] = current_label
-    return mask_npy
 
 
 def aniso_intermediate_resample(
@@ -1035,212 +722,3 @@ def get_best_patch_size(
         else:
             patch_size.append(int(2 ** np.floor(np.log2(med_sz))))
     return patch_size
-
-
-class ConstantSchedule:
-    """Constant schedule for boundary loss weighting.
-
-    Boundary loss weightings are defined as follows:
-
-    total_loss = (1 - alpha) * region_loss + alpha * boundary_loss
-
-    In this case, we set alpha to be a constant value. The value of alpha
-    must be between 0 and 1.
-
-    Attributes:
-        constant: Constant value for the schedule.
-
-    Raises:
-        ValueError: If the constant value is not between 0 and 1.
-    """
-    def __init__(self, constant):
-        if not 0 <= constant <= 1:
-            raise ValueError("Constant value must be between 0 and 1.")
-        self.constant = constant
-
-    def __call__(self, epoch: int) -> float:
-        return self.constant
-
-
-class StepSchedule:
-    """Step schedule for boundary loss weighting.
-
-    This class implements a step schedule for adjusting the weighting between
-    a region and boundary loss during training. The schedule reduces the weight
-    of the region loss in a stepwise fashion after a specified number of epochs.
-
-    Attributes:
-        step_length: Number of epochs for each step.
-        num_steps: Total number of steps.
-        num_epochs: Total number of epochs.
-    """
-    def __init__(self, num_epochs, step_length):
-        self.step_length = step_length
-        self.num_steps = num_epochs // step_length
-        self.num_epochs = num_epochs + step_length
-
-    def __call__(self, epoch: int) -> float:
-        if epoch >= self.num_epochs - self.step_length:
-            return 0
-        step = epoch // self.step_length
-        return max(0, 1 - step / self.num_steps)
-
-
-class CosineSchedule:
-    """Cosine schedule for boundary loss weighting.
-
-    This class implements a cosine schedule for adjusting the weighting between
-    a region and boundary loss during training. The schedule smoothly reduces
-    the weight of the region loss over the course of training.
-
-    Attributes:
-        num_epochs: Total number of epochs.
-        min_val: Minimum value for the schedule.
-        max_val: Maximum value for the schedule.
-    """
-    def __init__(self, num_epochs, min_val=0, max_val=1):
-        self.num_epochs = num_epochs - 1
-        self.min_val = min_val
-        self.max_val = max_val
-
-    def __call__(self, epoch: int) -> float:
-        cos_out = (1 + np.cos(np.pi * epoch / self.num_epochs)) / 2
-        return self.min_val + (self.max_val - self.min_val) * cos_out
-
-
-class LinearSchedule:
-    """
-    Linear schedule for boundary loss weighting.
-
-    This class implements a linear schedule for adjusting the weighting between
-    a region and boundary loss during training. The schedule linearly reduces
-    the weight of the region loss over the course of training after an initial
-    pause defined as a number of epochs.
-
-    Attributes:
-        num_epochs: Total number of epochs.
-        init_pause: Number of epochs to pause before starting to reduce the
-            weight.
-    """
-
-    def __init__(self, num_epochs: int, init_pause: int):
-        self.num_epochs = num_epochs - 1
-        self.init_pause = init_pause
-        self.denominator = num_epochs - init_pause
-
-    def __call__(self, epoch: int) -> float:
-        if epoch > self.init_pause:
-            current_value = float(epoch - self.init_pause) / self.denominator
-            return min(1, max(0, 1.0 - current_value))
-        return 1.0
-
-
-class AlphaSchedule:
-    """Group of schedules for boundary loss weighting.
-
-    This class combines multiple scheduling strategies for adjusting the
-    weighting between a region and boundary loss during training.
-
-    Attributes:
-        schedule: Type of schedule to use.
-        constant: Constant weighting schedule.
-        linear: Linear weighting schedule.
-        step: Step weighting schedule.
-        cosine: Cosine weighting schedule.
-    """
-    def __init__(self, n_epochs, schedule, **kwargs):
-        self.schedule = schedule
-        self.constant = ConstantSchedule(constant=kwargs["constant"])
-        self.linear = LinearSchedule(n_epochs, init_pause=kwargs["init_pause"])
-        self.step = StepSchedule(
-            n_epochs - kwargs["step_length"], step_length=kwargs["step_length"]
-        )
-        self.cosine = CosineSchedule(n_epochs)
-
-    def __call__(self, epoch: int) -> float:
-        if self.schedule == "constant":
-            return float(self.constant(epoch))
-        if self.schedule == "linear":
-            return float(self.linear(epoch))
-        if self.schedule == "step":
-            return float(self.step(epoch))
-        if self.schedule == "cosine":
-            return float(self.cosine(epoch))
-        raise ValueError(f"Received invalid schedule type {self.schedule}.")
-
-
-def get_epochs_and_validation_params(
-        mist_arguments: argparse.Namespace,
-        num_train_examples: int,
-        num_optimization_steps: int,
-        validate_every_n_steps: int,
-) -> Dict[str, int]:
-    """Get number of epochs and validation parameters based on user input.
-
-    Args:
-        mist_arguments: Command line arguments.
-        num_train_examples: Number of training examples.
-        num_optimization_steps: Number of optimization steps.
-        validate_every_n_steps: Number of steps between each validation.
-
-    Returns:
-        Dictionary containing the following key-value pairs:
-            steps_per_epoch: Number of steps per epoch.
-            epochs: Number of epochs.
-            validate_every_n_epochs: Number of epochs between each validation.
-            validate_after_n_epochs: Number of epochs before starting
-                validation.
-
-    Raises:
-        ValueError: If validate_after_n_epochs is greater than epochs or a
-            negative value other than -1.
-    """
-    # Get steps per epoch if not given by user.
-    if mist_arguments.steps_per_epoch is None:
-        steps_per_epoch = num_train_examples // mist_arguments.batch_size
-    else:
-        steps_per_epoch = mist_arguments.steps_per_epoch
-
-    # Get default number of epochs per fold. This is defined as
-    # 250000 / steps_per_epoch.
-    if mist_arguments.epochs is None:
-        epochs = num_optimization_steps // steps_per_epoch
-    else:
-        epochs = mist_arguments.epochs
-
-    # Get number of epochs between each validation. We validate every
-    # 250 steps by default.
-    if mist_arguments.validate_every_n_epochs is None:
-        validate_every_n_epochs = validate_every_n_steps // steps_per_epoch
-
-        # Ensure that we validate at most once per epoch.
-        validate_every_n_epochs = max(1, validate_every_n_epochs)
-    else:
-        validate_every_n_epochs = mist_arguments.validate_every_n_epochs
-
-    # Get number of epochs before starting validation. By default, we start
-    # validation after the first epoch. Otherwise, we start validation after
-    # some user-specified number of epochs.
-    validate_after_n_epochs = mist_arguments.validate_after_n_epochs
-    if validate_after_n_epochs > epochs and epochs > 0:
-        raise ValueError(
-            "validate_after_n_epochs must be less than or equal to epochs. Got "
-            f"validate_after_n_epochs = {validate_after_n_epochs} and epochs = "
-            f"{epochs}."
-        )
-
-    if validate_after_n_epochs < 0 and epochs > 0:
-        if validate_after_n_epochs != -1:
-            raise ValueError(
-                "The only valid negative value for validate_after_n_epochs is "
-                f"-1. Got {validate_after_n_epochs}."
-            )
-        validate_after_n_epochs = epochs
-
-    # Format output as dictionary.
-    return {
-        "steps_per_epoch": steps_per_epoch,
-        "epochs": epochs,
-        "validate_every_n_epochs": validate_every_n_epochs,
-        "validate_after_n_epochs": validate_after_n_epochs,
-    }

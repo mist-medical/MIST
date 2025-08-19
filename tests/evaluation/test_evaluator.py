@@ -81,7 +81,9 @@ def test_validate_evaluation_classes_zero_label():
 # Test initialization of Evaluator. This tests that the Evaluator class
 # initializes correctly with valid inputs and that it sets up the results
 # dataframe and console print functionality.
-@mock.patch("mist.evaluation.evaluator.utils.initialize_results_dataframe")
+@mock.patch(
+    "mist.evaluation.evaluator.evaluation_utils.initialize_results_dataframe"
+)
 def test_evaluator_initialization(mock_init_df, mock_valid_inputs):
     df, classes, output_path, metrics = mock_valid_inputs
     mock_df = pd.DataFrame()
@@ -506,8 +508,10 @@ def dummy_eval_inputs(tmp_path):
     return df, classes, str(output_csv_path), metrics
 
 
-@mock.patch("mist.evaluation.evaluator.utils.compute_results_stats")
-@mock.patch("mist.evaluation.evaluator.utils.initialize_results_dataframe")
+@mock.patch("mist.evaluation.evaluator.evaluation_utils.compute_results_stats")
+@mock.patch(
+    "mist.evaluation.evaluator.evaluation_utils.initialize_results_dataframe"
+)
 @mock.patch("mist.evaluation.evaluator.utils.get_progress_bar")
 @mock.patch("mist.evaluation.evaluator.Evaluator._evaluate_single_patient")
 @mock.patch("mist.evaluation.evaluator.Evaluator._load_patient_data")
@@ -569,11 +573,11 @@ def test_run_method_success(
 
 @mock.patch("mist.evaluation.evaluator.utils.get_progress_bar")
 @mock.patch(
-    "mist.evaluation.evaluator.utils.compute_results_stats",
+    "mist.evaluation.evaluator.evaluation_utils.compute_results_stats",
     side_effect=lambda x: x
 )
 @mock.patch(
-    "mist.evaluation.evaluator.utils.initialize_results_dataframe",
+    "mist.evaluation.evaluator.evaluation_utils.initialize_results_dataframe",
     return_value=pd.DataFrame()
 )
 def test_run_collects_patient_errors(
@@ -623,11 +627,11 @@ def test_run_collects_patient_errors(
 
 @mock.patch("mist.evaluation.evaluator.utils.get_progress_bar")
 @mock.patch(
-    "mist.evaluation.evaluator.utils.compute_results_stats",
+    "mist.evaluation.evaluator.evaluation_utils.compute_results_stats",
     side_effect=lambda x: x
 )
 @mock.patch(
-    "mist.evaluation.evaluator.utils.initialize_results_dataframe",
+    "mist.evaluation.evaluator.evaluation_utils.initialize_results_dataframe",
     return_value=pd.DataFrame()
 )
 def test_run_handles_exceptions(
