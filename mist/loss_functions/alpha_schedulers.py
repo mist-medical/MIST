@@ -76,11 +76,17 @@ class LinearScheduler:
         return max(0.0, 1.0 - progress)
 
 
+ALPHA_SCHEDULER_REGISTRY = {
+    "constant": ConstantScheduler,
+    "linear": LinearScheduler,
+}
+
+
 def get_alpha_scheduler(name: str, **kwargs):
     """Factory to get alpha scheduler by name.
 
     Args:
-        name: Name of the scheduler ('constant' or 'linear').
+        name: Name of the scheduler.
         **kwargs: Keyword arguments to pass to the scheduler.
 
     Returns:
@@ -89,10 +95,12 @@ def get_alpha_scheduler(name: str, **kwargs):
     Raises:
         ValueError: If the scheduler name is unrecognized.
     """
-    if name == "constant":
-        return ConstantScheduler(**kwargs)
-    if name == "linear":
-        return LinearScheduler(**kwargs)
-    raise ValueError(
-        f"Unknown scheduler: {name}. Choose from 'constant', 'linear'."
-    )
+    try:
+        return ALPHA_SCHEDULER_REGISTRY[name](**kwargs)
+    except KeyError as e:
+        raise ValueError(f"Unknown scheduler: {name}") from e
+
+
+def list_alpha_schedulers():
+    """List available alpha scheduler names."""
+    return list(ALPHA_SCHEDULER_REGISTRY.keys())

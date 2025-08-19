@@ -1,119 +1,76 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """Handle command line arguments for main MIST pipelines."""
 from typing import Union
-
 import argparse
-from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
+from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser # pylint: disable=unused-import
 
 # MIST imports.
-from mist.metrics.metrics_registry import list_registered_metrics
 from mist.models.model_registry import list_registered_models
+from mist.training.lr_schedulers.lr_scheduler_registry import list_lr_schedulers
+from mist.training.optimizers.optimizer_registry import list_optimizers
+from mist.loss_functions.loss_registry import list_registered_losses
+from mist.loss_functions.alpha_schedulers import list_alpha_schedulers
 
 
 def positive_int(value: Union[str, int]) -> int:
-    """Check if the input is a positive integer.
-
-    Args:
-        value: Input value. This can be a string or an integer.
-
-    Returns:
-        integer_value: The input value as an integer.
-
-    Raises:
-        argparse.ArgumentTypeError: If the converted value is not a positive
-            integer or if the converted string is not an integer.
-    """
+    """Check if the input is a positive integer."""
     integer_value = int(value)
     if integer_value <= 0:
         raise argparse.ArgumentTypeError(
-            f"Argparse error. Expected a positive integer but got {value}"
+            f"Argparse error. Expected a positive integer but got {value}."
         )
     return integer_value
 
 
 def positive_float(value: Union[str, float]) -> float:
-    """Check if the input is a positive integer.
-
-    Args:
-        value: Input value. This can be a string or an integer.
-
-    Returns:
-        float_value: The input value as an integer.
-
-    Raises:
-        argparse.ArgumentTypeError: If the converted value is not a positive
-            float or if the converted string is not an float.
-    """
+    """Check if the input is a positive float."""
     float_value = float(value)
     if float_value <= 0:
         raise argparse.ArgumentTypeError(
-            f"Argparse error. Expected a positive integer but got {value}"
+            f"Argparse error. Expected a positive float but got {value}."
         )
     return float_value
 
 
 def non_negative_int(value: Union[str, int]) -> int:
-    """Check if the input is a non-negative integer.
-
-    Args:
-        value: Input value. This can be a string or an integer.
-
-    Returns:
-        integer_value: The input value as an integer.
-
-    Raises:
-        argparse.ArgumentTypeError: If the converted value is not a non-negative
-            integer
-    """
+    """Check if the input is a non-negative integer."""
     integer_value = int(value)
     if integer_value < 0:
         raise argparse.ArgumentTypeError(
-            f"Argparse error. Expected a non-negative integer but got {value}"
+            f"Argparse error. Expected a non-negative integer but got {value}."
         )
     return integer_value
 
 
 def float_0_1(value: Union[str, float]) -> float:
-    """Check if the input is a float between 0 and 1.
-
-    Args:
-        value: Input value. This can be a string or a float.
-
-    Returns:
-        float_value: The input value as a float.
-
-    Raises:
-        argparse.ArgumentTypeError: If the converted value is not a float
-            between 0 and 1.
-    """
+    """Check if the input is a float in [0, 1]."""
     float_value = float(value)
     if not 0 <= float_value <= 1:
         raise argparse.ArgumentTypeError(
-            "Argparse error. Expected a float from range (0, 1), "
-            f"but got {value}"
+            "Argparse error. Expected a float from range [0, 1], "
+            f"but got {value}."
         )
     return float_value
 
 
 def str2bool(value: Union[str, bool]) -> bool:
-    """Convert a string to a boolean value.
-
-    Args:
-        value: Input string or boolean value.
-
-    Returns:
-        bool_value: The input string as a boolean value.
-
-    Raises:
-        argparse.ArgumentTypeError: If the input string is not a boolean value.
-    """
+    """Convert a string to a boolean value."""
     if isinstance(value, bool):
         return value
-    if value.lower() in ("yes", "true", "t", "y", "1"):
+    v = value.lower()
+    if v in ("yes", "true", "t", "y", "1"):
         return True
-    elif value.lower() in ("no", "false", "f", "n", "0"):
+    if v in ("no", "false", "f", "n", "0"):
         return False
-    else:
-        raise argparse.ArgumentTypeError("Boolean value expected!")
+    raise argparse.ArgumentTypeError("Boolean value expected!")
 
 
 class ArgParser(ArgumentParser):
@@ -123,373 +80,105 @@ class ArgParser(ArgumentParser):
         return super().add_argument(*args, **kwargs)
 
     def flag(self, *args, **kwargs):
-        """Add a flag to the parser."""
+        """Add a flag to the parser (store_true)."""
         return super().add_argument(*args, action="store_true", **kwargs)
 
     def boolean_flag(self, *args, **kwargs):
-        """Add a boolean flag to the parser."""
+        """Add a boolean flag with optional explicit true/false."""
         return super().add_argument(
             *args,
             type=str2bool,
             nargs="?",
             const=True,
             metavar="BOOLEAN",
-            **kwargs
+            **kwargs,
         )
 
+# pylint: disable=line-too-long
+def add_io_args(parser: ArgParser) -> None:
+    """Add input/output arguments to the parser.
 
-def get_main_args():
-    """Get command line arguments for the main MIST pipeline."""
-
-    # Create an argument parser.
-    parser = ArgParser(formatter_class=ArgumentDefaultsHelpFormatter)
-
-    # Set execution mode for MIST.
-    parser.arg(
-        "--exec-mode",
-        type=str,
-        default="all",
-        choices=["all", "analyze", "preprocess", "train"],
-        help="Run all of the MIST pipeline or an individual component"
-    )
-
-    # Path to dataset description.
-    parser.arg("--data", type=str, help="Path to dataset json file")
-
-    # Set number of GPUs to use. This defaults to all available GPUs.
-    parser.arg(
-        "--gpus",
-        nargs="+",
-        default=[-1],
-        type=int,
-        help="Which gpu(s) to use, defaults to all available GPUs"
-    )
-
-    # Set the master port for multi-gpu training.
-    parser.arg(
-        "--master-port",
-        type=str,
-        default="12355",
-        help="Master port for multi-gpu training"
-    )
-
-    # Set the random seed for reproducibility.
-    parser.arg(
-        "--seed_val", type=non_negative_int, default=42, help="Random seed"
-    )
-
-    # Enable test time augmentation.
-    parser.boolean_flag(
-        "--tta", default=False, help="Enable test time augmentation"
-    )
-
-    # Enable overwriting of previous results.
-    parser.boolean_flag(
-        "--overwrite",
-        default=False,
-        help="Overwrites previous run at specified results folder"
-    )
+    Pipelines that use these arguments are:
+        - Analyze
+        - Preprocess
+        - Train
+    """
+    g = parser.add_argument_group("I/O")
+    g.add_argument("--data", type=str, help="Path to dataset JSON file.")
+    g.add_argument("--results", type=str, help="Path to output of MIST pipeline.")
+    g.add_argument("--numpy", type=str, help="Path to save preprocessed NumPy data.")
+    parser.boolean_flag("--overwrite", default=False, help="Overwrite previous configuration/results.")
 
 
-    # Set output directory for MIST pipeline.
-    parser.arg("--results", type=str, help="Path to output of MIST pipeline")
+def add_hardware_args(parser: ArgParser) -> None:
+    """Add hardware-related arguments to the parser.
 
-    # Set path to preprocessed numpy data.
-    parser.arg("--numpy", type=str, help="Path to save preprocessed numpy data")
+    Pipelines that use these arguments are:
+        - Train
+    """
+    g = parser.add_argument_group("Hardware")
+    g.add_argument("--gpus", nargs="+", default=[-1], type=int, help="IDs of GPUs to use; use -1 for CPU.")
 
-    # Enable automatic mixed precision.
-    parser.boolean_flag(
-        "--amp",
-        default=False,
-        help="Enable automatic mixed precision (recommended)"
-    )
 
-    # Set training hyperparameters.
-    parser.arg("--batch-size", type=positive_int, help="Batch size")
-    parser.arg(
-        "--patch-size",
-        nargs="+",
-        type=int,
-        help="Height, width, and depth of patch size"
-    )
-    parser.arg(
-        "--validate-every-n-epochs",
-        type=positive_int,
-        help="Validate every n epochs"
-    )
-    parser.arg(
-        "--validate-after-n-epochs",
-        type=positive_int,
-        default=1,
-        help="Start validation after n epochs. If -1, validate only on the last epoch"
-    )
-    parser.arg(
-        "--max-patch-size",
-        default=[256, 256, 256],
-        nargs="+",
-        type=int,
-        help="Max patch size"
-    )
-    parser.arg(
-        "--val-percent",
-        type=float_0_1,
-        default=0,
-        help="Percentage to split training data for validation"
-    )
-    parser.arg(
-        "--learning-rate",
-        type=positive_float,
-        default=3e-4,
-        help="Learning rate"
-    )
-    parser.arg(
-        "--lr-scheduler",
-        type=str,
-        default="constant",
-        choices=[
-            "constant",
-            "polynomial",
-            "cosine",
-            "cosine-warm-restarts",
-        ],
-        help="Learning rate scheduler"
-    )
+def add_training_args(parser: ArgParser) -> None:
+    """Add training-related arguments to the parser.
 
-    # Augmentation parameters.
-    parser.boolean_flag(
-        "--no-augmentation",
-        default=False,
-        help="Turn off data augmentation"
-    )
-    parser.boolean_flag(
-        "--augmentation-no-flips",
-        default=False,
-        help="Turn off flips during augmentation"
-    )
-    parser.boolean_flag(
-        "--augmentation-no-blur",
-        default=False,
-        help="Turn off blur during augmentation"
-    )
-    parser.boolean_flag(
-        "--augmentation-no-noise",
-        default=False,
-        help="Turn off noise during augmentation"
-    )
-    parser.boolean_flag(
-        "--augmentation-no-zoom",
-        default=False,
-        help="Turn off zoom during augmentation"
-    )
-    parser.boolean_flag(
-        "--augmentation-no-brightness",
-        default=False,
-        help="Turn off brightness during augmentation"
-    )
-    parser.boolean_flag(
-        "--augmentation-no-contrast",
-        default=False,
-        help="Turn off contrast during augmentation"
-    )
+    Pipelines that use these arguments are:
+        - Analyze
+        - Train
+    """
+    g = parser.add_argument_group("Training")
+    g.add_argument("--epochs", type=non_negative_int, help="Number of epochs per fold.")
+    g.add_argument("--batch-size-per-gpu", type=positive_int, help="Batch size per GPU/CPU worker.")
+    g.add_argument("--patch-size", nargs=3, type=positive_int, metavar=("X", "Y", "Z"), help="Patch size as three ints: X Y Z.")
+    g.add_argument("--learning-rate", type=positive_float, help="Learning rate.")
+    g.add_argument("--lr-scheduler", type=str, choices=list_lr_schedulers(), help="Learning rate scheduler.")
+    g.add_argument("--optimizer", type=str, choices=list_optimizers(), help="Optimizer to use.")
+    g.add_argument("--l2-penalty", type=positive_float, help="L2 penalty (weight decay).")
+    parser.boolean_flag("--use-dtms", default=False, help="Use DTMs during training.")
 
-    # Optimizer parameters.
-    parser.arg(
-        "--optimizer",
-        type=str,
-        default="adam",
-        choices=["adam", "sgd", "adamw"],
-        help="Pick which optimizer to use"
-    )
-    parser.arg(
-        "--sgd-momentum", type=float_0_1, default=0, help="Momentum for SGD"
-    )
-    parser.boolean_flag(
-        "--clip-norm", default=False, help="Use gradient clipping"
-    )
-    parser.arg(
-        "--clip-norm-max",
-        type=positive_float,
-        default=1.0,
-        help="Max threshold for global norm clipping"
-    )
 
-    # Network architecture parameters.
-    parser.arg(
-        "--model",
-        type=str,
-        default="nnunet",
-        choices=list_registered_models(),
-        help="Pick which network architecture to use"
-    )
-    parser.boolean_flag(
-        "--use-res-block",
-        default=False,
-        help="Use residual blocks for nnUNet, FMG-Net, W-Net, or MedNeXt"
-    )
-    parser.boolean_flag(
-        "--pocket",
-        default=False,
-        help="Use pocket version of nnUNet or MedNeXt"
-    )
-    parser.boolean_flag(
-        "--deep-supervision",
-        default=False,
-        help="Use deep supervision for nnUNet, FMG-Net, W-Net, or MedNeXt"
-    )
+def add_model_args(parser: ArgParser) -> None:
+    """Add model-related arguments to the parser.
 
-    # Regularization parameters.
-    parser.boolean_flag("--l2-reg", default=False, help="Use L2 regularization")
-    parser.arg(
-        "--l2-penalty", type=positive_float, default=1e-5, help="L2 penalty"
-    )
-    parser.boolean_flag("--l1-reg", default=False, help="Use L1 regularization")
-    parser.arg(
-        "--l1-penalty", type=positive_float, default=1e-5, help="L1 penalty"
-    )
+    Pipelines that use these arguments are:
+        - Train
+    """
+    g = parser.add_argument_group("Model")
+    g.add_argument("--model", type=str, choices=list_registered_models(), help="Network architecture.")
+    parser.boolean_flag("--pocket", default=False, help="Use pocket version of model (if available).")
 
-    # Data loading parameters.
-    parser.arg(
-        "--oversampling",
-        type=float_0_1,
-        default=0.6,
-        help="Probability of crop centered on foreground voxel"
-    )
-    parser.arg(
-        "--num-workers",
-        type=positive_int,
-        default=8,
-        help="Number of workers to use for data loading"
-    )
 
-    # Preprocessing parameters.
-    parser.boolean_flag(
-        "--no-preprocess", default=False, help="Turn off preprocessing"
-    )
-    parser.boolean_flag(
-        "--use-dtms",
-        default=False,
-        help="Compute and use DTMs during training"
-    )
-    parser.boolean_flag(
-        "--normalize-dtms",
-        default=False,
-        help="Normalize DTMs to have values between -1 and 1"
-    )
+def add_preprocessing_args(parser: ArgParser) -> None:
+    """Add preprocessing-related arguments to the parser.
 
-    # Loss function parameters.
-    parser.arg(
-        "--loss",
-        type=str,
-        default="dice-ce",
-        choices=[
-            "dice-ce",
-            "dice",
-            "bl",
-            "hdl",
-            "gsl",
-            "cldice"
-        ],
-        help="Pick loss function for training"
-    )
-    parser.boolean_flag(
-        "--exclude-background",
-        default=False,
-        help="Exclude background class from loss computation."
-    )
-    parser.arg(
-        "--boundary-loss-schedule",
-        default="constant",
-        choices=["constant", "linear", "step", "cosine"],
-        help="Weighting schedule for boundary losses"
-    )
-    parser.arg(
-        "--loss-schedule-constant",
-        type=float_0_1,
-        default=0.5,
-        help="Constant for fixed alpha schedule"
-    )
-    parser.arg(
-        "--linear-schedule-pause",
-        type=positive_int,
-        default=5,
-        help="Number of epochs before linear alpha scheduler starts"
-    )
-    parser.arg(
-        "--step-schedule-step-length",
-        type=positive_int,
-        default=5,
-        help="Number of epochs before in each section of the step-wise alpha scheduler"
-    )
+    Pipelines that use these arguments are:
+        - Analyze
+        - Preprocess
+    """
+    g = parser.add_argument_group("Preprocessing") # pylint: disable=unused-variable
+    parser.boolean_flag("--no-preprocess", default=False, help="Turn off preprocessing.")
+    parser.boolean_flag("--compute-dtms", default=False, help="Compute DTMs during preprocessing.")
 
-    # Inference parameters.
-    parser.arg(
-        "--sw-overlap",
-        type=float_0_1,
-        default=0.5,
-        help="Amount of overlap between patches during sliding window inference at test time"
-    )
-    parser.arg(
-        "--val-sw-overlap",
-        type=float_0_1,
-        default=0.5,
-        help="Amount of overlap between patches for sliding window inference during validation"
-    )
-    parser.arg(
-        "--blend-mode",
-        type=str,
-        choices=["gaussian", "constant"],
-        default="gaussian",
-        help="How to blend output of overlapping windows"
-    )
 
-    # Validation parameters.
-    parser.arg(
-        "--nfolds",
-        type=positive_int,
-        default=5,
-        help="Number of cross-validation folds"
-    )
-    parser.arg(
-        "--folds",
-        nargs="+",
-        default=[0, 1, 2, 3, 4],
-        type=int,
-        help="Specify which folds to run"
-    )
+def add_loss_args(parser: ArgParser) -> None:
+    """Add loss function arguments to the parser.
 
-    # Training parameters.
-    parser.arg(
-        "--steps-per-epoch",
-        type=positive_int,
-        help="Steps per epoch. By default this is training_dataset_size // batch_size"
-    )
-    parser.arg(
-        "--epochs",
-        type=non_negative_int,
-        help="Number of epochs per fold. By default, this is 250000 // steps_per_epoch"
-    )
+    Pipelines that use these arguments are:
+        - Train
+    """
+    g = parser.add_argument_group("Loss")
+    g.add_argument("--loss", type=str, choices=list_registered_losses(), help="Loss function for training.")
+    g.add_argument("--composite-loss-weighting", type=str, choices=list_alpha_schedulers(), help="Weighting schedule for composite losses.")
 
-    # Evaluation parameters.
-    parser.arg(
-        "--metrics",
-        nargs="+",
-        default=["dice", "haus95"],
-        choices=list_registered_metrics(),
-        help="List of metrics to use for evaluation"
-    )
-    parser.arg(
-        "--surf-dice-tol",
-        type=positive_float,
-        default=1.0,
-        help="Tolerance for surface dice"
-    )
 
-    # Uncertainty quantification parameters.
-    parser.boolean_flag(
-        "--output-std",
-        default=False,
-        help="Output standard deviation of predictions for ensemble predictions"
-    )
+def add_cv_args(parser: ArgParser) -> None:
+    """Add cross-validation arguments to the parser.
 
-    args = parser.parse_args()
-    return args
+    Pipelines that use these arguments are:
+        - Analyze
+        - Train
+    """
+    g = parser.add_argument_group("Cross-Validation")
+    g.add_argument("--nfolds", type=positive_int, default=5, help="Number of cross-validation folds.")
+    g.add_argument("--folds", nargs="+", type=int, help="Specify which folds to run.")
