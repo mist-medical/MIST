@@ -320,8 +320,14 @@ def patch_dist(monkeypatch):
 
     class FakeDist:
         """Inert torch.distributed replacement for testing."""
-
         _initialized = False
+        _rank = 0
+        _world_size = 1
+
+        @staticmethod
+        def is_available():
+            """Pretend torch.distributed is available."""
+            return True
 
         @staticmethod
         def is_initialized():
@@ -329,10 +335,22 @@ def patch_dist(monkeypatch):
             return FakeDist._initialized
 
         @staticmethod
+        def get_rank():
+            """Return the rank set at init_process_group time."""
+            return FakeDist._rank
+
+        @staticmethod
+        def get_world_size():
+            """Return the world size set at init_process_group time."""
+            return FakeDist._world_size
+
+        @staticmethod
         def init_process_group(backend, rank, world_size):
             """Initialize the fake process group."""
             calls["init"] += 1
             FakeDist._initialized = True
+            FakeDist._rank = int(rank)
+            FakeDist._world_size = int(world_size)
 
         @staticmethod
         def destroy_process_group():
@@ -357,10 +375,9 @@ def patch_dist(monkeypatch):
 
         ReduceOp = SimpleNamespace(SUM=0)
 
-    # Patch the torch.distributed used inside the module.
+    # Patch the torch.distributed used inside the module under test.
     monkeypatch.setattr(bt, "dist", FakeDist)
     return calls
-
 
 def test_update_num_gpus_and_batchsize(tmp_pipeline, mist_args, monkeypatch):
     """Ensure GPU count is written to config and batch size is computed."""

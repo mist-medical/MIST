@@ -1,6 +1,7 @@
 """Base trainer class for MIST."""
 from abc import ABC, abstractmethod
 import os
+import random
 import numpy as np
 import pandas as pd
 import rich
@@ -83,6 +84,35 @@ class BaseTrainer(ABC):
         raise NotImplementedError( # pragma: no cover
             "validation_step method must be implemented in the subclass."
         )
+
+    def _set_seed(self, seed: int) -> None:
+        """Seed Python, NumPy, and PyTorch RNGs (DDP-aware).
+
+        Uses the provided base `seed`, offset by the process rank so that each 
+        rank gets a distinct but reproducible RNG stream. Also sets
+        PYTHONHASHSEED for consistent hashing across runs.
+        """
+        # Determine rank (works before/after dist.init_process_group).
+        if dist.is_available() and dist.is_initialized():
+            rank = dist.get_rank()
+        else:
+            # Fall back to env (set by torchrun) or 0.
+            rank = int(os.environ.get("RANK", 0))
+
+        final_seed = int(seed) + int(rank)
+
+        # Python and env.
+        os.environ["PYTHONHASHSEED"] = str(final_seed)
+        random.seed(final_seed)
+
+        # NumPy.
+        np.random.seed(final_seed)
+
+        # PyTorch (CPU & CUDA).
+        torch.manual_seed(final_seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(final_seed)
+            torch.cuda.manual_seed_all(final_seed)
 
     def _overwrite_config_from_args(self):
         """Overwrite certain config parameters from command line arguments."""
@@ -394,6 +424,9 @@ class BaseTrainer(ABC):
         # Set up for distributed training.
         self.setup(rank, world_size)
         torch.cuda.set_device(rank)
+
+        # Set random seed for reproducibility.
+        self._set_seed(self.config["training"]["seed"])
 
         # Get the fold data.
         fold_data = self.folds[fold]
