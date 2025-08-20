@@ -11,12 +11,12 @@
 """Converts data from csv files to MIST format."""
 import os
 from typing import Optional
-
 import pprint
 import rich
 import pandas as pd
 
 # MIST imports.
+from mist.conversion_tools.conversion_utils import copy_image_from_source_to_dest
 from mist.runtime import utils
 
 # Set up console for rich text.
@@ -66,7 +66,7 @@ def copy_csv_data(
                 if not os.path.exists(mask_source):
                     error_messages += f"Mask {mask_source} does not exist!\n"
                     continue
-                utils.copy_image_from_source_to_dest(mask_source, mask_dest)
+                copy_image_from_source_to_dest(mask_source, mask_dest)
 
             # Copy images to new patient folder
             image_keys = list(patient_dict.keys())[image_start_idx:]
@@ -78,7 +78,7 @@ def copy_csv_data(
                 if not os.path.exists(image_source):
                     error_messages += f"Image {image_source} does not exist!\n"
                     continue
-                utils.copy_image_from_source_to_dest(image_source, image_dest)
+                copy_image_from_source_to_dest(image_source, image_dest)
 
     if error_messages:
         console.print(rich.text.Text(error_messages)) # type: ignore

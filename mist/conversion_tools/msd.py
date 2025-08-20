@@ -11,13 +11,13 @@
 """Converts medical segmentation decathlon dataset to MIST dataset."""
 import os
 from typing import Dict, Any
-
 import pprint
 import rich
 import numpy as np
 import SimpleITK as sitk
 
 # MIST imports.
+from mist.conversion_tools.conversion_utils import copy_image_from_source_to_dest
 from mist.runtime import utils
 
 console = rich.console.Console()
@@ -120,14 +120,14 @@ def copy_msd_data(
                     )
             else:
                 # Directly copy the image if only one modality.
-                utils.copy_image_from_source_to_dest(
+                copy_image_from_source_to_dest(
                     image_path,
                     os.path.join(patient_directory, f"{modalities[0]}.nii.gz")
                 )
 
             # Copy mask for training data.
             if is_training:
-                utils.copy_image_from_source_to_dest(
+                copy_image_from_source_to_dest(
                     mask_path,
                     os.path.join(patient_directory, "mask.nii.gz")
                 )
