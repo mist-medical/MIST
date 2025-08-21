@@ -1,6 +1,19 @@
+# Copyright (c) MIST Imaging LLC.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """Base trainer class for MIST."""
+from typing import Dict, Any
 from abc import ABC, abstractmethod
+from pathlib import Path
 import os
+import math
 import random
 import numpy as np
 import pandas as pd
@@ -21,6 +34,7 @@ from mist.loss_functions.losses.dice import DiceLoss
 from mist.loss_functions.alpha_schedulers import get_alpha_scheduler
 from mist.training.lr_schedulers.lr_scheduler_registry import get_lr_scheduler
 from mist.training.optimizers.optimizer_registry import get_optimizer
+from mist.training import training_utils
 from mist.training.trainers.trainer_constants import TrainerConstants
 from mist.runtime import progress_bar
 from mist.runtime import utils
@@ -31,16 +45,16 @@ class BaseTrainer(ABC):
     def __init__(self, mist_args):
         """Initialize the trainer class."""
         self.mist_args = mist_args
-        self.results_dir = self.mist_args.results
-        self.numpy_dir = self.mist_args.numpy
-        self.models_dir = os.path.join(self.results_dir, "models")
-        self.logs_dir = os.path.join(self.results_dir, "logs")
+        self.results_dir = Path(self.mist_args.results).expanduser().resolve()
+        self.numpy_dir = Path(self.mist_args.numpy).expanduser().resolve()
+        self.models_dir = self.results_dir / "models"
+        self.logs_dir = self.results_dir / "logs"
 
         # Required files.
-        paths_csv = os.path.join(self.results_dir, "train_paths.csv")
+        paths_csv = self.results_dir / "train_paths.csv"
         self.paths = pd.read_csv(paths_csv)
 
-        self.config_json = os.path.join(self.results_dir, "config.json")
+        self.config_json = self.results_dir / "config.json"
         self.config = utils.read_json_file(self.config_json)
 
         # Merge command line overrides into the config.
@@ -93,11 +107,14 @@ class BaseTrainer(ABC):
         PYTHONHASHSEED for consistent hashing across runs.
         """
         # Determine rank (works before/after dist.init_process_group).
-        if dist.is_available() and dist.is_initialized():
-            rank = dist.get_rank()
-        else:
-            # Fall back to env (set by torchrun) or 0.
-            rank = int(os.environ.get("RANK", 0))
+        rank = int(os.environ.get("RANK", 0))
+        try:
+            if getattr(dist, "is_initialized", lambda: False)():
+                get_rank = getattr(dist, "get_rank", None)
+                if callable(get_rank):
+                    rank = int(get_rank())
+        except Exception:
+            pass
 
         final_seed = int(seed) + int(rank)
 
@@ -243,7 +260,7 @@ class BaseTrainer(ABC):
         # labels. If we are using distance transform maps, we will also
         # create a dictionary with the training distance transform maps. We will
         # also determine the number of training steps per epoch, which is
-        # min(250, len(train_images) // batch_size).
+        # max(250, len(train_images) // batch_size).
         training = self.config["training"]
         self.folds = {}
         for fold in range(training["nfolds"]):
@@ -252,26 +269,22 @@ class BaseTrainer(ABC):
             test_ids = list(self.paths.loc[self.paths["fold"] == fold]["id"])
 
             # Get list of training images and labels.
-            train_images = utils.get_numpy_file_paths_list(
-                base_dir=self.numpy_dir,
-                folder="images",
+            train_images = training_utils.get_npy_paths(
+                data_dir=self.numpy_dir / "images",
                 patient_ids=train_ids,
             )
-            train_labels = utils.get_numpy_file_paths_list(
-                base_dir=self.numpy_dir,
-                folder="labels",
+            train_labels = training_utils.get_npy_paths(
+                data_dir= self.numpy_dir / "labels",
                 patient_ids=train_ids,
             )
 
             # Get list of validation images and labels.
-            val_images = utils.get_numpy_file_paths_list(
-                base_dir=self.numpy_dir,
-                folder="images",
+            val_images = training_utils.get_npy_paths(
+                data_dir=self.numpy_dir / "images",
                 patient_ids=test_ids,
             )
-            val_labels = utils.get_numpy_file_paths_list(
-                base_dir=self.numpy_dir,
-                folder="labels",
+            val_labels = training_utils.get_npy_paths(
+                data_dir=self.numpy_dir / "labels",
                 patient_ids=test_ids,
             )
 
@@ -279,9 +292,8 @@ class BaseTrainer(ABC):
             # distance transform maps.
             train_dtms = None
             if self._use_dtms():
-                train_dtms = utils.get_numpy_file_paths_list(
-                    base_dir=self.numpy_dir,
-                    folder="dtms",
+                train_dtms = training_utils.get_npy_paths(
+                    data_dir=self.numpy_dir / "dtms",
                     patient_ids=train_ids,
                 )
 
@@ -309,18 +321,29 @@ class BaseTrainer(ABC):
                 if self._use_dtms():
                     train_dtms, _ = maybe_dtms
 
+            # Sanity check the fold data.
+            training_utils.sanity_check_fold_data(
+                fold=fold,
+                use_dtms=self._use_dtms(),
+                train_images=train_images,
+                train_labels=train_labels,
+                val_images=val_images,
+                val_labels=val_labels,
+                train_dtms=train_dtms,
+            )
+
             # Save the fold configuration.
             self.folds[fold]["train_images"] = train_images
             self.folds[fold]["train_labels"] = train_labels
             self.folds[fold]["val_images"] = val_images
             self.folds[fold]["val_labels"] = val_labels
             self.folds[fold]["train_dtms"] = train_dtms
-            self.folds[fold]["steps_per_epoch"] = min(
+            self.folds[fold]["steps_per_epoch"] = max(
                 training["min_steps_per_epoch"],
-                len(train_images) // self.batch_size
+                math.ceil(len(train_images) / max(1, self.batch_size)),
             )
 
-    def build_components(self, rank: int, world_size: int) -> None:
+    def build_components(self, rank: int, world_size: int) -> Dict[str, Any]:
         """Build the model, loss function, and optimizer components."""
         training = self.config["training"]
 
@@ -331,18 +354,19 @@ class BaseTrainer(ABC):
             **self.config["model"]["params"]
         )
 
+        use_ddp = world_size > 1
         # Make batch normalization compatible with DDP. This only matters if
         # the model uses batch normalization layers. None of the current MIST
         # models use batch normalization, but this is a good practice to
         # ensure compatibility with DDP if a new model is added in the future.
-        model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
+        if use_ddp:
+            model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
 
         # Send model to device.
         model.to(torch.device(f"cuda:{rank}"))
 
-        # Set up model for distributed data parallel training if using multiple
-        # GPUs.
-        if world_size > 1:
+        # Set up model for distributed data parallel training.
+        if use_ddp:
             model = DDP(model, device_ids=[rank], find_unused_parameters=True)
 
         # Get loss function. First get the loss function from the registry.
@@ -402,7 +426,7 @@ class BaseTrainer(ABC):
 
     def setup(self, rank: int, world_size: int) -> None:
         """Initialize the process group for distributed training."""
-        if dist.is_initialized():
+        if dist.is_initialized() or world_size == 1:
             return
 
         # Set the environment variables for distributed training.
@@ -422,21 +446,22 @@ class BaseTrainer(ABC):
     def train_fold(self, fold: int, rank: int, world_size: int) -> None:
         """Generic training loop for a single fold."""
         # Set up for distributed training.
-        self.setup(rank, world_size)
+        use_ddp = world_size > 1
         torch.cuda.set_device(rank)
+        self.setup(rank, world_size)
 
         # Set random seed for reproducibility.
         self._set_seed(self.config["training"]["seed"])
 
         # Get the fold data.
         fold_data = self.folds[fold]
-        if len(fold_data["val_images"]) < world_size:
+        if use_ddp and len(fold_data["val_images"]) < world_size:
             raise ValueError(
                 "Not enough validation data for the number of GPUs. "
                 "Ensure that the validation set is large enough for the number "
                 "of GPUs being used or reduce the number of GPUs."
             )
-        val_steps = len(fold_data["val_images"]) // world_size
+        val_steps = math.ceil(len(fold_data["val_images"]) / max(1, world_size))
 
         # Build components for the fold.
         state = self.build_components(rank=rank, world_size=world_size)
@@ -449,16 +474,14 @@ class BaseTrainer(ABC):
         # Only log metrics on first process (i.e., rank 0).
         if rank == 0:
             # Compute running averages for training and validation losses.
-            running_train_loss = utils.RunningMean()
-            running_val_loss = utils.RunningMean()
+            running_train_loss = training_utils.RunningMean()
+            running_val_loss = training_utils.RunningMean()
 
             # Set up tensorboard summary writer.
-            logs_writer = SummaryWriter(
-                os.path.join(self.logs_dir, f"fold_{fold}")
-            )
+            logs_writer = SummaryWriter(str(self.logs_dir / f"fold_{fold}"))
 
             # Path and name for best model for this fold.
-            model_name = os.path.join(self.models_dir, f"fold_{fold}.pt")
+            model_name = str(self.models_dir / f"fold_{fold}.pt")
 
         # Stop training flag if we encounter nan or inf losses.
         stop_training = torch.tensor(
@@ -494,8 +517,11 @@ class BaseTrainer(ABC):
                         # Detach and aggregate across all ranks (mean).
                         with torch.no_grad():
                             loss_det = loss.detach()
-                            dist.all_reduce(loss_det, op=dist.ReduceOp.SUM)
-                            mean_loss = (loss_det / world_size).item()
+                            if use_ddp:
+                                dist.all_reduce(loss_det, op=dist.ReduceOp.SUM)
+                                mean_loss = (loss_det / world_size).item()
+                            else:
+                                mean_loss = loss_det.item()
 
                             # Check for NaN/Inf on rank 0
                             if not np.isfinite(mean_loss):
@@ -526,12 +552,14 @@ class BaseTrainer(ABC):
                     state["global_step"] += 1
 
                     # Aggregate training losses across ranks.
-                    with torch.no_grad():
-                        loss_det = loss.detach()
-                        dist.all_reduce(loss_det, op=dist.ReduceOp.SUM)
+                    if use_ddp:
+                        with torch.no_grad():
+                            loss_det = loss.detach()
+                            dist.all_reduce(loss_det, op=dist.ReduceOp.SUM)
 
             # Broadcast stop flag so all ranks exit together if needed.
-            dist.broadcast(stop_training, src=0)
+            if use_ddp:
+                dist.broadcast(stop_training, src=0)
             if stop_training.item() == 1:
                 if rank == 0:
                     logs_writer.close()
@@ -542,7 +570,8 @@ class BaseTrainer(ABC):
             state["lr_scheduler"].step()
 
             # Wait for all processes to finish the training part of the epoch.
-            dist.barrier()
+            if use_ddp:
+                dist.barrier()
 
             # Start validation phase.
             state["model"].eval()
@@ -560,8 +589,11 @@ class BaseTrainer(ABC):
 
                             # Aggregate mean across ranks.
                             val_det = val_loss.detach()
-                            dist.all_reduce(val_det, op=dist.ReduceOp.SUM)
-                            mean_val = (val_det / world_size).item()
+                            if use_ddp:
+                                dist.all_reduce(val_det, op=dist.ReduceOp.SUM)
+                                mean_val = (val_det / world_size).item()
+                            else:
+                                mean_val = val_det.item()
 
                             # Update running average of validation loss.
                             val_mean_loss = running_val_loss(mean_val)
@@ -582,7 +614,13 @@ class BaseTrainer(ABC):
                         state["best_val_loss"] = val_mean_loss
 
                         # Save the model.
-                        torch.save(state["model"].state_dict(), model_name)
+                        # Modify so we can load cleanly in non-DDP contexts.
+                        to_save = (
+                            state["model"].module
+                            if hasattr(state["model"], "module")
+                            else state["model"]
+                        )
+                        torch.save(to_save.state_dict(), model_name)
                     else:
                         self.console.print("Validation loss did not improve.\n")
                 else:
@@ -595,8 +633,9 @@ class BaseTrainer(ABC):
                         val_loss = self.validation_step(state=state, data=batch)
 
                         # Aggregate validation losses across ranks.
-                        val_det = val_loss.detach()
-                        dist.all_reduce(val_det, op=dist.ReduceOp.SUM)
+                        if use_ddp:
+                            val_det = val_loss.detach()
+                            dist.all_reduce(val_det, op=dist.ReduceOp.SUM)
 
             # Reset the dataloaders for the next epoch.
             train_loader.reset()
@@ -616,7 +655,8 @@ class BaseTrainer(ABC):
                 running_val_loss.reset_states()
 
             # Wait for all processes to finish before starting the next epoch.
-            dist.barrier()
+            if use_ddp:
+                dist.barrier()
 
         # Close the tensorboard writer.
         if rank == 0:

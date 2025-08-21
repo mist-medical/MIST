@@ -1,5 +1,16 @@
-"""Unit tests for the BaseTrainer implementation."""
+# Copyright (c) MIST Imaging LLC.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Tests for the BaseTrainer implementation."""
 import json
+import math
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,135 +29,124 @@ BaseTrainer = bt.BaseTrainer
 
 class DummyIter:
     """DALI-style loader with .next()[0] and .reset()."""
-
     def __init__(self, batch, length: int):
-        """Initialize the iterator.
-
-        Args:
-            batch: The fixed batch to emit.
-            length: Number of steps before wrapping.
-        """
         self._batch = batch
         self._length = max(0, length)
         self._i = 0
 
     def next(self):
-        """Return a tuple(batch,) each call, wrapping after length steps."""
+        """Return the next batch, cycling through."""
         if self._i >= self._length:
-            # Emulate stop by wrapping around (trainer controls step count).
             self._i = 0
         self._i += 1
         return (self._batch,)
 
     def reset(self):
-        """Reset the internal step counter."""
+        """Reset the iterator to the start."""
         self._i = 0
 
 
 class DummyModel(nn.Module):
-    """Minimal neural network for testing."""
-
+    """Dummy model with a single linear layer for testing."""
     def __init__(self):
-        """Initialize the dummy model."""
         super().__init__()
         self.l = nn.Linear(2, 2)
 
     def forward(self, x):
-        """Forward pass (unused in tests, defined for completeness)."""
+        """Forward pass through the dummy linear layer."""
         return self.l(x)
 
 
 class DummyDDP(nn.Module):
-    """Minimal DDP stand-in with .module for checkpoint friendliness."""
-
+    """Dummy DDP wrapper that does nothing but pass through the"""
     def __init__(self, module, device_ids=None, find_unused_parameters=False):
-        """Initialize the dummy DDP wrapper."""
         super().__init__()
         self.module = module
 
     def forward(self, *a, **k):
-        """Forward pass that delegates to the wrapped module."""
+        """Forward pass that calls the wrapped module."""
         return self.module(*a, **k)
 
 
 class DummySummaryWriter:
-    """In-memory SummaryWriter stand-in that records scalars."""
-
+    """Dummy SummaryWriter that collects scalars in memory."""
     def __init__(self, log_dir):
-        """Initialize the writer with a given log directory."""
         self.log_dir = log_dir
         self.scalars = []
         self.closed = False
 
     def add_scalars(self, tag, scalars, step):
-        """Record a scalar dictionary at a given step."""
+        """Collect scalars in memory."""
         self.scalars.append((tag, dict(scalars), int(step)))
 
     def flush(self):
-        """No-op flush."""
+        """Flush the collected scalars."""
         pass
 
     def close(self):
-        """Mark the writer as closed."""
+        """Close the writer, marking it as closed."""
         self.closed = True
 
 
 class DummyProgressCtx:
-    """Context manager used by train/val progress bars with .update()."""
-
+    """Dummy context manager for progress bars that does nothing."""
     def __init__(self, *a, **k):
-        """Initialize the dummy context manager."""
         pass
 
     def __enter__(self):
-        """Enter the context."""
         return self
 
     def __exit__(self, exc_type, exc, tb):
-        """Exit the context."""
         return False
 
     def update(self, **kwargs):
-        """Accept updates for loss/lr without side effects."""
-        # Accept loss/lr updates; no-op.
         pass
 
 
 class DummyTrainer(BaseTrainer):
     """Concrete subclass providing minimal train/val steps and loaders."""
-
     def __init__(self, mist_args, train_loss_value=1.0, val_loss_value=2.0):
-        """Initialize the dummy trainer with fixed loss values."""
         self._train_loss_value = train_loss_value
         self._val_loss_value = val_loss_value
         super().__init__(mist_args)
 
     def build_dataloaders(self, fold_data, rank, world_size):
-        """Build deterministic DALI-style loaders with a fixed batch tensor."""
-        # Build deterministic DALI-style loaders with a fixed batch tensor.
+        """Build dummy dataloaders for training and validation."""
         train_len = int(fold_data["steps_per_epoch"])
-        val_len = max(1, len(fold_data["val_images"]) // max(1, world_size))
+        val_len = max(
+            1, math.ceil(len(fold_data["val_images"]) / max(1, world_size))
+        )
         batch = torch.zeros(1, 2)
         return DummyIter(batch, train_len), DummyIter(batch, val_len)
 
     def training_step(self, **kwargs):
-        """Return a scalar tensor for the training loss."""
+        """Perform a dummy training step."""
         state = kwargs["state"]
         dev = next(state["model"].parameters()).device
         return torch.tensor(self._train_loss_value, device=dev)
 
     def validation_step(self, **kwargs):
-        """Return a scalar tensor for the validation loss."""
+        """Perform a dummy validation step."""
         state = kwargs["state"]
         dev = next(state["model"].parameters()).device
         return torch.tensor(self._val_loss_value, device=dev)
 
 
 @pytest.fixture(autouse=True)
+def patch_paths(monkeypatch):
+    """Patch training_utils.get_npy_paths so tests don't hit the FS."""
+    def fake_get_npy_paths(data_dir, patient_ids, **kwargs):
+        base = Path(data_dir).resolve()
+        # Return absolute-looking paths; existence isn't required by the tests.
+        return [str((base / f"{pid}.npy").resolve()) for pid in patient_ids]
+
+    monkeypatch.setattr(bt.training_utils, "get_npy_paths", fake_get_npy_paths)
+    # JSON read/write pass-through is fine.
+
+
+@pytest.fixture(autouse=True)
 def patch_cuda_and_moves(monkeypatch):
     """Patch CUDA availability and device moves so tests run CPU-only."""
-    # Pretend CUDA exists so the trainer doesn't raise in
-    # _update_num_gpus_in_config.
     monkeypatch.setattr(torch.cuda, "is_available", lambda: True, raising=False)
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 1, raising=False)
     monkeypatch.setattr(
@@ -162,8 +162,8 @@ def patch_cuda_and_moves(monkeypatch):
     _orig_tensor = torch.tensor
 
     def _cpu_tensor(*args, **kwargs):
-        """Create a CPU tensor regardless of any device kwarg."""
-        kwargs.pop("device", None)  # Strip any device='cuda:0' etc.
+        """Create a tensor on CPU, ignoring device."""
+        kwargs.pop("device", None)
         return _orig_tensor(*args, **kwargs)
 
     monkeypatch.setattr(bt.torch, "tensor", _cpu_tensor, raising=False)
@@ -182,7 +182,6 @@ def tmp_pipeline(tmp_path: Path) -> Tuple[Path, Path]:
     df = pd.DataFrame({"id": ["p0", "p1", "p2", "p3"], "fold": [0, 1, 0, 1]})
     df.to_csv(results / "train_paths.csv", index=False)
 
-    # Minimal config.json matching the production structure.
     config = {
         "model": {"architecture": "dummy", "params": {}},
         "training": {
@@ -194,7 +193,7 @@ def tmp_pipeline(tmp_path: Path) -> Tuple[Path, Path]:
                 "master_addr": "127.0.0.1",
                 "master_port": 12355,
                 "communication_backend": "nccl",
-                "num_gpus": 1,  # Will be overwritten.
+                "num_gpus": 1,
             },
             "min_steps_per_epoch": 2,
             "val_percent": 0.0,
@@ -214,13 +213,12 @@ def tmp_pipeline(tmp_path: Path) -> Tuple[Path, Path]:
     }
     (results / "config.json").write_text(json.dumps(config))
 
-    # Numpy layout is mocked by tests via utils.get_numpy_file_paths_list.
     return results, numpy_dir
 
 
 @pytest.fixture
 def mist_args(tmp_pipeline):
-    """Build a CLI-like args namespace used by the trainer."""
+    """Create a mist_args object with minimal configuration."""
     results, numpy_dir = tmp_pipeline
     return SimpleNamespace(
         results=str(results),
@@ -242,68 +240,59 @@ def mist_args(tmp_pipeline):
 
 
 @pytest.fixture(autouse=True)
-def patch_utils(monkeypatch):
-    """Patch utils helpers to avoid touching the filesystem."""
+def patch_path_resolver(monkeypatch):
+    """Patch BaseTrainer's path builder to avoid real filesystem checks."""
+    def fake_get_paths(data_dir, patient_ids):
+        base = Path(data_dir)
+        return [str(base / f"{pid}.npy") for pid in patient_ids]
 
-    def fake_get_paths(base_dir, folder, patient_ids):
-        """Return a list of pseudo-paths for trainer logic."""
-        return [f"{folder}/{pid}.npy" for pid in patient_ids]
-
-    monkeypatch.setattr(bt.utils, "get_numpy_file_paths_list", fake_get_paths)
-    # JSON read/write pass-through to real file IO is fine here.
+    # Important: keep it a staticmethod on the class
+    monkeypatch.setattr(
+        bt.BaseTrainer,
+        "_get_numpy_file_paths_list",
+        staticmethod(fake_get_paths),
+        raising=False,
+    )
+    # We leave JSON read/write alone.
 
 
 @pytest.fixture(autouse=True)
 def patch_registries(monkeypatch):
     """Patch registries: model, loss, optimizer, and LR scheduler."""
-    # get_model -> DummyModel.
     monkeypatch.setattr(bt, "get_model", lambda arch, **p: DummyModel())
-
-    # get_loss -> simple placeholder (unused by training_step here).
     monkeypatch.setattr(bt, "get_loss", lambda name: object())
-
-    # alpha scheduler registry -> dummy object.
     monkeypatch.setattr(bt, "get_alpha_scheduler", lambda cfg: object())
 
-    # optimizer -> SGD with optional lr and weight_decay.
     def fake_get_optimizer(
         name, params, weight_decay, eps, lr=None, l2_penalty=None
     ):
-        """Build a simple SGD optimizer for the provided parameters."""
+        """Fake optimizer that returns a dummy SGD."""
         lr = 0.1 if lr is None else float(lr)
         wd = float(weight_decay if l2_penalty is None else l2_penalty)
         return torch.optim.SGD(params, lr=lr, weight_decay=wd)
 
     monkeypatch.setattr(bt, "get_optimizer", fake_get_optimizer)
 
-    # lr scheduler -> a scheduler with .step().
     class DummyScheduler:
-        """No-op scheduler with a step method."""
-
+        """Dummy scheduler that does nothing."""
         def step(self):
-            """No-op scheduler step."""
+            """Dummy step method that does nothing."""
             pass
 
     monkeypatch.setattr(
-        bt,
-        "get_lr_scheduler",
-        lambda name, optimizer, epochs: DummyScheduler(),
+        bt, "get_lr_scheduler", lambda name, optimizer, epochs: DummyScheduler()
     )
 
 
 @pytest.fixture(autouse=True)
 def patch_ddp_and_tb_and_save(monkeypatch):
-    """Patch DDP, TensorBoard SummaryWriter, progress bars, and torch.save."""
-    # Patch the DDP symbol used inside the module.
+    """Patch DDP, TensorBoard, and torch.save to use dummy classes."""
     monkeypatch.setattr(bt, "DDP", DummyDDP)
-    # SummaryWriter -> dummy collector.
     monkeypatch.setattr(bt, "SummaryWriter", DummySummaryWriter)
-    # Progress bars -> contexts with update().
     monkeypatch.setattr(bt.progress_bar, "TrainProgressBar", DummyProgressCtx)
     monkeypatch.setattr(
         bt.progress_bar, "ValidationProgressBar", DummyProgressCtx
     )
-    # torch.save -> no-op.
     monkeypatch.setattr(torch, "save", lambda *a, **k: None)
 
 
@@ -311,42 +300,38 @@ def patch_ddp_and_tb_and_save(monkeypatch):
 def patch_dist(monkeypatch):
     """Patch torch.distributed to be inert but count calls."""
     calls = {
-        "init": 0,
-        "destroy": 0,
-        "all_reduce": 0,
-        "broadcast": 0,
-        "barrier": 0,
+        "init": 0, "destroy": 0, "all_reduce": 0, "broadcast": 0, "barrier": 0
     }
 
     class FakeDist:
-        """Inert torch.distributed replacement for testing."""
+        """Fake distributed module to track calls."""
         _initialized = False
         _rank = 0
         _world_size = 1
 
         @staticmethod
         def is_available():
-            """Pretend torch.distributed is available."""
+            """Check if distributed is available."""
             return True
 
         @staticmethod
         def is_initialized():
-            """Return whether the fake process group is initialized."""
+            """Check if distributed is initialized."""
             return FakeDist._initialized
 
         @staticmethod
         def get_rank():
-            """Return the rank set at init_process_group time."""
+            """Get the current process rank."""
             return FakeDist._rank
 
         @staticmethod
         def get_world_size():
-            """Return the world size set at init_process_group time."""
+            """Get the total number of processes."""
             return FakeDist._world_size
 
         @staticmethod
         def init_process_group(backend, rank, world_size):
-            """Initialize the fake process group."""
+            """Initialize the process group."""
             calls["init"] += 1
             FakeDist._initialized = True
             FakeDist._rank = int(rank)
@@ -354,62 +339,59 @@ def patch_dist(monkeypatch):
 
         @staticmethod
         def destroy_process_group():
-            """Destroy the fake process group."""
+            """Destroy the process group."""
             calls["destroy"] += 1
             FakeDist._initialized = False
 
         @staticmethod
         def all_reduce(t, op=None):
-            """No-op all_reduce that only counts calls."""
+            """Perform all-reduce operation."""
             calls["all_reduce"] += 1
 
         @staticmethod
         def broadcast(t, src):
-            """No-op broadcast that only counts calls."""
+            """Broadcast tensor to all processes."""
             calls["broadcast"] += 1
 
         @staticmethod
         def barrier():
-            """No-op barrier that only counts calls."""
+            """Synchronize all processes."""
             calls["barrier"] += 1
 
         ReduceOp = SimpleNamespace(SUM=0)
 
-    # Patch the torch.distributed used inside the module under test.
     monkeypatch.setattr(bt, "dist", FakeDist)
     return calls
 
+
 def test_update_num_gpus_and_batchsize(tmp_pipeline, mist_args, monkeypatch):
-    """Ensure GPU count is written to config and batch size is computed."""
-    # Simulate single GPU.
+    """Test that num_gpus and batch size are set correctly."""
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 1, raising=False)
     trainer = DummyTrainer(mist_args)
     assert trainer.config["training"]["hardware"]["num_gpus"] == 1
     assert (
-        trainer.batch_size
-        == trainer.config["training"]["batch_size_per_gpu"] * 1
+        trainer.batch_size ==
+        trainer.config["training"]["batch_size_per_gpu"] * 1
     )
 
 
 def test_setup_folds_no_valsplit(tmp_pipeline, mist_args, monkeypatch):
-    """Verify fold setup without validation split and DTMs."""
+    """Test setup_folds with no validation split."""
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 1, raising=False)
     trainer = DummyTrainer(mist_args)
     fold0 = trainer.folds[0]
-    # steps_per_epoch = min(min_steps, len(train_images) // batch).
-    assert fold0["steps_per_epoch"] == min(
+    expected = max(
         trainer.config["training"]["min_steps_per_epoch"],
-        len(fold0["train_images"]) // trainer.batch_size,
+        math.ceil(len(fold0["train_images"]) / max(1, trainer.batch_size)),
     )
-    # DTMs disabled by default.
+    assert fold0["steps_per_epoch"] == expected
     assert fold0["train_dtms"] is None
 
 
 def test_setup_folds_with_dtms_and_valsplit(
     tmp_pipeline, mist_args, monkeypatch
 ):
-    """Verify fold setup when DTMs and validation split are enabled."""
-    # Enable DTMs and validation split in config.json.
+    """Test setup_folds with DTM data and validation split."""
     results, _ = tmp_pipeline
     cfg = json.loads((Path(results) / "config.json").read_text())
     cfg["training"]["loss"]["params"]["use_dtms"] = True
@@ -420,27 +402,23 @@ def test_setup_folds_with_dtms_and_valsplit(
     trainer = DummyTrainer(mist_args)
     fold0 = trainer.folds[0]
     assert isinstance(fold0["train_dtms"], list)
-    # With 50% split, we should have moved some items from train to val.
     assert len(fold0["val_images"]) > 0
 
 
 def test_build_components_single_gpu(tmp_pipeline, mist_args, monkeypatch):
-    """Ensure build_components returns a non-DDP model on single GPU."""
+    """Test build_components with single GPU, no DDP."""
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 1, raising=False)
     trainer = DummyTrainer(mist_args)
     state = trainer.build_components(rank=0, world_size=1)
-    # Not wrapped in DDP if world_size == 1 (patched DDP, but code guards it).
     assert not isinstance(state["model"], DummyDDP)
-    # Scaler respects AMP flag.
     assert state["scaler"].is_enabled() is False
 
 
 def test_build_components_multi_gpu_wraps_with_ddp(
     tmp_pipeline, mist_args, monkeypatch
 ):
-    """Ensure build_components wraps the model with DDP on multi-GPU."""
+    """Test build_components with multiple GPUs, DDP wrapping."""
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 2, raising=False)
-    # Flip AMP on.
     results, _ = tmp_pipeline
     cfg = json.loads((Path(results) / "config.json").read_text())
     cfg["training"]["amp"] = True
@@ -455,46 +433,46 @@ def test_build_components_multi_gpu_wraps_with_ddp(
 def test_setup_initializes_process_group_once(
     tmp_pipeline, mist_args, monkeypatch, patch_dist
 ):
-    """Ensure setup initializes the process group only once."""
+    """Ensure process group is initialized only once."""
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 2, raising=False)
     trainer = DummyTrainer(mist_args)
     trainer.setup(rank=0, world_size=2)
-    trainer.setup(rank=0, world_size=2)  # Second call should be no-op.
-    assert patch_dist["init"] == 1  # Only initialized once.
+    trainer.setup(rank=0, world_size=2)
+    assert patch_dist["init"] == 1
 
 
 def test_train_fold_runs_full_epoch(
     tmp_pipeline, mist_args, monkeypatch, patch_dist
 ):
-    """Run a full epoch on rank 0 and verify collectives are called."""
-    # world_size=1 simplifies collectives.
+    """Test that train_fold runs a full epoch with correct steps."""
+    """With world_size=1, no collectives are called in the new code path."""
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 1, raising=False)
 
-    # Ensure enough val samples so val_steps > 0 (true with 2 samples/fold).
     trainer = DummyTrainer(mist_args, train_loss_value=1.0, val_loss_value=2.0)
     trainer.train_fold(fold=0, rank=0, world_size=1)
 
-    # Collectives were called and should not error.
-    assert patch_dist["broadcast"] >= 1
-    assert patch_dist["barrier"] >= 2  # End of train/val loop barriers.
+    # New behavior: no DDP => no collectives.
+    assert patch_dist["broadcast"] == 0
+    assert patch_dist["barrier"] == 0
+    assert patch_dist["all_reduce"] == 0
 
 
 def test_train_fold_early_stop_on_nan(
     tmp_pipeline, mist_args, monkeypatch, patch_dist
 ):
-    """NaN training loss should trigger early stop and cleanup."""
-    monkeypatch.setattr(torch.cuda, "device_count", lambda: 1, raising=False)
+    """NaN training loss should trigger early stop and cleanup (DDP case)."""
+    # Use 2 GPUs so DDP is engaged, ensuring cleanup() destroys the process
+    # group.
+    monkeypatch.setattr(torch.cuda, "device_count", lambda: 2, raising=False)
     trainer = DummyTrainer(
         mist_args, train_loss_value=float("nan"), val_loss_value=2.0
     )
-    trainer.train_fold(fold=0, rank=0, world_size=1)
-    # We should have called destroy_process_group through cleanup().
+    trainer.train_fold(fold=0, rank=0, world_size=2)
     assert patch_dist["destroy"] >= 1
 
 
 def test_overwrite_config_from_args(tmp_pipeline, mist_args, monkeypatch):
-    """Verify all CLI overrides are reflected in the trainer's config."""
-    # Provide some CLI overrides.
+    """Test that mist_args overwrite config values correctly."""
     mist_args.model = "myarch"
     mist_args.patch_size = [32, 32, 32]
     mist_args.folds = [0]
@@ -530,28 +508,26 @@ def test_overwrite_config_from_args(tmp_pipeline, mist_args, monkeypatch):
 def test_fit_single_gpu_calls_run_directly(
     tmp_pipeline, mist_args, monkeypatch
 ):
-    """fit() should call run_cross_validation directly on single GPU."""
+    """Test that fit with single GPU calls run directly."""
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 1, raising=False)
     called = {"run": 0}
 
     def spy_run(rank, world_size):
-        """Spy that records run_cross_validation invocations."""
         assert rank == 0 and world_size == 1
         called["run"] += 1
 
     trainer = DummyTrainer(mist_args)
-    trainer.run_cross_validation = spy_run  # type: ignore
+    trainer.run_cross_validation = spy_run
     trainer.fit()
     assert called["run"] == 1
 
 
 def test_fit_multi_gpu_uses_spawn(tmp_pipeline, mist_args, monkeypatch):
-    """fit() should use mp.spawn when multiple GPUs are available."""
+    """Test that fit with multiple GPUs uses spawn."""
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 2, raising=False)
     spawned = {"count": 0}
 
     def fake_spawn(fn, args, nprocs, join):
-        """Fake mp.spawn that validates arguments and counts invocations."""
         assert nprocs == 2
         assert isinstance(args, tuple) and args[0] == 2
         spawned["count"] += 1
@@ -563,24 +539,16 @@ def test_fit_multi_gpu_uses_spawn(tmp_pipeline, mist_args, monkeypatch):
 
 
 def test_invalid_folds_subset_raises(tmp_pipeline, mist_args):
-    """Invalid folds in CLI args should raise during trainer construction.
-
-    If mist_args.folds includes an index >= nfolds, _overwrite_config_from_args
-    should raise ValueError during BaseTrainer.__init__.
-    """
+    """Test that invalid folds subset raises ValueError."""
     results, _ = tmp_pipeline
 
-    # Make valid folds be {0, 1}; any '2' should be invalid.
     cfg_path = Path(results) / "config.json"
     cfg = json.loads(cfg_path.read_text())
     cfg["training"]["nfolds"] = 2
     cfg_path.write_text(json.dumps(cfg))
 
-    # Ask for an out-of-range fold.
     mist_args.folds = [0, 2]
 
-    # Constructing DummyTrainer calls __init__ -> _overwrite_config_from_args,
-    # which should raise on the invalid folds subset.
     with pytest.raises(ValueError) as excinfo:
         DummyTrainer(mist_args)
 
@@ -592,14 +560,13 @@ def test_invalid_folds_subset_raises(tmp_pipeline, mist_args):
 def test_update_num_gpus_raises_when_cuda_unavailable(
     tmp_pipeline, mist_args, monkeypatch
 ):
-    """_update_num_gpus_in_config should fail fast when CUDA is unavailable."""
-    # Force CUDA unavailable.
+    """Test that update_num_gpus raises when CUDA is unavailable."""
     monkeypatch.setattr(
         torch.cuda, "is_available", lambda: False, raising=False
     )
 
     with pytest.raises(ValueError) as excinfo:
-        DummyTrainer(mist_args)  # __init__ calls _update_num_gpus_in_config.
+        DummyTrainer(mist_args)
 
     msg = str(excinfo.value)
     assert "CUDA is not available" in msg
@@ -608,34 +575,30 @@ def test_update_num_gpus_raises_when_cuda_unavailable(
 def test_update_num_gpus_raises_when_zero_devices(
     tmp_pipeline, mist_args, monkeypatch
 ):
-    """If CUDA is available but device_count() == 0, raise a clear error."""
+    """Test that update_num_gpus raises when device_count is zero."""
     monkeypatch.setattr(torch.cuda, "is_available", lambda: True, raising=False)
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 0, raising=False)
 
     with pytest.raises(ValueError) as excinfo:
-        DummyTrainer(mist_args)  # __init__ calls _update_num_gpus_in_config.
+        DummyTrainer(mist_args)
 
     msg = str(excinfo.value)
     assert "device_count() == 0" in msg
-    assert "CUDA_VISIBLE_DEVICES" in msg  # Sanity check message contents.
+    assert "CUDA_VISIBLE_DEVICES" in msg
 
 
 def test_update_num_gpus_sets_config_and_persists(
     tmp_pipeline, mist_args, monkeypatch
 ):
-    """When CUDA is available, write the detected GPU count to config."""
-    # Pretend we have 2 GPUs.
+    """Test that update_num_gpus sets config and persists to disk."""
     monkeypatch.setattr(torch.cuda, "is_available", lambda: True, raising=False)
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 2, raising=False)
 
-    # Construct trainer (triggers _update_num_gpus_in_config in __init__).
     results, _ = tmp_pipeline
     trainer = DummyTrainer(mist_args)
 
-    # In-memory config updated.
     assert trainer.config["training"]["hardware"]["num_gpus"] == 2
 
-    # And persisted to config.json.
     cfg_path = Path(results) / "config.json"
     on_disk = json.loads(cfg_path.read_text())
     assert on_disk["training"]["hardware"]["num_gpus"] == 2
@@ -644,16 +607,12 @@ def test_update_num_gpus_sets_config_and_persists(
 def test_train_fold_raises_when_val_images_less_than_world_size(
     tmp_pipeline, mist_args, monkeypatch
 ):
-    """Raise when validation set size is less than the number of GPUs."""
-    results, _ = tmp_pipeline
+    """Test that train_fold raises when val_images < world_size."""
     trainer = DummyTrainer(mist_args)
 
-    # Patch setup to skip DDP init.
     monkeypatch.setattr(trainer, "setup", lambda *a, **k: None)
-    # Patch build_components to skip model creation.
     monkeypatch.setattr(trainer, "build_components", lambda *a, **k: None)
 
-    # Minimal fold data: only 1 validation image, but 2 GPUs.
     trainer.folds = [
         {
             "val_images": ["val_img_0"],  # Length 1.
@@ -673,45 +632,26 @@ def test_train_fold_raises_when_val_images_less_than_world_size(
 def test_train_loop_else_branch_rank_nonzero(
     tmp_pipeline, mist_args, monkeypatch, patch_dist
 ):
-    """Cover the non-rank-0 training loop (else branch) and collectives."""
-    # Pretend we have 2 GPUs but keep everything CPU-only in tests.
-    monkeypatch.setattr(
-        torch.cuda, "is_available", lambda: True, raising=False)
-    monkeypatch.setattr(
-        torch.cuda, "device_count", lambda: 2, raising=False
-    )
+    """Test train_fold else branch for rank > 0."""
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True, raising=False)
+    monkeypatch.setattr(torch.cuda, "device_count", lambda: 2, raising=False)
     monkeypatch.setattr(
         torch.cuda, "set_device", lambda idx: None, raising=False
     )
-
-    # Make Module.to(...) a no-op so the model stays on CPU.
     monkeypatch.setattr(
         nn.Module, "to", lambda self, *a, **k: self, raising=False
     )
 
-    # Build the trainer.
     trainer = DummyTrainer(mist_args, train_loss_value=1.0, val_loss_value=2.0)
-
-    # Ensure fold 0 has >= 1 val step when world_size=2 and a few train steps.
-    # steps_per_epoch = 2 -> two training iterations on rank != 0.
-    # len(val_images) = 2 -> val_steps = 2 // 2 = 1.
     trainer.folds[0]["steps_per_epoch"] = 2
     trainer.folds[0]["val_images"] = ["val0", "val1"]
-    # Keep some train images (not actually consumed by DummyIter logic).
     trainer.folds[0]["train_images"] = ["tr0", "tr1", "tr2"]
 
-    # Avoid initializing a real process group (patched dist is inert anyway).
     monkeypatch.setattr(trainer, "setup", lambda *a, **k: None)
 
-    # Run one full epoch on rank 1 (non-zero), world_size=2 to hit the else
-    # branch.
     trainer.train_fold(fold=0, rank=1, world_size=2)
 
-    # In the else branch, we all_reduce once per train step and once per val
-    # step. With steps_per_epoch=2 and val_steps=1, expect at least 3 calls.
     assert patch_dist["all_reduce"] >= 3
-
-    # Sanity: broadcast/barrier should be called too (no strict counts).
     assert patch_dist["broadcast"] >= 1
     assert patch_dist["barrier"] >= 1
 
@@ -719,11 +659,8 @@ def test_train_loop_else_branch_rank_nonzero(
 def test_validation_else_branch_rank_nonzero(
     tmp_pipeline, mist_args, monkeypatch, patch_dist
 ):
-    """Cover the non-rank-0 validation loop (else branch)."""
-    # Pretend we have 2 GPUs, but keep all ops on CPU for tests.
-    monkeypatch.setattr(
-        torch.cuda, "is_available", lambda: True, raising=False
-    )
+    """Test validation step else branch for rank > 0."""
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True, raising=False)
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 2, raising=False)
     monkeypatch.setattr(
         torch.cuda, "set_device", lambda idx: None, raising=False
@@ -734,26 +671,17 @@ def test_validation_else_branch_rank_nonzero(
 
     trainer = DummyTrainer(mist_args, train_loss_value=1.0, val_loss_value=2.0)
 
-    # Ensure no training iterations and exactly one validation step:
-    # val_steps = len(val_images) // world_size = 2 // 2 = 1.
     trainer.folds[0]["steps_per_epoch"] = 0
-    trainer.folds[0]["val_images"] = ["val0", "val1"]  # Length 2.
-    trainer.folds[0]["train_images"] = ["tr0", "tr1"]  # Not used.
+    trainer.folds[0]["val_images"] = ["val0", "val1"]
+    trainer.folds[0]["train_images"] = ["tr0", "tr1"]
 
-    # Avoid real process-group init; our patched dist is inert.
     monkeypatch.setattr(trainer, "setup", lambda *a, **k: None)
 
-    # Track all_reduce calls before/after to prove the else-branch ran.
     before = patch_dist["all_reduce"]
-
-    # Run with rank=1 (non-zero) to take the validation else-branch.
     trainer.train_fold(fold=0, rank=1, world_size=2)
-
     after = patch_dist["all_reduce"]
-    # Expect at least one all_reduce from the non-zero rank validation loop.
-    assert (after - before) >= 1
 
-    # Sanity: we should have broadcast/barrier during the epoch lifecycle.
+    assert (after - before) >= 1
     assert patch_dist["broadcast"] >= 1
     assert patch_dist["barrier"] >= 1
 
@@ -761,8 +689,7 @@ def test_validation_else_branch_rank_nonzero(
 def test_validation_no_improvement_message(
     tmp_pipeline, mist_args, monkeypatch
 ):
-    """Print a message when validation loss does not improve on rank 0."""
-    # Keep CPU-only in tests.
+    """Test that validation step logs no improvement message."""
     monkeypatch.setattr(torch.cuda, "is_available", lambda: True, raising=False)
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 1, raising=False)
     monkeypatch.setattr(
@@ -772,29 +699,22 @@ def test_validation_no_improvement_message(
         nn.Module, "to", lambda self, *a, **k: self, raising=False
     )
 
-    # Set val_loss_value high enough to avoid improvement.
     trainer = DummyTrainer(
         mist_args, train_loss_value=1.0, val_loss_value=float("inf")
     )
 
-    # Force one train step and at least one val step.
     trainer.folds[0]["steps_per_epoch"] = 1
-    # world_size=1 -> val_steps=2.
     trainer.folds[0]["val_images"] = ["val0", "val1"]
 
-    # Patch setup to skip DDP.
     monkeypatch.setattr(trainer, "setup", lambda *a, **k: None)
 
-    # Capture console output.
     buf = StringIO()
     monkeypatch.setattr(
         trainer.console, "print", lambda msg: buf.write(str(msg))
     )
 
-    # Run training on rank=0 to hit rank-0 validation branch.
     trainer.train_fold(fold=0, rank=0, world_size=1)
 
-    # Check that the message was printed.
     output = buf.getvalue()
     assert "Validation loss did not improve" in output
 
@@ -802,10 +722,9 @@ def test_validation_no_improvement_message(
 def test_run_cross_validation_rank0_prints_and_calls_all_folds(
     tmp_pipeline, mist_args, monkeypatch
 ):
-    """Rank 0 should print start message and call train_fold for each fold."""
+    """Test run_cross_validation on rank 0 prints and calls all folds."""
     results, _ = tmp_pipeline
 
-    # Configure multiple folds to ensure iteration.
     cfg_path = Path(results) / "config.json"
     cfg = json.loads(cfg_path.read_text())
     cfg["training"]["folds"] = [0, 1]
@@ -813,37 +732,30 @@ def test_run_cross_validation_rank0_prints_and_calls_all_folds(
 
     trainer = DummyTrainer(mist_args)
 
-    # Capture console output.
     out = []
     monkeypatch.setattr(
         trainer.console, "print", lambda msg: out.append(str(msg))
     )
 
-    # Spy on train_fold.
     calls = []
 
     def spy_train_fold(fold, rank, world_size):
-        """Record invocations of train_fold."""
         calls.append((fold, rank, world_size))
 
     monkeypatch.setattr(trainer, "train_fold", spy_train_fold)
 
-    # Run as rank 0.
     trainer.run_cross_validation(rank=0, world_size=2)
 
-    # Message printed once.
     assert any("Starting training" in s for s in out)
-    # train_fold called for each fold with correct args.
     assert calls == [(0, 0, 2), (1, 0, 2)]
 
 
 def test_run_cross_validation_nonzero_rank_no_print_but_calls_folds(
     tmp_pipeline, mist_args, monkeypatch
 ):
-    """Non-zero rank should not print, but still call train_fold."""
+    """Test run_cross_validation on non-zero rank does not print but calls."""
     results, _ = tmp_pipeline
 
-    # Ensure multiple folds again.
     cfg_path = Path(results) / "config.json"
     cfg = json.loads(cfg_path.read_text())
     cfg["training"]["folds"] = [0, 1]
@@ -851,27 +763,21 @@ def test_run_cross_validation_nonzero_rank_no_print_but_calls_folds(
 
     trainer = DummyTrainer(mist_args)
 
-    # Capture console output (should remain empty).
     out = []
     monkeypatch.setattr(
         trainer.console, "print", lambda msg: out.append(str(msg))
     )
 
-    # Spy on train_fold.
     calls = []
 
     def spy_train_fold(fold, rank, world_size):
-        """Record invocations of train_fold."""
         calls.append((fold, rank, world_size))
 
     monkeypatch.setattr(trainer, "train_fold", spy_train_fold)
 
-    # Run as a non-zero rank.
     trainer.run_cross_validation(rank=1, world_size=2)
 
-    # No "Starting training" print on non-zero ranks.
     assert not any("Starting training" in s for s in out)
-    # But train_fold still called for each fold with the non-zero rank.
     assert calls == [(0, 1, 2), (1, 1, 2)]
 
 
@@ -879,23 +785,13 @@ def test_run_cross_validation_nonzero_rank_no_print_but_calls_folds(
 def test_build_components_composite_loss_scheduler(
     tmp_pipeline, mist_args, monkeypatch, schedule_cfg
 ):
-    """Verify composite-loss alpha scheduler is created only when configured.
-
-    When `training["loss"]["params"]["composite_loss_weighting"]` is not None,
-    `get_alpha_scheduler` must be called with that config and the returned
-    object should be stored in `state["composite_loss_weight_schedule"]`.
-    Otherwise, the scheduler should be `None` and the registry function should
-    not be called.
-    """
+    """Test that build_components sets composite_loss_weighting correctly."""
     results, _ = tmp_pipeline
-
-    # Update config to set/unset the composite loss weighting schedule.
     cfg_path = Path(results) / "config.json"
     cfg = json.loads(cfg_path.read_text())
     cfg["training"]["loss"]["params"]["composite_loss_weighting"] = schedule_cfg
     cfg_path.write_text(json.dumps(cfg))
 
-    # Spy on get_alpha_scheduler and return a sentinel.
     calls = {"args": []}
     sentinel = object()
 
@@ -905,13 +801,79 @@ def test_build_components_composite_loss_scheduler(
 
     monkeypatch.setattr(bt, "get_alpha_scheduler", spy_get_alpha_scheduler)
 
-    # Build components and inspect the returned state.
     trainer = DummyTrainer(mist_args)
     state = trainer.build_components(rank=0, world_size=1)
 
     if schedule_cfg is None:
         assert state["composite_loss_weighting"] is None
-        assert not calls["args"] # Not called when config is None.
+        assert not calls["args"]
     else:
         assert state["composite_loss_weighting"] is sentinel
-        assert calls["args"] == [schedule_cfg]  # Called exactly once.
+        assert calls["args"] == [schedule_cfg]
+
+
+def test_set_seed_swallows_dist_errors(tmp_pipeline, mist_args, monkeypatch):
+    """_set_seed should ignore exceptions from torch.distributed calls."""
+    import os
+    monkeypatch.setattr(torch.cuda, "device_count", lambda: 1, raising=False)
+    trainer = DummyTrainer(mist_args)
+
+    class BadDist:
+        """Fake distributed module that raises in is_initialized()."""
+        def is_initialized(self):
+            """Raise an error to simulate a bad distributed state."""
+            raise RuntimeError("kaboom")
+
+    # Override the module's dist with one that raises inside is_initialized().
+    monkeypatch.setattr(bt, "dist", BadDist())
+
+    # Ensure default env path (rank from env not used).
+    os.environ.pop("RANK", None)
+
+    # Should NOT raise despite the deliberate exception.
+    trainer._set_seed(123)
+
+    # Verify we proceeded past the except: env var was set.
+    assert os.environ["PYTHONHASHSEED"] == "123"
+
+
+def test_validation_rank0_ddp_allreduce_and_mean(
+    tmp_pipeline, mist_args, monkeypatch, patch_dist
+):
+    """With DDP, rank 0 validation uses all_reduce and divides by world_size."""
+    # Enable multi-GPU (DDP path).
+    monkeypatch.setattr(torch.cuda, "device_count", lambda: 2, raising=False)
+
+    # Capture the SummaryWriter instance used during training to inspect logged
+    # scalars.
+    created_writers = []
+
+    class CapturingWriter(DummySummaryWriter):
+        def __init__(self, log_dir):
+            super().__init__(log_dir)
+            created_writers.append(self)
+
+    # Override the writer for this test (autouse fixture sets a default; we
+    # override it here).
+    monkeypatch.setattr(bt, "SummaryWriter", CapturingWriter)
+
+    # Build trainer with a known validation loss.
+    trainer = DummyTrainer(mist_args, train_loss_value=1.0, val_loss_value=4.0)
+
+    # Run one epoch on rank 0 with world_size=2 (DDP enabled).
+    trainer.train_fold(fold=0, rank=0, world_size=2)
+
+    # Ensure an all_reduce occurred somewhere (train and/or val). We
+    # specifically exercised the rank-0 validation branch that calls all_reduce
+    # if use_ddp.
+    assert patch_dist["all_reduce"] >= 1
+
+    # Inspect the logged scalars. Validation mean should be val_loss/world_size.
+    assert created_writers, "SummaryWriter was not instantiated"
+    tag, scalars, step = created_writers[-1].scalars[-1]
+    assert tag == "losses"
+    # With FakeDist all_reduce as a no-op, the code divides by world_size
+    # explicitly.
+    assert scalars["validation"] == pytest.approx(4.0 / 2)
+    # (Optional) train mean is also divided by world_size on rank 0 in DDP.
+    assert scalars["train"] == pytest.approx(1.0 / 2)

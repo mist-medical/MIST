@@ -1,5 +1,13 @@
 # Copyright (c) MIST Imaging LLC.
-# Licensed under the Apache License, Version 2.0.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """Unit tests for Patch3DTrainer."""
 import json
 from contextlib import contextmanager
@@ -209,13 +217,23 @@ def mist_args(tmp_pipeline):
 
 
 @pytest.fixture(autouse=True)
-def patch_utils(monkeypatch):
-    """Stub out utils.get_numpy_file_paths_list in BaseTrainer setup."""
-    def fake_get_paths(base_dir: str, folder: str, patient_ids: list) -> list:
-        """Return fake paths for each patient id."""
-        return [f"{folder}/{pid}.npy" for pid in patient_ids]
+def patch_utils(monkeypatch, tmp_pipeline):
+    """Stub out get_npy_paths and align nfolds with the tiny test dataset."""
+    # 1) Make nfolds consistent with train_paths.csv (ids p0,p1 -> folds {0,1}).
+    results, _ = tmp_pipeline
+    cfg_path = Path(results) / "config.json"
+    cfg = json.loads(cfg_path.read_text())
+    cfg["training"]["nfolds"] = 2
+    cfg["training"]["folds"] = [0, 1]
+    cfg_path.write_text(json.dumps(cfg))
 
-    monkeypatch.setattr(bt.utils, "get_numpy_file_paths_list", fake_get_paths)
+    # 2) Stub training_utils.get_npy_paths so it doesn't require files to exist.
+    def fake_get_npy_paths(data_dir, patient_ids, **kwargs):
+        base = Path(data_dir).expanduser().resolve()
+        return [str((base / f"{pid}.npy").resolve()) for pid in patient_ids]
+
+    monkeypatch.setattr(bt.training_utils, "get_npy_paths", fake_get_npy_paths)
+
 
 
 def test_build_dataloaders_passes_expected_args(

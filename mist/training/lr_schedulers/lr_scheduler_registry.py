@@ -25,7 +25,7 @@ def _cosine_scheduler(optimizer: Optimizer, epochs: int) -> _LRScheduler:
 
 def _polynomial_scheduler(optimizer: Optimizer, epochs: int) -> _LRScheduler:
     """Polynomial decay LR schedule."""
-    torch.optim.lr_scheduler.PolynomialLR(
+    return torch.optim.lr_scheduler.PolynomialLR(
         optimizer,
         total_iters=epochs,
         power=LRSchedulerConstants.POLYNOMIAL_DECAY,
