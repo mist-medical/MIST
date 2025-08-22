@@ -355,25 +355,31 @@ def test_resample_image_calls_utils_and_resample(monkeypatch):
     out_ants = _DummyAntsImage(np.ones((4, 4, 4), dtype=np.float32))
 
     monkeypatch.setattr(
-        pp.utils, "ants_to_sitk", lambda _img: dummy_sitk, raising=True
+        pp.preprocessing_utils,
+        "ants_to_sitk",
+        lambda _img: dummy_sitk,
+        raising=True,
     )
     monkeypatch.setattr(
-        pp.utils, "sitk_to_ants", lambda _s: out_ants, raising=True
+        pp.preprocessing_utils,
+        "sitk_to_ants",
+        lambda _s: out_ants,
+        raising=True,
     )
     monkeypatch.setattr(
-        pp.utils,
+        pp.analyzer_utils,
         "get_resampled_image_dimensions",
         lambda size, sp, tgt: (4, 4, 4),
         raising=True,
     )
     monkeypatch.setattr(
-        pp.utils,
+        pp.preprocessing_utils,
         "check_anisotropic",
         lambda _s: {"is_anisotropic": False},
         raising=True,
     )
     monkeypatch.setattr(
-        pp.utils,
+        pp.preprocessing_utils,
         "aniso_intermediate_resample",
         lambda *_a, **_k: pytest.fail("Unexpected."),
     )
@@ -388,20 +394,24 @@ def test_resample_image_calls_utils_and_resample(monkeypatch):
     np.testing.assert_array_equal(out.numpy(), out_ants.numpy())
 
 
+
 def test_resample_image_aniso_axis_type_error(monkeypatch):
     """Anisotropic path with non-int axis raises ValueError."""
     dummy_sitk = _DummySitkImage()
     monkeypatch.setattr(
-        pp.utils, "ants_to_sitk", lambda _img: dummy_sitk, raising=True
+        pp.preprocessing_utils,
+        "ants_to_sitk",
+        lambda _img: dummy_sitk,
+        raising=True,
     )
     monkeypatch.setattr(
-        pp.utils,
+        pp.analyzer_utils,
         "get_resampled_image_dimensions",
         lambda size, sp, tgt: (4, 4, 4),
         raising=True,
     )
     monkeypatch.setattr(
-        pp.utils,
+        pp.preprocessing_utils,
         "check_anisotropic",
         lambda _s: {"is_anisotropic": True, "low_resolution_axis": "z"},
         raising=True,
@@ -417,16 +427,19 @@ def test_resample_image_aniso_intermediate_called(monkeypatch):
     seen: Dict[str, Any] = {}
 
     monkeypatch.setattr(
-        pp.utils, "ants_to_sitk", lambda _x: dummy_before, raising=True
+        pp.preprocessing_utils,
+        "ants_to_sitk",
+        lambda _x: dummy_before,
+        raising=True,
     )
     monkeypatch.setattr(
-        pp.utils,
+        pp.analyzer_utils,
         "get_resampled_image_dimensions",
         lambda size, spacing, tgt: (10, 12, 14),
         raising=True,
     )
     monkeypatch.setattr(
-        pp.utils,
+        pp.preprocessing_utils,
         "check_anisotropic",
         lambda _img: {"is_anisotropic": True, "low_resolution_axis": 2},
         raising=True,
@@ -437,7 +450,7 @@ def test_resample_image_aniso_intermediate_called(monkeypatch):
         return dummy_before
 
     monkeypatch.setattr(
-        pp.utils,
+        pp.preprocessing_utils,
         "aniso_intermediate_resample",
         _aniso_intermediate,
         raising=True,
@@ -449,7 +462,10 @@ def test_resample_image_aniso_intermediate_called(monkeypatch):
 
     final_ants = object()
     monkeypatch.setattr(
-        pp.utils, "sitk_to_ants", lambda _img: final_ants, raising=True
+        pp.preprocessing_utils,
+        "sitk_to_ants",
+        lambda _img: final_ants,
+        raising=True,
     )
 
     out = pp.resample_image(img_ants=object(), target_spacing=(1.0, 1.0, 1.0))
@@ -473,16 +489,19 @@ def test_resample_mask_happy_path(monkeypatch):
     )
 
     monkeypatch.setattr(
-        pp.utils, "make_onehot", lambda _m, _lbls: onehots, raising=True
+        pp.preprocessing_utils,
+        "make_onehot",
+        lambda _m, _lbls: onehots,
+        raising=True,
     )
     monkeypatch.setattr(
-        pp.utils,
+        pp.analyzer_utils,
         "get_resampled_image_dimensions",
         lambda size, sp, tgt: (3, 3, 3),
         raising=True,
     )
     monkeypatch.setattr(
-        pp.utils,
+        pp.preprocessing_utils,
         "check_anisotropic",
         lambda _s: {"is_anisotropic": False},
         raising=True,
@@ -498,7 +517,9 @@ def test_resample_mask_happy_path(monkeypatch):
         arr = np.zeros((3, 3, 3, len(labels)), dtype=np.float32)
         return _DummyAntsImage(arr)
 
-    monkeypatch.setattr(pp.utils, "sitk_to_ants", _sitk_to_ants, raising=True)
+    monkeypatch.setattr(
+        pp.preprocessing_utils, "sitk_to_ants", _sitk_to_ants, raising=True
+    )
     monkeypatch.setattr(
         pp.ants,
         "from_numpy",
@@ -521,16 +542,19 @@ def test_resample_mask_aniso_axis_not_int_raises(monkeypatch):
     """Anisotropic resample with non-int axis raises ValueError."""
     masks = [_DummySitkImage()]
     monkeypatch.setattr(
-        pp.utils, "make_onehot", lambda _m, _l: masks, raising=True
+        pp.preprocessing_utils,
+        "make_onehot",
+        lambda _m, _l: masks,
+        raising=True,
     )
     monkeypatch.setattr(
-        pp.utils,
+        pp.analyzer_utils,
         "get_resampled_image_dimensions",
         lambda size, spacing, tgt: (8, 8, 8),
         raising=True,
     )
     monkeypatch.setattr(
-        pp.utils,
+        pp.preprocessing_utils,
         "check_anisotropic",
         lambda _img: {"is_anisotropic": True, "low_resolution_axis": "z"},
         raising=True,
@@ -555,16 +579,19 @@ def test_resample_mask_aniso_intermediate_called_for_each_label(monkeypatch):
     target_spacing = (1.0, 1.0, 1.0)
 
     monkeypatch.setattr(
-        pp.utils, "make_onehot", lambda _m, _lbls: masks, raising=True
+        pp.preprocessing_utils,
+        "make_onehot",
+        lambda _m, _lbls: masks,
+        raising=True,
     )
     monkeypatch.setattr(
-        pp.utils,
+        pp.analyzer_utils,
         "get_resampled_image_dimensions",
         lambda size, spacing, tgt: new_size,
         raising=True,
     )
     monkeypatch.setattr(
-        pp.utils,
+        pp.preprocessing_utils,
         "check_anisotropic",
         lambda _img: {"is_anisotropic": True, "low_resolution_axis": 2},
         raising=True,
@@ -577,7 +604,10 @@ def test_resample_mask_aniso_intermediate_called_for_each_label(monkeypatch):
         return img
 
     monkeypatch.setattr(
-        pp.utils, "aniso_intermediate_resample", _aniso, raising=True
+        pp.preprocessing_utils,
+        "aniso_intermediate_resample",
+        _aniso,
+        raising=True,
     )
     monkeypatch.setattr(pp.sitk, "Resample", lambda *a, **k: a[0], raising=True)
     monkeypatch.setattr(pp.sitk, "JoinSeries", lambda seq: seq, raising=True)
@@ -592,7 +622,9 @@ def test_resample_mask_aniso_intermediate_called_for_each_label(monkeypatch):
         )
         return SimpleNamespace(numpy=lambda: arr)
 
-    monkeypatch.setattr(pp.utils, "sitk_to_ants", _sitk_to_ants, raising=True)
+    monkeypatch.setattr(
+        pp.preprocessing_utils, "sitk_to_ants", _sitk_to_ants, raising=True
+    )
 
     class _Out:
         """Simple ANTs-like output holder."""
@@ -643,12 +675,18 @@ def test_compute_dtm_shapes_and_types(monkeypatch):
         _DummySitkImage(size=(5, 6, 7)), _DummySitkImage(size=(5, 6, 7))
     ]
     monkeypatch.setattr(
-        pp.utils, "make_onehot", lambda _m, _lbls: onehots, raising=True
+        pp.preprocessing_utils,
+        "make_onehot",
+        lambda _m, _lbls: onehots,
+        raising=True,
     )
 
-    sums = iter([1, 0])  # First non-empty, second empty.
+    sums = iter([1, 0]) # First non-empty, second empty.
     monkeypatch.setattr(
-        pp.utils, "sitk_get_sum", lambda _m: next(sums), raising=True
+        pp.preprocessing_utils,
+        "sitk_get_sum",
+        lambda _m: next(sums),
+        raising=True,
     )
     monkeypatch.setattr(
         pp.sitk,
@@ -658,7 +696,10 @@ def test_compute_dtm_shapes_and_types(monkeypatch):
     )
     monkeypatch.setattr(pp.sitk, "Cast", lambda img, _t: img, raising=True)
     monkeypatch.setattr(
-        pp.utils, "sitk_get_min_max", lambda _img: (-2.0, 3.0), raising=True
+        pp.preprocessing_utils,
+        "sitk_get_min_max",
+        lambda _img: (-2.0, 3.0),
+        raising=True,
     )
     monkeypatch.setattr(
         pp.sitk,
@@ -676,7 +717,9 @@ def test_compute_dtm_shapes_and_types(monkeypatch):
         arr = np.zeros((5, 6, 7, len(labels)), dtype=np.float32)
         return _DummyAntsImage(arr)
 
-    monkeypatch.setattr(pp.utils, "sitk_to_ants", _sitk_to_ants, raising=True)
+    monkeypatch.setattr(
+        pp.preprocessing_utils, "sitk_to_ants", _sitk_to_ants, raising=True
+    )
 
     out = pp.compute_dtm(mask_ants=src_mask, labels=labels, normalize_dtm=True)
     assert isinstance(out, np.ndarray)
@@ -689,8 +732,12 @@ def test_compute_dtm_zero_guards_combined(monkeypatch):
     labels = [0]
     masks = [_DummySitkImage()]
 
-    monkeypatch.setattr(pp.utils, "make_onehot", lambda *_: masks, raising=True)
-    monkeypatch.setattr(pp.utils, "sitk_get_sum", lambda _m: 1, raising=True)
+    monkeypatch.setattr(
+        pp.preprocessing_utils, "make_onehot", lambda *_: masks, raising=True
+    )
+    monkeypatch.setattr(
+        pp.preprocessing_utils, "sitk_get_sum", lambda _m: 1, raising=True
+    )
     monkeypatch.setattr(
         pp.sitk, "Cast", lambda img, *_a, **_k: img, raising=True
     )
@@ -701,7 +748,10 @@ def test_compute_dtm_zero_guards_combined(monkeypatch):
             return np.zeros((2, 2, 2, len(labels)), dtype=np.float32)
 
     monkeypatch.setattr(
-        pp.utils, "sitk_to_ants", lambda s: _AntsArray(), raising=True
+        pp.preprocessing_utils,
+        "sitk_to_ants",
+        lambda s: _AntsArray(),
+        raising=True,
     )
 
     # Scenario A: ext_max == 0 → guard to 1.
@@ -722,7 +772,10 @@ def test_compute_dtm_zero_guards_combined(monkeypatch):
         return (0.0, 1.0)
 
     monkeypatch.setattr(
-        pp.utils, "sitk_get_min_max", _minmax_ext_zero, raising=True
+        pp.preprocessing_utils,
+        "sitk_get_min_max",
+        _minmax_ext_zero,
+        raising=True,
     )
 
     out = pp.compute_dtm(
@@ -734,7 +787,7 @@ def test_compute_dtm_zero_guards_combined(monkeypatch):
     assert ext_divs and ext_divs[0] == 1
     assert int_divs and int_divs[0] == -2.0
 
-    # Scenario B: int_min == 0 → guard to -1.
+    # Scenario B: int_min == 0 -> guard to -1.
     recorder.clear()
 
     def _minmax_int_zero(img):
@@ -746,7 +799,10 @@ def test_compute_dtm_zero_guards_combined(monkeypatch):
         return (0.0, 1.0)
 
     monkeypatch.setattr(
-        pp.utils, "sitk_get_min_max", _minmax_int_zero, raising=True
+        pp.preprocessing_utils,
+        "sitk_get_min_max",
+        _minmax_int_zero,
+        raising=True,
     )
 
     out = pp.compute_dtm(
@@ -766,7 +822,6 @@ def test_compute_dtm_empty_mask_diagonal_distance(monkeypatch):
 
     class _ArrayImage:
         """Wrapper returned by sitk.GetImageFromArray."""
-
         def __init__(self, arr):
             self._arr = np.asarray(arr, dtype=np.float32)
 
@@ -784,8 +839,12 @@ def test_compute_dtm_empty_mask_diagonal_distance(monkeypatch):
 
     labels = [0, 1]
     masks = [_DummySitkImage() for _ in labels]
-    monkeypatch.setattr(pp.utils, "make_onehot", lambda *_: masks, raising=True)
-    monkeypatch.setattr(pp.utils, "sitk_get_sum", lambda _m: 0, raising=True)
+    monkeypatch.setattr(
+        pp.preprocessing_utils, "make_onehot", lambda *_: masks, raising=True
+    )
+    monkeypatch.setattr(
+        pp.preprocessing_utils, "sitk_get_sum", lambda _m: 0, raising=True
+    )
     monkeypatch.setattr(
         pp.sitk, "GetImageFromArray", lambda arr: _ArrayImage(arr), raising=True
     )
@@ -799,7 +858,9 @@ def test_compute_dtm_empty_mask_diagonal_distance(monkeypatch):
             numpy=lambda: np.stack([im._arr for im in seq], axis=-1)
         )
 
-    monkeypatch.setattr(pp.utils, "sitk_to_ants", _sitk_to_ants, raising=True)
+    monkeypatch.setattr(
+        pp.preprocessing_utils, "sitk_to_ants", _sitk_to_ants, raising=True
+    )
 
     out = pp.compute_dtm(
         mask_ants=SimpleNamespace(), labels=labels, normalize_dtm=False
@@ -856,7 +917,9 @@ def test_preprocess_example_full_flow_no_skip_with_crop_and_dtm(monkeypatch):
         calls["crop_calls"] += 1
         return im
 
-    monkeypatch.setattr(pp.utils, "crop_to_fg", _crop, raising=True)
+    monkeypatch.setattr(
+        pp.preprocessing_utils, "crop_to_fg", _crop, raising=True
+    )
     monkeypatch.setattr(
         pp, "resample_image", lambda im, target_spacing: im, raising=True
     )
@@ -866,6 +929,7 @@ def test_preprocess_example_full_flow_no_skip_with_crop_and_dtm(monkeypatch):
     monkeypatch.setattr(
         pp, "window_and_normalize", lambda arr, cfg_: arr, raising=True
     )
+
     def _compute_dtm(_m, labels, normalize_dtm):
         return np.ones((2, 2, 2, len(labels)), dtype=np.float32)
 
@@ -907,7 +971,9 @@ def test_preprocess_example_skip_true_no_resample_no_normalize(monkeypatch):
     mask_img = _DummyAntsImage(np.zeros((2, 2, 2), dtype=np.float32))
 
     seq = iter([img0, mask_img])
-    monkeypatch.setattr(pp.ants, "image_read", lambda _p: next(seq), raising=True)
+    monkeypatch.setattr(
+        pp.ants, "image_read", lambda _p: next(seq), raising=True
+    )
     monkeypatch.setattr(
         pp.ants, "reorient_image2", lambda im, _ori: im, raising=True
     )
@@ -951,7 +1017,10 @@ def test_preprocess_example_crop_requires_bbox_error(monkeypatch):
         pp.ants, "image_read", lambda _p: _DummyAntsImage(), raising=True
     )
     monkeypatch.setattr(
-        pp.utils, "get_fg_mask_bbox", lambda _im: None, raising=True
+        pp.preprocessing_utils,
+        "get_fg_mask_bbox",
+        lambda _im: None,
+        raising=True,
     )
     monkeypatch.setattr(
         pp.ants, "reorient_image2", lambda im, _ori: im, raising=True
@@ -1046,7 +1115,7 @@ def test_preprocess_dataset_end_to_end_saves_arrays_and_updates_config(
     )
 
     monkeypatch.setattr(
-        pp.utils, "get_progress_bar", lambda *_: _PB(), raising=True
+        pp.progress_bar, "get_progress_bar", lambda *_: _PB(), raising=True
     )
 
     def _pe(config, image_paths_list, mask_path, fg_bbox):
@@ -1175,10 +1244,13 @@ def test_preprocess_dataset_sets_fg_bbox_none_when_crop_disabled(
     )
 
     monkeypatch.setattr(
-        pp.utils, "get_progress_bar", lambda *_a, **_k: _PB(), raising=True
+        pp.progress_bar,
+        "get_progress_bar",
+        lambda *_a, **_k: _PB(),
+        raising=True,
     )
     monkeypatch.setattr(
-        pp.utils,
+        pp.io,
         "read_json_file",
         lambda p: json.loads(Path(p).read_text(encoding="utf-8")),
         raising=True,

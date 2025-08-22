@@ -20,7 +20,9 @@ import rich
 import SimpleITK as sitk
 
 # MIST imports.
-from mist.runtime import utils
+from mist.utils import io, progress_bar
+from mist.analyze_data import analyzer_utils
+from mist.preprocessing import preprocessing_utils
 from mist.preprocessing.preprocessing_constants import (
     PreprocessingConstants as pc
 )
@@ -47,17 +49,17 @@ def resample_image(
     """
     # Convert ants image to sitk image. We do this because the resampling
     # function in SimpleITK is more robust and faster than the one in ANTs.
-    img_sitk = utils.ants_to_sitk(img_ants)
+    img_sitk = preprocessing_utils.ants_to_sitk(img_ants)
 
     # Get new size if not provided. This is done to ensure that the image
     # is resampled to the correct dimensions.
     if new_size is None:
-        new_size = utils.get_resampled_image_dimensions(
+        new_size = analyzer_utils.get_resampled_image_dimensions(
             img_sitk.GetSize(), img_sitk.GetSpacing(), target_spacing
         )
 
     # Check if the image is anisotropic.
-    anisotropic_results = utils.check_anisotropic(img_sitk)
+    anisotropic_results = preprocessing_utils.check_anisotropic(img_sitk)
 
     # If the image is anisotropic, we need to use an intermediate resampling
     # step to avoid artifacts. This step uses nearest neighbor interpolation
@@ -67,7 +69,7 @@ def resample_image(
             raise ValueError(
                 "The low resolution axis must be an integer."
             )
-        img_sitk = utils.aniso_intermediate_resample(
+        img_sitk = preprocessing_utils.aniso_intermediate_resample(
             img_sitk,
             new_size,
             target_spacing,
@@ -88,7 +90,7 @@ def resample_image(
     )
 
     # Convert the resampled image back to ANTs image.
-    return utils.sitk_to_ants(img_sitk)
+    return preprocessing_utils.sitk_to_ants(img_sitk)
 
 
 def resample_mask(
@@ -113,14 +115,14 @@ def resample_mask(
             resampling an anisotropic mask.
     """
     # Get mask as a series of onehot encoded series of sitk images.
-    masks_sitk = utils.make_onehot(mask_ants, labels)
+    masks_sitk = preprocessing_utils.make_onehot(mask_ants, labels)
     if new_size is None:
-        new_size = utils.get_resampled_image_dimensions(
+        new_size = analyzer_utils.get_resampled_image_dimensions(
             masks_sitk[0].GetSize(), masks_sitk[0].GetSpacing(), target_spacing
         )
 
     # Check if the mask is anisotropic. Only do this for the first mask.
-    anisotropic_results = utils.check_anisotropic(masks_sitk[0])
+    anisotropic_results = preprocessing_utils.check_anisotropic(masks_sitk[0])
 
     # Resample each mask in the series. If the mask is anisotropic, we
     # need to use an intermediate resampling step to avoid artifacts. This
@@ -132,7 +134,7 @@ def resample_mask(
                 raise ValueError(
                     "The low resolution axis must be an integer."
                 )
-            masks_sitk[i] = utils.aniso_intermediate_resample(
+            masks_sitk[i] = preprocessing_utils.aniso_intermediate_resample(
                 masks_sitk[i],
                 new_size,
                 target_spacing,
@@ -154,7 +156,7 @@ def resample_mask(
         )
 
     # Use the argmax function to join the masks into a single mask.
-    mask = utils.sitk_to_ants(sitk.JoinSeries(masks_sitk))
+    mask = preprocessing_utils.sitk_to_ants(sitk.JoinSeries(masks_sitk))
     mask = mask.numpy()
     mask = np.argmax(mask, axis=-1)
 
@@ -163,7 +165,6 @@ def resample_mask(
     mask.set_spacing(target_spacing)
     mask.set_origin(mask_ants.origin)
     mask.set_direction(mask_ants.direction)
-
     return mask
 
 
@@ -256,11 +257,11 @@ def compute_dtm(
     dtms_sitk = []
 
     # Get the one-hot encoded masks as a list of SimpleITK images.
-    masks_sitk = utils.make_onehot(mask_ants, labels)
+    masks_sitk = preprocessing_utils.make_onehot(mask_ants, labels)
 
     for mask in masks_sitk:
         # Start with case that the mask for the label is non-empty.
-        if utils.sitk_get_sum(mask) != 0:
+        if preprocessing_utils.sitk_get_sum(mask) != 0:
             # Compute the DTM for the current mask.
             dtm_i = sitk.SignedMaurerDistanceMap(
                 sitk.Cast(mask, sitk.sitkUInt8),
@@ -274,11 +275,11 @@ def compute_dtm(
                 # parts.
                 dtm_int = sitk.Cast((dtm_i < 0), sitk.sitkFloat32)
                 dtm_int *= dtm_i
-                int_min, _ = utils.sitk_get_min_max(dtm_int)
+                int_min, _ = preprocessing_utils.sitk_get_min_max(dtm_int)
 
                 dtm_ext = sitk.Cast((dtm_i > 0), sitk.sitkFloat32)
                 dtm_ext *= dtm_i
-                _, ext_max = utils.sitk_get_min_max(dtm_ext)
+                _, ext_max = preprocessing_utils.sitk_get_min_max(dtm_ext)
 
                 # Safeguard against division by zero.
                 # If ext_max is zero, then there are no positive distances.
@@ -320,7 +321,7 @@ def compute_dtm(
         dtms_sitk.append(dtm_i)
 
     # Join the DTMs into a single 4D image and return as a numpy array.
-    dtm = utils.sitk_to_ants(sitk.JoinSeries(dtms_sitk))
+    dtm = preprocessing_utils.sitk_to_ants(sitk.JoinSeries(dtms_sitk))
     dtm = dtm.numpy()
     return dtm
 
@@ -379,7 +380,7 @@ def preprocess_example(
 
         # Get foreground mask if necessary.
         if i == 0 and crop and fg_bbox is None:
-            fg_bbox = utils.get_fg_mask_bbox(image_i)
+            fg_bbox = preprocessing_utils.get_fg_mask_bbox(image_i)
 
         # If cropping is requested, but the foreground bounding box is not
         # provided, raise an error. Otherwise, crop the image to the
@@ -390,7 +391,7 @@ def preprocess_example(
                     "Foreground bounding box is required for cropping, but "
                     "none was provided."
                 )
-            image_i = utils.crop_to_fg(image_i, fg_bbox)
+            image_i = preprocessing_utils.crop_to_fg(image_i, fg_bbox)
 
         # Put all images into standard space.
         image_i = ants.reorient_image2(image_i, "RAI")
@@ -406,7 +407,7 @@ def preprocess_example(
         # Crop to foreground. We don't need to check if fg_bbox is None
         # because we already checked it above.
         if crop:
-            mask = utils.crop_to_fg(mask, fg_bbox)
+            mask = preprocessing_utils.crop_to_fg(mask, fg_bbox)
 
         # Put mask into standard space.
         mask = ants.reorient_image2(mask, "RAI")
@@ -468,7 +469,7 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
         raise FileNotFoundError(
             f"Configuration file not found in {args.results}."
         )
-    config = utils.read_json_file(os.path.join(args.results, "config.json"))
+    config = io.read_json_file(os.path.join(args.results, "config.json"))
 
     # Check if training paths file exists and read it.
     if not os.path.exists(os.path.join(args.results, "train_paths.csv")):
@@ -498,7 +499,7 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
 
         # Write the updated configuration file back to disk.
         config_json = os.path.join(args.results, "config.json")
-        utils.write_json_file(config_json, config)
+        io.write_json_file(config_json, config)
 
     # If the user specified to not preprocess, we will only reorient and
     # (optionally) crop the images and masks for their foreground bounding
@@ -509,7 +510,7 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
 
         # Write the updated configuration file back to disk.
         config_json = os.path.join(args.results, "config.json")
-        utils.write_json_file(config_json, config)
+        io.write_json_file(config_json, config)
 
     # Print preprocessing message and get progress bar.
     text = rich.text.Text("\nPreprocessing dataset\n") # type: ignore
@@ -517,9 +518,9 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
     console.print(text)
 
     if config["preprocessing"]["skip"]:
-        progress = utils.get_progress_bar("Converting nifti to npy")
+        progress = progress_bar.get_progress_bar("Converting nifti to npy")
     else:
-        progress = utils.get_progress_bar("Preprocessing")
+        progress = progress_bar.get_progress_bar("Preprocessing")
 
     # Check if foreground bounding box file exists and read it.
     if not os.path.exists(os.path.join(args.results, "fg_bboxes.csv")):

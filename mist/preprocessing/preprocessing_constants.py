@@ -12,6 +12,7 @@
 import dataclasses
 import numpy as np
 
+
 @dataclasses.dataclass(frozen=True)
 class PreprocessingConstants:
     """Constants for MIST data preprocessing."""
@@ -21,3 +22,7 @@ class PreprocessingConstants:
 
     # RAI orientation constants.
     RAI_ANTS_DIRECTION = np.eye(3)
+
+    # Foreground bounding box threshold percentiles.
+    FOREGROUND_BBOX_PERCENTILE_LOW = 33.0
+    FOREGROUND_BBOX_PERCENTILE_HIGH = 99.5
