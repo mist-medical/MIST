@@ -152,11 +152,13 @@ def load_model_from_config(
     # Load checkpoint weights.
     state_dict = torch.load(weights_path, weights_only=True)
 
-    # Handle DDP-trained models (strip 'module.' prefix).
-    new_state_dict = OrderedDict()
-    for k, v in state_dict.items():
-        new_key = k[7:] if k.startswith("module.") else k
-        new_state_dict[new_key] = v
+    # If keys come from DDP, strip 'module.' prefix.
+    if any(k.startswith("module.") for k in state_dict.keys()):
+        new_state_dict = OrderedDict()
+        for k, v in state_dict.items():
+            new_key = k[7:] if k.startswith("module.") else k
+            new_state_dict[new_key] = v
+        state_dict = new_state_dict
 
-    model.load_state_dict(new_state_dict)
+    model.load_state_dict(state_dict)
     return model

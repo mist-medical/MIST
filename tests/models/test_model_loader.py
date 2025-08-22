@@ -98,15 +98,14 @@ def test_validate_missing_required_params_key(valid_mist_config):
 
 
 @patch("torch.load")
-def test_load_model_from_config_success(
+def test_load_model_from_config_strips_ddp_prefix(
     mock_torch_load, valid_mist_config
 ):
-    """Test successful loading of a model from config and checkpoint."""
+    """DDP checkpoints (with 'module.' prefix) are stripped before loading."""
     dummy_model = MagicMock(spec=MGNet)
-    with patch(
-        "mist.models.model_loader.get_model_from_registry",
-        return_value=dummy_model
-    ):
+
+    # Return a dummy model instance from registry constructor.
+    with patch("mist.models.model_loader.get_model", return_value=dummy_model):
         # Fake DDP-wrapped weights.
         mock_torch_load.return_value = {
             "module.encoder.weight": torch.randn(4, 1, 3, 3, 3),
@@ -115,9 +114,40 @@ def test_load_model_from_config_success(
 
         model = load_model_from_config("mock_weights.pth", valid_mist_config)
 
+        # Verify keys were stripped.
         loaded_state_dict = dummy_model.load_state_dict.call_args[0][0]
         assert "encoder.weight" in loaded_state_dict
         assert "encoder.bias" in loaded_state_dict
+        assert all(
+            not k.startswith("module.") for k in loaded_state_dict.keys()
+        )
+        assert model is dummy_model
+
+
+@patch("torch.load")
+def test_load_model_from_config_keeps_non_ddp_keys(
+    mock_torch_load, valid_mist_config
+):
+    """Non-DDP checkpoints are loaded without key modification."""
+    dummy_model = MagicMock(spec=MGNet)
+
+    with patch("mist.models.model_loader.get_model", return_value=dummy_model):
+        # Raw (non-DDP) state dict.
+        mock_torch_load.return_value = {
+            "encoder.weight": torch.randn(4, 1, 3, 3, 3),
+            "encoder.bias": torch.randn(4),
+        }
+
+        model = load_model_from_config("mock_weights.pth", valid_mist_config)
+
+        loaded_state_dict = dummy_model.load_state_dict.call_args[0][0]
+        assert "encoder.weight" in loaded_state_dict
+        assert "encoder.bias" in loaded_state_dict
+        # Ensure nothing was stripped.
+        assert all(
+            k in ["encoder.weight", "encoder.bias"]
+            for k in loaded_state_dict.keys()
+        )
         assert model is dummy_model
 
 
