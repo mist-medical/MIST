@@ -9,9 +9,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tests for MIST inference utilities."""
+from typing import Tuple, Dict
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 import json
+import ants
 import numpy as np
 import pandas as pd
 import pytest
@@ -86,11 +88,11 @@ def mock_mist_config():
         "x_og_size": 64, "y_og_size": 64, "z_og_size": 64,
     }
 ])
-@patch("mist.inference.inference_utils.utils.decrop_from_fg")
-@patch("mist.inference.inference_utils.preprocess.resample_mask")
-@patch("mist.inference.inference_utils.ants.get_orientation")
-@patch("mist.inference.inference_utils.ants.reorient_image2")
-@patch("mist.inference.inference_utils.ants.from_numpy")
+@patch("mist.inference.inference_utils.decrop_from_fg")
+@patch("mist.preprocessing.preprocess.resample_mask")
+@patch("ants.get_orientation")
+@patch("ants.reorient_image2")
+@patch("ants.from_numpy")
 def test_back_to_original_space(
     mock_from_numpy,
     mock_reorient_image2,
@@ -148,17 +150,19 @@ def test_back_to_original_space(
 
     original_image.new_image_like.assert_called_once_with("mock_numpy_data")
 
+
 class _DummyModel:
     """Minimal stub for a torch.nn.Module, supporting .to(...).eval()."""
-
     def __init__(self):
         self.device_arg = None
 
     def to(self, device):
+        """Simulate moving model to a device."""
         self.device_arg = device
         return self
 
     def eval(self):
+        """Simulate setting model to evaluation mode."""
         return self
 
 
@@ -181,8 +185,8 @@ def test_load_test_time_models_no_checkpoints(tmp_path: Path, mock_mist_config):
         )
 
 
-@patch("mist.inference.inference_utils.model_loader.load_model_from_config")
-@patch("torch.cuda.is_available",return_value=False,)
+@patch("mist.models.model_loader.load_model_from_config")
+@patch("torch.cuda.is_available",return_value=False)
 def test_load_test_time_models_loads_all_on_cpu_when_no_cuda(
     mock_cuda_available,
     mock_load_model,
@@ -215,7 +219,7 @@ def test_load_test_time_models_loads_all_on_cpu_when_no_cuda(
     ]
 
 
-@patch("mist.inference.inference_utils.model_loader.load_model_from_config")
+@patch("mist.models.model_loader.load_model_from_config")
 @patch("torch.cuda.is_available")
 def test_load_test_time_models_uses_provided_device(
     mock_cuda_available,
@@ -248,9 +252,9 @@ def test_load_test_time_models_uses_provided_device(
     )
 
 
-@patch("mist.inference.inference_utils.model_loader.load_model_from_config")
-@patch("mist.inference.inference_utils.model_loader.convert_legacy_model_config")
-@patch("mist.inference.inference_utils.utils.read_json_file")
+@patch("mist.models.model_loader.load_model_from_config")
+@patch("mist.models.model_loader.convert_legacy_model_config")
+@patch("mist.utils.io.read_json_file")
 def test_load_test_time_models_converts_legacy_model_config(
     mock_read_json,
     mock_convert_legacy,
@@ -328,10 +332,10 @@ def test_remap_mask_labels(input_mask, original_labels, expected_output):
     assert result.dtype == input_mask.dtype
 
 
-@patch("mist.inference.inference_utils.utils.compare_headers")
-@patch("mist.inference.inference_utils.utils.is_image_3d")
-@patch("mist.inference.inference_utils.ants.image_read")
-@patch("mist.inference.inference_utils.ants.image_header_info")
+@patch("mist.analyze_data.analyzer_utils.compare_headers")
+@patch("mist.analyze_data.analyzer_utils.is_image_3d")
+@patch("ants.image_read")
+@patch("ants.image_header_info")
 @patch("os.path.isfile")
 def test_validate_inference_images_success(
     mock_isfile,
@@ -351,8 +355,8 @@ def test_validate_inference_images_success(
     mock_isfile.return_value = True
 
     # Mock headers and 3D checks.
-    header1 = {"dim": [3]}
-    header2 = {"dim": [3]}
+    header1 = {"dimensions": [64, 64, 64]}
+    header2 = {"dimensions": [64, 64, 64]}
     mock_image_header_info.side_effect = [header1, header2]
     mock_is_image_3d.return_value = True
     mock_compare_headers.return_value = True
@@ -382,8 +386,8 @@ def test_validate_inference_images_missing_file(mock_isfile):
         iu.validate_inference_images(patient_dict)
 
 
-@patch("mist.inference.inference_utils.utils.is_image_3d")
-@patch("mist.inference.inference_utils.ants.image_header_info")
+@patch("mist.analyze_data.analyzer_utils.is_image_3d")
+@patch("ants.image_header_info")
 @patch("os.path.isfile")
 def test_validate_inference_images_anchor_not_3d(
     mock_isfile,
@@ -399,10 +403,10 @@ def test_validate_inference_images_anchor_not_3d(
         iu.validate_inference_images(patient_dict)
 
 
-@patch("mist.inference.inference_utils.utils.compare_headers")
-@patch("mist.inference.inference_utils.utils.is_image_3d")
-@patch("mist.inference.inference_utils.ants.image_read")
-@patch("mist.inference.inference_utils.ants.image_header_info")
+@patch("mist.analyze_data.analyzer_utils.compare_headers")
+@patch("mist.analyze_data.analyzer_utils.is_image_3d")
+@patch("ants.image_read")
+@patch("ants.image_header_info")
 @patch("os.path.isfile")
 def test_validate_inference_images_header_mismatch(
     mock_isfile,
@@ -439,10 +443,10 @@ def test_validate_inference_images_no_image_columns():
         iu.validate_inference_images(patient_dict)
 
 
-@patch("mist.inference.inference_utils.utils.compare_headers")
-@patch("mist.inference.inference_utils.utils.is_image_3d")
-@patch("mist.inference.inference_utils.ants.image_read")
-@patch("mist.inference.inference_utils.ants.image_header_info")
+@patch("mist.analyze_data.analyzer_utils.compare_headers")
+@patch("mist.analyze_data.analyzer_utils.is_image_3d")
+@patch("ants.image_read")
+@patch("ants.image_header_info")
 @patch("os.path.isfile")
 def test_validate_inference_images_secondary_image_not_3d(
     mock_isfile,
@@ -531,3 +535,132 @@ def test_validate_paths_dataframe_parametrized(df, should_raise, match):
             iu.validate_paths_dataframe(df)
     else:
         iu.validate_paths_dataframe(df)  # Should not raise.
+
+
+def _make_ants_image(
+    arr_xyz: np.ndarray,
+    spacing: Tuple[float, float, float] = (1.0, 1.0, 1.0),
+    origin: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+):
+    """Create an ANTs image with basic metadata."""
+    img = ants.from_numpy(arr_xyz.astype(np.float32))
+    img.set_spacing(spacing)
+    img.set_origin(origin)
+    img.set_direction(np.eye(3))
+    return img
+
+
+def _crop_with_bbox(arr: np.ndarray, bbox: Dict[str, int]) -> np.ndarray:
+    """Numpy crop using the same inclusive end convention as crop_to_fg."""
+    xs, xe = bbox["x_start"], bbox["x_end"]
+    ys, ye = bbox["y_start"], bbox["y_end"]
+    zs, ze = bbox["z_start"], bbox["z_end"]
+    return arr[xs:xe + 1, ys:ye + 1, zs:ze + 1]
+
+
+def _expected_decrop(
+    cropped: np.ndarray,
+    og_shape: Tuple[int, int, int],
+    bbox: Dict[str, int],
+) -> np.ndarray:
+    """Construct the expected zero-padded array according to bbox placement."""
+    out = np.zeros(og_shape, dtype=cropped.dtype)
+    xs, xe = bbox["x_start"], bbox["x_end"]
+    ys, ye = bbox["y_start"], bbox["y_end"]
+    zs, ze = bbox["z_start"], bbox["z_end"]
+    out[xs:xe + 1, ys:ye + 1, zs:ze + 1] = cropped
+    return out
+
+
+def test_decrop_from_fg_restores_original_region():
+    """Decropping pads the cropped block back to its original placement."""
+    og_shape = (12, 10, 8)
+    rng = np.random.default_rng(0)
+    vol = rng.normal(size=og_shape).astype(np.float32)
+
+    # Define a nontrivial bbox strictly inside the volume.
+    bbox = {
+        "x_start": 2, "x_end": 8,
+        "y_start": 1, "y_end": 7,
+        "z_start": 3, "z_end": 6,
+        "x_og_size": og_shape[0],
+        "y_og_size": og_shape[1],
+        "z_og_size": og_shape[2],
+    }
+
+    cropped_np = _crop_with_bbox(vol, bbox)
+    cropped_img = _make_ants_image(cropped_np)
+
+    decropped_img = iu.decrop_from_fg(cropped_img, bbox)
+    decropped_np = decropped_img.numpy()
+
+    assert decropped_np.shape == og_shape
+    expected = _expected_decrop(cropped_np, og_shape, bbox)
+    assert np.allclose(decropped_np, expected)
+
+
+@pytest.mark.parametrize(
+    "bbox",
+    [
+        # Right padding only: starts at 0, ends before last index.
+        {"x_start": 0, "x_end": 7, "y_start": 0, "y_end": 8,
+         "z_start": 1, "z_end": 5},
+        # Left padding only: ends at last index.
+        {"x_start": 3, "x_end": 11, "y_start": 2, "y_end": 9,
+         "z_start": 0, "z_end": 7},
+        # Both sides padding on all axes.
+        {"x_start": 2, "x_end": 9, "y_start": 1, "y_end": 7,
+         "z_start": 1, "z_end": 6},
+    ],
+)
+def test_decrop_from_fg_padding_patterns(bbox):
+    """Decropping handles left-only, right-only, and both-side padding."""
+    og_shape = (12, 10, 8)
+    # Fill in *_og_size keys.
+    bbox = dict(bbox, **{
+        "x_og_size": og_shape[0],
+        "y_og_size": og_shape[1],
+        "z_og_size": og_shape[2],
+    })
+
+    # Use a deterministic pattern so misalignment is obvious.
+    vol = np.zeros(og_shape, dtype=np.float32)
+    xs, xe = bbox["x_start"], bbox["x_end"]
+    ys, ye = bbox["y_start"], bbox["y_end"]
+    zs, ze = bbox["z_start"], bbox["z_end"]
+    vol[xs:xe + 1, ys:ye + 1, zs:ze + 1] = 7.0
+
+    cropped_np = _crop_with_bbox(vol, bbox)
+    cropped_img = _make_ants_image(cropped_np)
+
+    decropped_img = iu.decrop_from_fg(cropped_img, bbox)
+    decropped_np = decropped_img.numpy()
+
+    assert decropped_np.shape == og_shape
+    expected = _expected_decrop(cropped_np, og_shape, bbox)
+    assert np.array_equal(decropped_np, expected)
+
+
+def test_decrop_from_fg_bbox_full_image_is_noop():
+    """When bbox covers full image, decropping returns the same image."""
+    og_shape = (8, 7, 6)
+    rng = np.random.default_rng(123)
+    vol = rng.uniform(size=og_shape).astype(np.float32)
+
+    bbox = {
+        "x_start": 0, "x_end": og_shape[0] - 1,
+        "y_start": 0, "y_end": og_shape[1] - 1,
+        "z_start": 0, "z_end": og_shape[2] - 1,
+        "x_og_size": og_shape[0],
+        "y_og_size": og_shape[1],
+        "z_og_size": og_shape[2],
+    }
+
+    # Cropped equals original region since bbox spans entire volume.
+    cropped_img = _make_ants_image(vol.copy())
+
+    decropped_img = iu.decrop_from_fg(cropped_img, bbox)
+    decropped_np = decropped_img.numpy()
+
+    assert decropped_np.shape == og_shape
+    assert np.allclose(decropped_np, vol)

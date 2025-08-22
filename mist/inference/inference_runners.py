@@ -24,17 +24,19 @@ import rich
 import torch
 
 # MIST imports.
+from mist.utils import progress_bar, io
 from mist.inference import inference_utils
 from mist.inference.inference_constants import InferenceConstants as ic
 from mist.inference.predictor import Predictor
 from mist.data_loading import dali_loader
 from mist.models import model_loader
-from mist.runtime import utils
 from mist.inference.ensemblers.ensembler_registry import get_ensembler
 from mist.inference.tta.strategies import get_strategy
 from mist.inference.inferers.inferer_registry import get_inferer
 from mist.postprocessing.postprocessor import Postprocessor
 from mist.preprocessing import preprocess
+from mist.preprocessing import preprocessing_utils
+from mist.training import training_utils
 
 
 def predict_single_example(
@@ -74,7 +76,9 @@ def predict_single_example(
         mist_configuration["preprocessing"]["crop_to_foreground"]
         and foreground_bounding_box is None
     ):
-        foreground_bounding_box = utils.get_fg_mask_bbox(original_ants_image)
+        foreground_bounding_box = preprocessing_utils.get_fg_mask_bbox(
+            original_ants_image
+        )
 
     # Restore original spacing, orientation, and header.
     prediction = inference_utils.back_to_original_space(
@@ -125,17 +129,17 @@ def test_on_fold(
     numpy_dir = os.path.join(mist_args.numpy)
     models_dir = os.path.join(results_dir, "models")
     config_path = os.path.join(results_dir, "config.json")
-    config = utils.read_json_file(config_path)
+    config = io.read_json_file(config_path)
 
     # Get dataframe with paths for test images.
     train_df = pd.read_csv(os.path.join(results_dir, "train_paths.csv"))
     test_df = train_df.loc[train_df["fold"] == fold_number]
 
     # Construct paths to preprocessed .npy image volumes.
-    test_ids = list(test_df["id"])
-    test_image_paths = [
-        os.path.join(numpy_dir, "images", f"{pid}.npy") for pid in test_ids
-    ]
+    test_image_paths = training_utils.get_npy_paths(
+        data_dir=numpy_dir,
+        patient_ids=list(test_df["id"]),
+    )
 
     # Get bounding box data.
     foreground_bounding_boxes = pd.read_csv(
@@ -181,12 +185,14 @@ def test_on_fold(
     os.makedirs(output_directory, exist_ok=True)
 
     # Progress bar and error messages.
-    progress_bar = utils.get_progress_bar(f'Testing on fold {fold_number}')
     console = rich.console.Console()
     error_messages = []
 
     # Begin inference loop.
-    with torch.no_grad(), progress_bar as pb:
+    with (
+        torch.no_grad(),
+        progress_bar.get_progress_bar(f'Testing on fold {fold_number}') as pb
+    ):
         for image_index in pb.track(range(len(test_df))):
             patient = test_df.iloc[image_index].to_dict()
             patient_id = patient["id"]
@@ -339,12 +345,11 @@ def infer_from_dataframe(
     os.makedirs(output_directory, exist_ok=True)
 
     # Set up rich progress bar.
-    testing_progress = utils.get_progress_bar("Running inference")
     console = rich.console.Console()
     error_messages = []
 
     # Start inference loop.
-    with testing_progress as pb:
+    with progress_bar.get_progress_bar("Running inference") as pb:
         for patient_index in pb.track(range(len(paths_dataframe))):
             patient = paths_dataframe.iloc[patient_index].to_dict()
             patient_id = patient["id"]

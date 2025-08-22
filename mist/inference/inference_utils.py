@@ -9,22 +9,52 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Utility functions for MIST inference modules."""
-# Standard library imports.
-import os
 from typing import Any, Dict, Optional, Tuple, List, Union
 from collections.abc import Callable
 from pathlib import Path
+import os
 import ants
-import torch
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
+import torch
 
 # MIST imports.
+from mist.utils import io
+from mist.analyze_data import analyzer_utils
 from mist.preprocessing import preprocess
-from mist.runtime import utils
 from mist.inference.inference_constants import InferenceConstants as ic
 from mist.models import model_loader
+
+
+def decrop_from_fg(
+    ants_image: ants.core.ants_image.ANTsImage,
+    fg_bbox: Dict[str, int],
+) -> ants.core.ants_image.ANTsImage:
+    """Decrop image to original size using foreground bounding box.
+
+    Args:
+        ants_image: ANTs image object.
+        fg_bbox: Foreground bounding box.
+
+    Returns:
+        Decropped ANTs image object.
+    """
+    padding = [
+        (
+            np.max([0, fg_bbox["x_start"]]),
+            np.max([0, fg_bbox["x_og_size"] - fg_bbox["x_end"]]) - 1
+        ),
+        (
+            np.max([0, fg_bbox["y_start"]]),
+            np.max([0, fg_bbox["y_og_size"] - fg_bbox["y_end"]]) - 1
+        ),
+        (
+            np.max([0, fg_bbox["z_start"]]),
+            np.max([0, fg_bbox["z_og_size"] - fg_bbox["z_end"]]) - 1
+        )
+    ]
+    return ants.pad_image(ants_image, pad_width=padding, return_padvals=False)
 
 
 def back_to_original_space(
@@ -102,7 +132,7 @@ def back_to_original_space(
 
     # Appropriately pad back to original size if necessary.
     if foreground_bounding_box is not None:
-        prediction = utils.decrop_from_fg(prediction, foreground_bounding_box)
+        prediction = decrop_from_fg(prediction, foreground_bounding_box)
 
     # Copy header from original image onto the prediction so they match. This
     # will take care of other details in the header like the origin and the
@@ -166,7 +196,7 @@ def load_test_time_models(
     # Check if a legacy model config file exists.
     config_path = models_path / "model_config.json"
     if config_path.is_file():
-        legacy_config = utils.read_json_file(str(config_path))
+        legacy_config = io.read_json_file(str(config_path))
         mist_config = model_loader.convert_legacy_model_config(legacy_config)
 
     models = []
@@ -243,7 +273,7 @@ def validate_inference_images(
     # Load anchor image. Check if it is 3D before proceeding.
     anchor_filename = os.path.basename(image_paths[0])
     anchor_header = ants.image_header_info(image_paths[0])
-    if not utils.is_image_3d(anchor_header):
+    if not analyzer_utils.is_image_3d(anchor_header):
         raise ValueError(f"Anchor image is not 3D: {anchor_filename}")
     anchor_image = ants.image_read(image_paths[0])
 
@@ -251,10 +281,10 @@ def validate_inference_images(
     for image_path in image_paths[1:]:
         current_filename = os.path.basename(image_path)
         current_header = ants.image_header_info(image_path)
-        if not utils.is_image_3d(current_header):
+        if not analyzer_utils.is_image_3d(current_header):
             raise ValueError(f"Image is not 3D: {current_filename}")
 
-        if not utils.compare_headers(anchor_header, current_header):
+        if not analyzer_utils.compare_headers(anchor_header, current_header):
             raise ValueError(
                 f"Image headers do not match: {anchor_filename} and "
                 f"{current_filename}"
