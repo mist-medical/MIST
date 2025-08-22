@@ -50,15 +50,6 @@ def test_analyze_entry_creates_dirs_and_runs_analyzer(tmp_path, monkeypatch):
     This test pre-creates config.json and passes --overwrite to verify
     the entrypoint proceeds under the new overwrite guard.
     """
-    # Patch utils.set_warning_levels to avoid side effects and assert it’s
-    # called.
-    called = {"warn": False}
-    def _set_levels():
-        called["warn"] = True
-    monkeypatch.setattr(
-        entry.utils, "set_warning_levels", _set_levels, raising=True
-    )
-
     # Stub Analyzer to capture the Namespace and run() call.
     observed = {"namespace": None, "run_called": False}
 
@@ -96,7 +87,6 @@ def test_analyze_entry_creates_dirs_and_runs_analyzer(tmp_path, monkeypatch):
     # Analyzer constructed with parsed Namespace and run() called.
     ns = observed["namespace"]
     assert observed["run_called"] is True
-    assert called["warn"] is True
 
     # Spot-check parsed flags were passed through.
     assert ns.results == str(results_dir)
@@ -113,11 +103,6 @@ def test_analyze_entry_blocks_when_config_exists_without_overwrite(
     tmp_path, monkeypatch
 ):
     """Raise FileExistsError if config.json exists and no --overwrite."""
-    # Avoid side effects.
-    monkeypatch.setattr(
-        entry.utils, "set_warning_levels", lambda: None, raising=True
-    )
-
     # Track whether Analyzer was constructed or run (it should not be).
     constructed = {"count": 0}
     class _AnalyzerStub:
@@ -154,12 +139,6 @@ def test_analyze_entry_uses_default_results_when_missing(tmp_path, monkeypatch):
     """With no --results, analyze_entry should create ./results under CWD."""
     # Run in a temp CWD so default folder is predictable.
     monkeypatch.chdir(tmp_path)
-
-    # Stub out utils + Analyzer.
-    monkeypatch.setattr(
-        entry.utils, "set_warning_levels", lambda: None, raising=True
-    )
-
     ran = {"called": False}
     class _AnalyzerStub:
         def __init__(self, *_args, **_kwargs):

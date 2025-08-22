@@ -28,7 +28,9 @@ import numpy as np
 import rich
 
 # MIST imports.
-from mist.runtime import utils
+from mist.utils import io, progress_bar
+from mist.preprocessing import preprocessing_utils
+from mist.analyze_data import analyzer_utils
 from mist.analyze_data.analyzer_constants import AnalyzeConstants as constants
 
 
@@ -50,14 +52,16 @@ class Analyzer:
         self.mist_arguments = mist_arguments
 
         # Read the dataset information from the JSON file and validate it.
-        self.dataset_info = utils.read_json_file(self.mist_arguments.data)
+        self.dataset_info = io.read_json_file(self.mist_arguments.data)
         self._check_dataset_info()
 
         # Load the base configuration file.
-        self.config = utils.read_json_file("base_config.json")
+        self.config = io.read_json_file("base_config.json")
 
         # Initialize the dataframe with the file paths for the images and masks.
-        self.paths_df = utils.get_files_df(self.mist_arguments.data, "train")
+        self.paths_df = analyzer_utils.get_files_df(
+            self.mist_arguments.data, "train"
+        )
 
         # Set file paths for saving files like the training paths,
         # foreground bounding boxes, and configuration file.
@@ -229,7 +233,7 @@ class Analyzer:
         computes the bounding box around the non-zero voxels of the foreground
         mask.
         """
-        progress = utils.get_progress_bar("Checking FG vol. reduction")
+        progress = progress_bar.get_progress_bar("Checking FG vol. reduction")
 
         fg_bboxes_df = pd.DataFrame(
             columns=[
@@ -257,7 +261,7 @@ class Analyzer:
                 image = ants.image_read(image_list[0])
 
                 # Get foreground mask and save it to save computation time.
-                fg_bbox = utils.get_fg_mask_bbox(image)
+                fg_bbox = preprocessing_utils.get_fg_mask_bbox(image)
 
                 # Get cropped dimensions from bounding box.
                 cropped_dims[i, :] = [
@@ -293,7 +297,7 @@ class Analyzer:
         preprocessing will compute normalization parameters (for non CT cases)
         and apply the normalization scheme only to the non-zero voxels.
         """
-        progress = utils.get_progress_bar("Checking non-zero ratio")
+        progress = progress_bar.get_progress_bar("Checking non-zero ratio")
 
         nz_ratio = []
         with progress as pb:
@@ -324,7 +328,7 @@ class Analyzer:
         resolution to bring the ratio down. This is done to ensure that we still
         have a reasonable resolution when we preprocess the data.
         """
-        progress = utils.get_progress_bar("Getting target spacing")
+        progress = progress_bar.get_progress_bar("Getting target spacing")
 
         # If data is anisotropic, get median image spacing.
         original_spacings = np.zeros((len(self.paths_df), 3))
@@ -383,7 +387,9 @@ class Analyzer:
         # is larger than the recommended memory size, then warn the user.
         resampled_dims = np.zeros((len(self.paths_df), 3))
 
-        progress = utils.get_progress_bar("Checking resampled dimensions")
+        progress = progress_bar.get_progress_bar(
+            "Checking resampled dimensions"
+        )
         messages = ""
 
         with progress as pb:
@@ -400,16 +406,18 @@ class Analyzer:
                 current_spacing = mask_header["spacing"]
 
                 # Compute resampled dimensions.
-                new_dims = utils.get_resampled_image_dimensions(
+                new_dims = analyzer_utils.get_resampled_image_dimensions(
                     current_dims, current_spacing,
                     self.config["preprocessing"]["target_spacing"]
                 )
 
                 # Compute memory size of resampled image.
-                image_memory_size = utils.get_float32_example_memory_size(
-                    new_dims,
-                    len(image_list),
-                    len(self.dataset_info["labels"])
+                image_memory_size = (
+                    analyzer_utils.get_float32_example_memory_size(
+                        new_dims,
+                        len(image_list),
+                        len(self.dataset_info["labels"])
+                    )
                 )
 
                 # If image memory size is larger than the max recommended size
@@ -448,7 +456,7 @@ class Analyzer:
         CT images are normalized correctly and that the windowing is applied
         correctly to the foreground intensities.
         """
-        progress = utils.get_progress_bar("Getting CT norm. params.")
+        progress = progress_bar.get_progress_bar("Getting CT norm. params.")
         fg_intensities = []
         with progress as pb:
             for i in pb.track(range(len(self.paths_df))):
@@ -565,9 +573,7 @@ class Analyzer:
         # images. If the patch size is specified by the user, we use that patch
         # size.
         if self.mist_arguments.patch_size is None:
-            patch_size = utils.get_best_patch_size(
-                median_dims, self.mist_arguments.max_patch_size
-            )
+            patch_size = analyzer_utils.get_best_patch_size(median_dims)
             self.config["model"]["params"]["patch_size"] = [
                 int(size) for size in patch_size
             ]
@@ -600,7 +606,7 @@ class Analyzer:
         multiple images, it checks that they have the same header information.
         If any of these checks fail, the patient is excluded from training.
         """
-        progress = utils.get_progress_bar("Verifying dataset")
+        progress = progress_bar.get_progress_bar("Verifying dataset")
         dataset_labels_set = set(self.dataset_info["labels"])
 
         bad_data = set()
@@ -632,7 +638,7 @@ class Analyzer:
                     continue
 
                 # Check that the mask is 3D.
-                if not utils.is_image_3d(mask_header):
+                if not analyzer_utils.is_image_3d(mask_header):
                     messages += (
                         f"In {patient['id']}: Got 4D mask, make sure all"
                         "images are 3D\n"
@@ -644,7 +650,7 @@ class Analyzer:
                 # images is 3D.
                 for image_path in image_list:
                     image_header = ants.image_header_info(image_path)
-                    if not utils.compare_headers(
+                    if not analyzer_utils.compare_headers(
                         mask_header, image_header
                     ):
                         messages += (
@@ -654,7 +660,7 @@ class Analyzer:
                         bad_data.add(i)
                         break
 
-                    if not utils.is_image_3d(image_header):
+                    if not analyzer_utils.is_image_3d(image_header):
                         messages += (
                             f"In {patient['id']}: Got 4D image, make"
                             " sure all images are 3D\n"
@@ -671,7 +677,7 @@ class Analyzer:
                     for image_path in image_list[1:]:
                         image_header = ants.image_header_info(image_path)
 
-                        if not utils.compare_headers(
+                        if not analyzer_utils.compare_headers(
                             anchor_header, image_header
                         ):
                             messages += (
@@ -709,7 +715,7 @@ class Analyzer:
 
         # Step 2: Add folds to the paths dataframe and update the configuration
         # with the number of folds that we are using for training.
-        self.paths_df = utils.add_folds_to_df(
+        self.paths_df = analyzer_utils.add_folds_to_df(
             self.paths_df, n_splits=self.mist_arguments.nfolds
         )
         self.config["training"]["nfolds"] = int(self.mist_arguments.nfolds)
@@ -730,7 +736,7 @@ class Analyzer:
 
         # Step 4: Save the configuration file and the paths dataframe.
         self.paths_df.to_csv(self.paths_csv, index=False)
-        utils.write_json_file(self.config_json, self.config)
+        io.write_json_file(self.config_json, self.config)
 
         # Step 5: If the user specified test data in the dataset JSON file, then
         # create a test paths dataframe and save it as CSV.
@@ -744,7 +750,9 @@ class Analyzer:
                 )
 
             # Create a test paths dataframe from the test data directory.
-            test_paths_df = utils.get_files_df(self.mist_arguments.data, "test")
+            test_paths_df = analyzer_utils.get_files_df(
+                self.mist_arguments.data, "test"
+            )
 
             # Stay consistent with earlier string-based paths.
             test_paths_csv = os.path.join(self.results_dir, "test_paths.csv")
