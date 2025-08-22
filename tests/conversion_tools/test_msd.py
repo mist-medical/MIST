@@ -17,8 +17,10 @@ import pytest
 import SimpleITK as sitk
 from pathlib import Path
 
+# MIST imports.
+from mist.utils import io, progress_bar
+from mist.conversion_tools import conversion_utils
 from mist.conversion_tools.msd import convert_msd, copy_msd_data
-from mist.runtime import utils
 
 
 @pytest.fixture
@@ -62,7 +64,7 @@ def temp_msd_dir(tmp_path):
         "test": ["imagesTs/patient_002.nii.gz"],
     }
 
-    with open(source / "dataset.json", "w") as f:
+    with open(source / "dataset.json", "w", encoding="utf-8") as f:
         json.dump(dataset_json, f)
 
     return source, dest
@@ -72,10 +74,10 @@ def temp_msd_dir(tmp_path):
 def patch_utils(monkeypatch):
     """Patch utility functions to avoid actual file operations."""
     monkeypatch.setattr(
-        utils, "get_progress_bar", lambda msg: DummyProgressBar()
+        progress_bar, "get_progress_bar", lambda msg: DummyProgressBar()
     )
     monkeypatch.setattr(
-        utils,
+        conversion_utils,
         "copy_image_from_source_to_dest",
         lambda src, dst: shutil.copy(src, dst)
     )
@@ -84,14 +86,16 @@ def patch_utils(monkeypatch):
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
 
-    monkeypatch.setattr(utils, "write_json_file", fake_write_json_file)
+    monkeypatch.setattr(io, "write_json_file", fake_write_json_file)
 
 
 class DummyProgressBar:
     """A dummy progress bar that does nothing. For testing purposes only."""
     def __enter__(self): return self
     def __exit__(self, *args): pass
-    def track(self, iterable, total=None): return iterable
+    def track(self, iterable, total=None):
+        """Dummy track method that just returns the iterable."""
+        return iterable
 
 
 def test_convert_msd_creates_correct_output(temp_msd_dir):
@@ -113,7 +117,7 @@ def test_convert_msd_creates_correct_output(temp_msd_dir):
     # Check MIST config.
     config_file = Path(dest) / "dataset.json"
     assert config_file.exists()
-    with open(config_file) as f:
+    with open(config_file, encoding="utf-8") as f:
         config = json.load(f)
     assert config["modality"] == "other"
     assert config["labels"] == [0, 1]
@@ -265,7 +269,7 @@ def test_convert_msd_no_test_data_creates_correct_json(tmp_path):
             "label": "labelsTr/patient.nii.gz"
         }],
     }
-    with open(source / "dataset.json", "w") as f:
+    with open(source / "dataset.json", "w", encoding="utf-8") as f:
         json.dump(dataset_json, f)
 
     convert_msd(str(source), str(dest))
@@ -274,7 +278,7 @@ def test_convert_msd_no_test_data_creates_correct_json(tmp_path):
     config_file = dest / "dataset.json"
     assert config_file.exists()
 
-    with open(config_file) as f:
+    with open(config_file, encoding="utf-8") as f:
         config = json.load(f)
 
     # Check that "test-data" key is missing.
