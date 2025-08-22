@@ -94,3 +94,23 @@ class ValidationProgressBar(Progress):
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.progress.stop()
+
+
+def get_progress_bar(task_name: str) -> Progress:
+    """Set up rich progress bar.
+
+    Args:
+        task_name: Name of the task. This will be displayed on the left side of
+            the progress bar.
+
+    Returns:
+        A rich progress bar object.
+    """
+    # Set up rich progress bar
+    return Progress(
+        TextColumn(task_name),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TextColumn("•"),
+        TimeElapsedColumn()
+    )

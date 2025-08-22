@@ -17,7 +17,7 @@ import pandas as pd
 from sklearn.model_selection import KFold
 
 # MIST imports.
-from mist.runtime import io as io_utils
+from mist.utils import io as io_utils
 
 
 def compare_headers(header1: Dict[str, Any], header2: Dict[str, Any]) -> bool:

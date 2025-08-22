@@ -165,7 +165,7 @@ def test_get_files_df_train_mode_maps_paths(monkeypatch, tmp_path: Path):
     _touch(p3 / "image_1_only.nii.gz")
 
     # Mock read_json_file to return our dataset info regardless of path.
-    monkeypatch.setattr("mist.runtime.io.read_json_file",lambda _: ds_info,)
+    monkeypatch.setattr("mist.utils.io.read_json_file",lambda _: ds_info,)
 
     df = au.get_files_df("fake/path/dataset.json", "train")
 
@@ -212,10 +212,7 @@ def test_get_files_df_test_mode_no_mask(monkeypatch, tmp_path: Path):
     _touch(t1 / "image_2.nii.gz")
     _touch(t2 / "image_3.nii.gz")
 
-    monkeypatch.setattr(
-        "mist.runtime.io.read_json_file",
-        lambda _: ds_info,
-    )
+    monkeypatch.setattr("mist.utils.io.read_json_file", lambda _: ds_info)
 
     df = au.get_files_df("fake/path/dataset.json", "test")
 

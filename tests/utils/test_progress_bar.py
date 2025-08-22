@@ -13,9 +13,18 @@ from typing import Any, Dict, List
 from unittest.mock import patch
 import numpy as np
 import pytest
+from rich.progress import (
+    BarColumn,
+    TextColumn,
+    Progress,
+    MofNCompleteColumn,
+    TimeElapsedColumn
+)
 
 # MIST imports.
-from mist.runtime.progress_bar import TrainProgressBar, ValidationProgressBar
+from mist.utils.progress_bar import (
+    TrainProgressBar, ValidationProgressBar, get_progress_bar
+)
 
 
 class SpyProgress:
@@ -57,7 +66,7 @@ class SpyProgress:
         self.stopped = True
 
 
-@patch("mist.runtime.progress_bar.Progress", new=SpyProgress)
+@patch("mist.utils.progress_bar.Progress", new=SpyProgress)
 def test_train_progressbar_initialization_creates_task():
     """TrainProgressBar should create a task with loss/lr fields initialized."""
     current_epoch = 3
@@ -87,7 +96,7 @@ def test_train_progressbar_initialization_creates_task():
     assert len(pb.progress.columns) > 0
 
 
-@patch("mist.runtime.progress_bar.Progress", new=SpyProgress)
+@patch("mist.utils.progress_bar.Progress", new=SpyProgress)
 def test_train_progressbar_update_formats_loss_and_lr():
     """Update should advance by 1 and format loss and lr as expected."""
     pb = TrainProgressBar(current_epoch=1, fold=0, epochs=5, train_steps=10)
@@ -110,7 +119,7 @@ def test_train_progressbar_update_formats_loss_and_lr():
     assert update["lr"] == expected_lr
 
 
-@patch("mist.runtime.progress_bar.Progress", new=SpyProgress)
+@patch("mist.utils.progress_bar.Progress", new=SpyProgress)
 def test_train_progressbar_multiple_updates():
     """Multiple updates should each advance by 1 and record formatted fields."""
     pb = TrainProgressBar(current_epoch=1, fold=0, epochs=5, train_steps=3)
@@ -129,7 +138,7 @@ def test_train_progressbar_multiple_updates():
         )
 
 
-@patch("mist.runtime.progress_bar.Progress", new=SpyProgress)
+@patch("mist.utils.progress_bar.Progress", new=SpyProgress)
 def test_train_progressbar_context_manager_starts_and_stops():
     """Context manager should start on enter and stop on exit."""
     pb = TrainProgressBar(current_epoch=1, fold=0, epochs=5, train_steps=1)
@@ -147,7 +156,7 @@ def test_train_progressbar_context_manager_starts_and_stops():
     assert pb.progress.stopped
 
 
-@patch("mist.runtime.progress_bar.Progress", new=SpyProgress)
+@patch("mist.utils.progress_bar.Progress", new=SpyProgress)
 def test_validation_progressbar_initialization_creates_task():
     """ValidationProgressBar should create a task with val_loss field."""
     val_steps = 42
@@ -165,7 +174,7 @@ def test_validation_progressbar_initialization_creates_task():
     assert len(pb.progress.columns) > 0
 
 
-@patch("mist.runtime.progress_bar.Progress", new=SpyProgress)
+@patch("mist.utils.progress_bar.Progress", new=SpyProgress)
 def test_validation_progressbar_update_formats_loss():
     """Update should advance by 1 and format validation loss with 4 decimals."""
     pb = ValidationProgressBar(val_steps=5)
@@ -179,7 +188,7 @@ def test_validation_progressbar_update_formats_loss():
     assert update["loss"] == f"val_loss: {loss:.4f}"
 
 
-@patch("mist.runtime.progress_bar.Progress", new=SpyProgress)
+@patch("mist.utils.progress_bar.Progress", new=SpyProgress)
 def test_validation_progressbar_multiple_updates():
     """Multiple updates should each advance and format the loss correctly."""
     pb = ValidationProgressBar(val_steps=3)
@@ -194,7 +203,7 @@ def test_validation_progressbar_multiple_updates():
         assert update["loss"] == f"val_loss: {l:.4f}"
 
 
-@patch("mist.runtime.progress_bar.Progress", new=SpyProgress)
+@patch("mist.utils.progress_bar.Progress", new=SpyProgress)
 def test_validation_progressbar_context_manager_starts_and_stops():
     """Context manager should start on enter and stop on exit."""
     pb = ValidationProgressBar(val_steps=2)
@@ -208,3 +217,35 @@ def test_validation_progressbar_context_manager_starts_and_stops():
         assert not pb.progress.stopped
 
     assert pb.progress.stopped
+
+
+def test_get_progress_bar_structure_and_usage():
+    """get_progress_bar returns a Progress with expected columns and works."""
+    name = "Unit Test Task"
+    pb = get_progress_bar(name)
+
+    # Basic type.
+    assert isinstance(pb, Progress)
+
+    # Verify the configured columns: [TextColumn, BarColumn, MofN,
+    # TextColumn("•"), TimeElapsed]
+    cols = pb.columns
+    assert len(cols) == 5
+    assert isinstance(cols[0], TextColumn)
+    assert isinstance(cols[1], BarColumn)
+    assert isinstance(cols[2], MofNCompleteColumn)
+    assert isinstance(cols[3], TextColumn)
+    assert isinstance(cols[4], TimeElapsedColumn)
+
+    # Ensure it behaves as a context manager and can run a task.
+    # This should not raise and should allow advancing to completion.
+    with pb as progress:
+        task_id = progress.add_task(name, total=2)
+        progress.advance(task_id)
+        progress.advance(task_id)  # complete the task
+
+        # Sanity: the task is finished.
+        # Progress keeps task data in _tasks; use the public API where possible.
+        # `tasks` is public in rich>=13.x; fallback: ensure no exception is raised.
+        tasks = [t for t in progress.tasks if t.id == task_id]
+        assert tasks and tasks[0].finished

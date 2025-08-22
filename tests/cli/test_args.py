@@ -8,7 +8,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for mist.runtime.args."""
+"""Tests for mist.cli.args."""
 from typing import List
 import argparse
 import pytest
@@ -31,29 +31,29 @@ def patched_registries(monkeypatch):
     """Patch registry list functions in add_* so choices are deterministic."""
     # Model registry.
     monkeypatch.setattr(
-        "mist.runtime.args.list_registered_models",
+        "mist.cli.args.list_registered_models",
         lambda: ["fmgnet", "mednext"],
         raising=True,
     )
     # Optimizers and LR schedulers.
     monkeypatch.setattr(
-        "mist.runtime.args.list_optimizers",
+        "mist.cli.args.list_optimizers",
         lambda: ["adamw", "sgd"],
         raising=True,
     )
     monkeypatch.setattr(
-        "mist.runtime.args.list_lr_schedulers",
+        "mist.cli.args.list_lr_schedulers",
         lambda: ["cosine", "polynomial", "constant"],
         raising=True,
     )
     # Losses and alpha schedulers.
     monkeypatch.setattr(
-        "mist.runtime.args.list_registered_losses",
+        "mist.cli.args.list_registered_losses",
         lambda: ["dice", "focal"],
         raising=True,
     )
     monkeypatch.setattr(
-        "mist.runtime.args.list_alpha_schedulers",
+        "mist.cli.args.list_alpha_schedulers",
         lambda: ["linear", "constant"],
         raising=True,
     )
@@ -143,6 +143,18 @@ def test_flag_and_boolean_flag(parser: args_mod.ArgParser):
     assert ns.overwrite is False
     ns = parser.parse_args(["--overwrite", "true"])
     assert ns.overwrite is True
+
+
+def test_arg_method_adds_argument():
+    """ArgParser.arg behaves like add_argument."""
+    parser = args_mod.ArgParser()
+    parser.arg("--foo", type=int, default=42, help="Foo argument.")
+    # No flag provided -> default is used.
+    ns = parser.parse_args([])
+    assert ns.foo == 42
+    # With flag -> value is parsed.
+    ns = parser.parse_args(["--foo", "7"])
+    assert ns.foo == 7
 
 
 def test_add_io_args(parser: args_mod.ArgParser):
@@ -271,10 +283,10 @@ def test_compose_common_parser_and_parse_minimal(patched_registries):
         "--optimizer", "sgd",
         "--l2-penalty", "0.0" if False else "0.001",
         "--use-dtms",
-        "--model", "mednext-base",
+        "--model", "mednext",
         "--no-preprocess",
         "--compute-dtms",
-        "--loss", "bl",
+        "--loss", "dice",
         "--composite-loss-weighting", "constant",
         "--nfolds", "3",
         "--folds", "0", "1",
@@ -296,10 +308,10 @@ def test_compose_common_parser_and_parse_minimal(patched_registries):
     assert ns.optimizer == "sgd"
     assert ns.l2_penalty == pytest.approx(0.001)
     assert ns.use_dtms is True
-    assert ns.model == "mednext-base"
+    assert ns.model == "mednext"
     assert ns.no_preprocess is True
     assert ns.compute_dtms is True
-    assert ns.loss == "bl"
+    assert ns.loss == "dice"
     assert ns.composite_loss_weighting == "constant"
     assert ns.nfolds == 3
     assert ns.folds == [0, 1]
