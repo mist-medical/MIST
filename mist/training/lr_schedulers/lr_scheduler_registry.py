@@ -15,7 +15,9 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
 
 # MIST imports.
-from mist.training.lr_schedulers.lr_schedulers_constants import LRSchedulerConstants
+from mist.training.lr_schedulers.lr_schedulers_constants import (
+    LRSchedulerConstants
+)
 
 
 def _cosine_scheduler(optimizer: Optimizer, epochs: int) -> _LRScheduler:

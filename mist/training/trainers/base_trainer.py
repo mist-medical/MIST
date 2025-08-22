@@ -27,6 +27,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
 
 # Import MIST modules.
+from mist.utils import io, progress_bar
 from mist.models.model_loader import get_model
 from mist.loss_functions.loss_registry import get_loss
 from mist.loss_functions.deep_supervision_wrapper import DeepSupervisionLoss
@@ -36,8 +37,6 @@ from mist.training.lr_schedulers.lr_scheduler_registry import get_lr_scheduler
 from mist.training.optimizers.optimizer_registry import get_optimizer
 from mist.training import training_utils
 from mist.training.trainers.trainer_constants import TrainerConstants
-from mist.runtime import progress_bar
-from mist.runtime import utils
 
 
 class BaseTrainer(ABC):
@@ -55,7 +54,7 @@ class BaseTrainer(ABC):
         self.paths = pd.read_csv(paths_csv)
 
         self.config_json = self.results_dir / "config.json"
-        self.config = utils.read_json_file(self.config_json)
+        self.config = io.read_json_file(self.config_json)
 
         # Merge command line overrides into the config.
         self._overwrite_config_from_args()
@@ -218,7 +217,7 @@ class BaseTrainer(ABC):
             )
 
         # Write the updated configuration to the config.json file.
-        utils.write_json_file(self.config_json, self.config)
+        io.write_json_file(self.config_json, self.config)
 
     def _update_num_gpus_in_config(self) -> None:
         """Get the number of GPUs and add it to the configuration."""
@@ -242,7 +241,7 @@ class BaseTrainer(ABC):
         # If there are GPUs available, update the configuration with the number
         # of GPUs.
         self.config["training"]["hardware"]["num_gpus"] = num_gpus
-        utils.write_json_file(self.config_json, self.config)
+        io.write_json_file(self.config_json, self.config)
 
     def _use_dtms(self) -> bool:
         """Check if distance transform maps are used in the training."""
