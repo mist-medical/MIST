@@ -18,8 +18,8 @@ import pandas as pd
 import torch
 
 # MIST imports
-from mist.runtime.args import ArgParser
-from mist.runtime import utils
+from mist.cli.args import ArgParser
+from mist.utils import io
 from mist.inference import inference_utils
 from mist.inference import inference_runners
 
@@ -111,15 +111,13 @@ def _prepare_io(ns: argparse.Namespace) -> tuple[Path, Path, Path, Path]:
 
 def run_inference(ns: argparse.Namespace) -> None:
     """Main runner for MIST inference."""
-    utils.set_warning_levels()
-
     device = _resolve_device(ns.device)
     models_dir, config_path, paths_csv, output_dir = _prepare_io(ns)
 
     # Load & validate inputs
     df = pd.read_csv(paths_csv)
     inference_utils.validate_paths_dataframe(df) # Raises if invalid.
-    mist_cfg = utils.read_json_file(str(config_path))
+    mist_cfg = io.read_json_file(str(config_path))
 
     # Execute inference
     with torch.no_grad():

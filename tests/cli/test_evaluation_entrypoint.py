@@ -64,7 +64,7 @@ def test_parse_eval_args_rejects_invalid_metric(monkeypatch, tmp_path):
 def test_read_eval_classes_ok(monkeypatch, tmp_path):
     """Test _read_eval_classes with valid config."""
     monkeypatch.setattr(
-        entry.utils,
+        entry.io,
         "read_json_file",
         lambda p: {"evaluation": {"final_classes": [0, 1, 2]}},
         raising=True
@@ -76,7 +76,7 @@ def test_read_eval_classes_ok(monkeypatch, tmp_path):
 def test_read_eval_classes_missing_key_raises(monkeypatch, tmp_path):
     """Test _read_eval_classes raises on missing 'final_classes' key."""
     monkeypatch.setattr(
-        entry.utils, "read_json_file", lambda p: {}, raising=True
+        entry.io, "read_json_file", lambda p: {}, raising=True
     )
     with pytest.raises(ValueError, match="evaluation.final_classes"):
         entry._read_eval_classes(tmp_path / "config.json")
@@ -92,9 +92,6 @@ def test_ensure_output_dir_creates_parent(tmp_path):
 def test_run_evaluation_calls_evaluator_and_writes_dir(monkeypatch, tmp_path):
     """Test run_evaluation initializes Evaluator and writes output."""
     # Avoid side effects.
-    monkeypatch.setattr(
-        entry.utils, "set_warning_levels", lambda: None, raising=True
-    )
     monkeypatch.setattr(
         entry, "_read_eval_classes", lambda p: [0, 1], raising=True
     )

@@ -118,11 +118,6 @@ def test_run_postprocess_invokes_postprocessor(tmp_path, monkeypatch):
         postprocess_strategy=str(strat),
     )
 
-    # Avoid real side effects
-    monkeypatch.setattr(
-        entry.utils, "set_warning_levels", lambda: None, raising=True
-    )
-
     captured = {"ctor": None, "run": None}
 
     class _PPStub:

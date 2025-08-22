@@ -15,8 +15,7 @@ from typing import Optional, List
 import argparse
 
 # MIST imports.
-from mist.runtime import args as argmod
-from mist.runtime import utils
+from mist.cli import args as argmod
 from mist.preprocessing import preprocess
 
 
@@ -86,7 +85,6 @@ def _prepare_preprocess_dirs(ns: argparse.Namespace) -> None:
 
 def preprocess_entry(argv: Optional[List[str]] = None) -> None:
     """Entrypoint for the preprocess command."""
-    utils.set_warning_levels()
     ns = _parse_preprocess_args(argv)
     _ensure_analyze_artifacts(ns)
     _prepare_preprocess_dirs(ns)

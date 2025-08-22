@@ -17,8 +17,7 @@ from typing import List, Optional
 from mist.cli.analyze_entrypoint import analyze_entry
 from mist.cli.preprocess_entrypoint import preprocess_entry
 from mist.cli.train_entrypoint import train_entry
-from mist.runtime import args as argmod
-from mist.runtime import utils
+from mist.cli import args as argmod
 
 
 def _make_forwarded_argv(argv: Optional[List[str]]) -> List[str]:
@@ -50,8 +49,6 @@ def _make_forwarded_argv(argv: Optional[List[str]]) -> List[str]:
 
 def run_all_entry(argv: Optional[List[str]] = None) -> None:
     """Entrypoint for running analyze, preprocess, and train sequentially."""
-    utils.set_warning_levels()
-
     fwd = _make_forwarded_argv(argv)
 
     # 1) Analyze (creates/overwrites config.json, train_paths.csv,

@@ -8,15 +8,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tests for mist.scripts.train_entrypoint"""
-from pathlib import Path
 from types import SimpleNamespace
 from typing import List, Tuple
+from pathlib import Path
+import os
 import argparse
 import pandas as pd
 import pytest
+import torch
 
 # MIST imports.
 from mist.cli import train_entrypoint as entry
+
+# Keep a handle to the real implementation before autouse fixtures patch it.
+REAL__SET_VISIBLE_DEVICES = entry._set_visible_devices
 
 
 def _touch(path: Path) -> None:
@@ -90,16 +95,13 @@ def patch_argmod(monkeypatch):
 @pytest.fixture(autouse=True)
 def patch_utils_and_config(monkeypatch):
     """Patch utils side-effects and config reader."""
-    # No-op logging.
-    monkeypatch.setattr(entry.utils, "set_warning_levels", lambda: None)
-
     # Capture the Namespace passed to set_visible_devices.
     seen = {}
     def _set_visible_devices(ns: argparse.Namespace) -> int:
         seen["ns"] = ns
         return 2
     monkeypatch.setattr(
-        entry.utils, "set_visible_devices", _set_visible_devices
+        entry, "_set_visible_devices", _set_visible_devices
     )
 
     # Return a controlled configuration regardless of file contents.
@@ -111,7 +113,7 @@ def patch_utils_and_config(monkeypatch):
             "params": {"surf_dice_tol": 1.0},
         },
     }
-    monkeypatch.setattr(entry.utils, "read_json_file", lambda p: cfg)
+    monkeypatch.setattr(entry.io, "read_json_file", lambda p: cfg)
 
     return {"seen": seen, "config": cfg}
 
@@ -281,6 +283,87 @@ def test_create_train_dirs_creates_expected(tmp_path):
 
     entry._create_train_dirs(results_dir, has_test_paths=True)
     assert (results_dir / "predictions" / "test").is_dir()
+
+
+def _set_device_count(monkeypatch, total: int) -> None:
+    """Helper to patch torch.cuda.device_count()."""
+    monkeypatch.setattr(torch.cuda, "device_count", lambda: total, raising=True)
+
+
+@pytest.fixture(autouse=True)
+def _clear_cuda_visible_devices_env(monkeypatch):
+    """Ensure CUDA_VISIBLE_DEVICES is unset before each test."""
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+
+
+def test_no_cuda_devices_raises_runtime_error(monkeypatch):
+    """When no CUDA devices are available, raise RuntimeError."""
+    monkeypatch.setattr(
+        entry, "_set_visible_devices", REAL__SET_VISIBLE_DEVICES, raising=True
+    )
+
+    _set_device_count(monkeypatch, total=0)
+    args = SimpleNamespace(gpus=None)
+
+    with pytest.raises(RuntimeError, match="No CUDA devices found"):
+        entry._set_visible_devices(args)
+
+    # Env should remain unset on failure.
+    assert "CUDA_VISIBLE_DEVICES" not in os.environ
+
+
+@pytest.mark.parametrize("gpus_arg", [None, [], [-1]])
+def test_all_gpus_modes_set_full_range(monkeypatch, gpus_arg):
+    """gpus=None/[]/[-1] should map to all available GPU indices."""
+    monkeypatch.setattr(
+        entry, "_set_visible_devices", REAL__SET_VISIBLE_DEVICES, raising=True
+    )
+    total = 4
+    _set_device_count(monkeypatch, total=total)
+    args = SimpleNamespace(gpus=gpus_arg)
+
+    entry._set_visible_devices(args)
+
+    assert (
+        os.environ["CUDA_VISIBLE_DEVICES"]
+        == ",".join(str(i) for i in range(total))
+    )
+
+
+def test_specific_gpu_indices_set_correctly(monkeypatch):
+    """A specific list of valid GPU indices should be respected."""
+    monkeypatch.setattr(
+        entry, "_set_visible_devices", REAL__SET_VISIBLE_DEVICES, raising=True
+    )
+    total = 4
+    _set_device_count(monkeypatch, total=total)
+    args = SimpleNamespace(gpus=[0, 2])
+
+    entry._set_visible_devices(args)
+
+    assert os.environ["CUDA_VISIBLE_DEVICES"] == "0,2"
+
+
+@pytest.mark.parametrize(
+    "total,requested",
+    [
+        (2, [-2]),     # Negative invalid.
+        (2, [2]),      # Equal to total (out of range).
+        (2, [0, 1, 2]) # One invalid among valids.
+    ],
+)
+def test_invalid_indices_raise_value_error(monkeypatch, total, requested):
+    """Out-of-range indices should raise ValueError and not set the env var."""
+    monkeypatch.setattr(
+        entry, "_set_visible_devices", REAL__SET_VISIBLE_DEVICES, raising=True
+    )
+    _set_device_count(monkeypatch, total=total)
+    args = SimpleNamespace(gpus=requested)
+
+    with pytest.raises(ValueError, match="out of range"):
+        entry._set_visible_devices(args)
+
+    assert "CUDA_VISIBLE_DEVICES" not in os.environ
 
 
 def test_train_entry_full_pipeline_with_eval_and_infer(

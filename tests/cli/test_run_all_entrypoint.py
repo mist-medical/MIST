@@ -17,12 +17,6 @@ import pytest
 from mist.cli import run_all_entrypoint as entry
 
 
-@pytest.fixture(autouse=True)
-def patch_utils(monkeypatch):
-    """No-op warning level setup."""
-    monkeypatch.setattr(entry.utils, "set_warning_levels", lambda: None)
-
-
 @pytest.fixture
 def patch_argmod(monkeypatch):
     """Provide a minimal arg parser via mist.runtime.args helpers."""

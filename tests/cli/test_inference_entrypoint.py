@@ -196,10 +196,7 @@ def test_run_inference_calls_infer_with_expected_args(tmp_path, monkeypatch):
     _touch_csv(paths)
     out = tmp_path / "out"
 
-    # Stub utils + validation + runners.
-    monkeypatch.setattr(
-        entry.utils, "set_warning_levels", lambda: None, raising=True
-    )
+    # Stub validation + runners.
     monkeypatch.setattr(
         entry.inference_utils,
         "validate_paths_dataframe",
@@ -258,9 +255,6 @@ def test_run_inference_with_postprocess_strategy(tmp_path, monkeypatch):
     pps = tmp_path / "pps.json"; _touch_json(pps, {"post": True})
 
     # Stubs.
-    monkeypatch.setattr(
-        entry.utils, "set_warning_levels", lambda: None, raising=True
-    )
     monkeypatch.setattr(
         entry.inference_utils,
         "validate_paths_dataframe",

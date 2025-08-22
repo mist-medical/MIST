@@ -16,8 +16,7 @@ import argparse
 
 # MIST imports.
 from mist.analyze_data.analyzer import Analyzer
-from mist.runtime import args as argmod
-from mist.runtime import utils
+from mist.cli import args as argmod
 
 
 def prepare_analyze_dirs(cli: argparse.Namespace) -> Path:
@@ -29,8 +28,6 @@ def prepare_analyze_dirs(cli: argparse.Namespace) -> Path:
 
 def analyze_entry(argv: Optional[List[str]] = None) -> None:
     """Entrypoint for the analyze command."""
-    utils.set_warning_levels()
-
     # Build the argument parser.
     parser = argmod.ArgParser(
         formatter_class=ArgumentDefaultsHelpFormatter,

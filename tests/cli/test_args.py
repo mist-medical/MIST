@@ -14,7 +14,7 @@ import argparse
 import pytest
 
 # MIST imports.
-import mist.runtime.args as args_mod
+import mist.cli.args as args_mod
 
 
 @pytest.fixture
@@ -271,10 +271,10 @@ def test_compose_common_parser_and_parse_minimal(patched_registries):
         "--optimizer", "sgd",
         "--l2-penalty", "0.0" if False else "0.001",
         "--use-dtms",
-        "--model", "mednext",
+        "--model", "mednext-base",
         "--no-preprocess",
         "--compute-dtms",
-        "--loss", "focal",
+        "--loss", "bl",
         "--composite-loss-weighting", "constant",
         "--nfolds", "3",
         "--folds", "0", "1",
@@ -296,10 +296,10 @@ def test_compose_common_parser_and_parse_minimal(patched_registries):
     assert ns.optimizer == "sgd"
     assert ns.l2_penalty == pytest.approx(0.001)
     assert ns.use_dtms is True
-    assert ns.model == "mednext"
+    assert ns.model == "mednext-base"
     assert ns.no_preprocess is True
     assert ns.compute_dtms is True
-    assert ns.loss == "focal"
+    assert ns.loss == "bl"
     assert ns.composite_loss_weighting == "constant"
     assert ns.nfolds == 3
     assert ns.folds == [0, 1]

@@ -144,7 +144,7 @@ def test_preprocess_entry_integration_parsing_and_run(tmp_path, monkeypatch):
     ]
 
     observed = {
-        "called": False, "ns": None, "set_warn": False, "prep_dir": False
+        "called": False, "ns": None, "prep_dir": False
     }
 
     def _fake_preprocess_dataset(ns):
@@ -167,18 +167,11 @@ def test_preprocess_entry_integration_parsing_and_run(tmp_path, monkeypatch):
         raising=True,
     )
     monkeypatch.setattr(
-        entry.utils,
-        "set_warning_levels",
-        _fake_set_warning_levels,
-        raising=True,
-    )
-    monkeypatch.setattr(
         entry, "_prepare_preprocess_dirs", _wrapped_prepare, raising=True
     )
 
     entry.preprocess_entry(argv)
 
-    assert observed["set_warn"] is True
     assert observed["prep_dir"] is True
     assert observed["called"] is True
 
@@ -208,9 +201,6 @@ def test_preprocess_entry_blocks_when_numpy_nonempty_without_overwrite(
     monkeypatch.setattr(
         entry.preprocess, "preprocess_dataset", lambda *_: (_), raising=True
     )
-    monkeypatch.setattr(
-        entry.utils, "set_warning_levels", lambda: None, raising=True
-    )
 
     argv = ["--results", str(results)]
     with pytest.raises(FileExistsError):
@@ -227,9 +217,6 @@ def test_preprocess_entry_raises_when_analyze_artifacts_missing(
 
     monkeypatch.setattr(
         entry.preprocess, "preprocess_dataset", lambda *_: (_), raising=True
-    )
-    monkeypatch.setattr(
-        entry.utils, "set_warning_levels", lambda: None, raising=True
     )
 
     argv = ["--results", str(results)]

@@ -16,10 +16,10 @@ import argparse
 import pandas as pd
 
 # MIST imports.
-from mist.runtime.args import ArgParser
-from mist.runtime import utils
+from mist.cli.args import ArgParser
 from mist.evaluation.evaluator import Evaluator
 from mist.metrics.metrics_registry import list_registered_metrics
+from mist.utils import io
 
 
 def _parse_eval_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
@@ -56,7 +56,7 @@ def _parse_eval_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 
 def _read_eval_classes(config_path: Path) -> Dict:
     """Read evaluation classes from a MIST config file."""
-    cfg = utils.read_json_file(str(config_path))
+    cfg = io.read_json_file(str(config_path))
     try:
         return cfg["evaluation"]["final_classes"]
     except KeyError as e:
@@ -72,8 +72,6 @@ def _ensure_output_dir(output_csv: Path) -> None:
 
 def run_evaluation(ns: argparse.Namespace) -> None:
     """Load inputs, construct Evaluator, and run."""
-    utils.set_warning_levels()
-
     config_path = Path(ns.config).expanduser().resolve()
     paths_csv = Path(ns.paths_csv).expanduser().resolve()
     output_csv = Path(ns.output_csv).expanduser().resolve()

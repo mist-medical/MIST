@@ -16,8 +16,7 @@ import argparse
 
 # MIST imports.
 from mist.postprocessing.postprocessor import Postprocessor
-from mist.runtime.args import ArgParser
-from mist.runtime import utils
+from mist.cli.args import ArgParser
 
 
 def _parse_postprocess_args(
@@ -69,7 +68,6 @@ def _prepare_io(ns: argparse.Namespace) -> tuple[Path, Path, Path]:
 
 def run_postprocess(ns: argparse.Namespace) -> None:
     """Main runner for postprocessing."""
-    utils.set_warning_levels()
     base_dir, output_dir, strategy_path = _prepare_io(ns)
     postprocessor = Postprocessor(strategy_path=str(strategy_path))
     postprocessor.run(base_dir=str(base_dir), output_dir=str(output_dir))
