@@ -17,8 +17,9 @@ import numpy as np
 import rich
 
 # MIST imports.
+from mist.utils import progress_bar
+from mist.analyze_data import analyzer_utils
 from mist.evaluation import evaluation_utils
-from mist.runtime import utils
 from mist.metrics.metrics_registry import get_metric
 
 
@@ -251,7 +252,7 @@ class Evaluator:
         # Load the image headers and compare them before loading the images.
         mask_header = ants.image_header_info(row['mask'])
         prediction_header = ants.image_header_info(row['prediction'])
-        if not utils.compare_headers(mask_header, prediction_header):
+        if not analyzer_utils.compare_headers(mask_header, prediction_header):
             raise ValueError(
                 f"Image headers do not match for patient ID: {patient_id}. "
                 "Ensure that the ground truth mask and prediction have the "
@@ -411,9 +412,7 @@ class Evaluator:
         """
         error_messages = []
         patient_ids = self.filepaths_dataframe["id"].tolist()
-        progress_bar = utils.get_progress_bar("Evaluating predictions")
-
-        with progress_bar as pb:
+        with progress_bar.get_progress_bar("Evaluating predictions") as pb:
             for patient_id in pb.track(patient_ids):
                 try:
                     # Load ground truth and prediction images.
