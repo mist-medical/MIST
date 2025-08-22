@@ -67,3 +67,11 @@ def test_get_scheduler_invalid_name_raises():
     """Test that unknown scheduler name raises ValueError."""
     with pytest.raises(ValueError, match="Unknown scheduler:"):
         alpha_schedulers.get_alpha_scheduler("cosine", num_epochs=10)
+
+
+def test_list_registered_schedulers():
+    """Test that the list of registered schedulers is correct."""
+    schedulers = alpha_schedulers.list_alpha_schedulers()
+    assert "constant" in schedulers
+    assert "linear" in schedulers
+    assert len(schedulers) == 2
