@@ -144,6 +144,11 @@ class BaseTrainer(ABC):
                 int(dim) for dim in self.mist_args.patch_size
             ]
 
+        # Set the patch size for inference to be the same as training.
+        self.config["inference"]["inferer"]["params"]["patch_size"] = (
+            self.config["model"]["params"]["patch_size"]
+        )
+
         # Use pocket model if specified in command line arguments.
         if self.mist_args.pocket:
             self.config["model"]["params"]["use_pocket_model"] = True

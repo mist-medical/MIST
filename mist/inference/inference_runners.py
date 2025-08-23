@@ -163,16 +163,18 @@ def test_on_fold(
     # Inferer, ensembler, and TTA transforms are set up for sliding window
     # inference. This is the default mode of operation for MIST, but future
     # versions may allow for other modes.
-    config["inference"]["inferer"]["params"]["device"] = device
-    config["inference"]["inferer"]["params"]["patch_size"] = (
-        config["model"]["params"]["patch_size"]
-    )
-    inferer = get_inferer(config["inference"]["inferer"]["name"])(
-        **config["inference"]["inferer"]["params"],
-    )
-    ensembler = get_ensembler(config["inference"]["ensemble"]["strategy"])
-    if config["inference"]["tta"]["enabled"]:
-        tta_transforms = get_strategy(config["inference"]["tta"]["strategy"])()
+    inferer_name = config["inference"]["inferer"]["name"]
+    inferer_params = config["inference"]["inferer"]["params"]
+    ensembler_strategy = config["inference"]["ensemble"]["strategy"]
+    tta_enabled = config["inference"]["tta"]["enabled"]
+    tta_strategy = config["inference"]["tta"]["strategy"]
+
+    # Add device to inferer parameters.
+    inferer_params["device"] = device
+    inferer = get_inferer(inferer_name)(**inferer_params)
+    ensembler = get_ensembler(ensembler_strategy)
+    if tta_enabled:
+        tta_transforms = get_strategy(tta_strategy)()
     else:
         tta_transforms = get_strategy("none")()
     predictor = Predictor(

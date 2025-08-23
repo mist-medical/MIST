@@ -52,7 +52,7 @@ def convert_legacy_model_config(model_config: Dict) -> Dict:
         model_config_path: Path to the legacy model config file. This file will
             contain the following structure:
             {
-                "model": "model_name",
+                "model_name": "model_name",
                 "n_channels": 1,
                 "n_classes": 2,
                 "deep_supervision": false,
@@ -83,7 +83,7 @@ def convert_legacy_model_config(model_config: Dict) -> Dict:
         ValueError: If the config does not contain the expected keys.
     """
     required_keys = [
-        "model", "n_channels", "n_classes", "patch_size", "target_spacing",
+        "model_name", "n_channels", "n_classes", "patch_size", "target_spacing",
         "deep_supervision", "pocket", "use_res_block"
     ]
     for key in required_keys:
@@ -95,7 +95,7 @@ def convert_legacy_model_config(model_config: Dict) -> Dict:
     # Convert the legacy config to the new format.
     new_config = {
         "model": {
-            "architecture": model_config["model"],
+            "architecture": model_config["model_name"],
             "params": {
                 "in_channels": model_config["n_channels"],
                 "out_channels": model_config["n_classes"],

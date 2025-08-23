@@ -582,6 +582,11 @@ class Analyzer:
                 int(size) for size in self.mist_arguments.patch_size
             ]
 
+        # Set the patch size for inference to be the same as training.
+        self.config["inference"]["inferer"]["params"]["patch_size"] = (
+            self.config["model"]["params"]["patch_size"]
+        )
+
         # Add the target spacing to the model parameters in the model section
         # of the configuration. This is already in the preprocessing section
         # of the configuration, but this makes loading models and keeping track
