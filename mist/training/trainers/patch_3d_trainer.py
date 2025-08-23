@@ -128,7 +128,7 @@ class Patch3DTrainer(BaseTrainer):
         )
 
         optimizer.zero_grad()
-        if scaler.enabled:
+        if scaler is not None:
             with torch.autocast(device_type="cuda", dtype=torch.float16):
                 output = model(image)
 

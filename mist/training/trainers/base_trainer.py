@@ -371,7 +371,7 @@ class BaseTrainer(ABC):
         # Get loss function. First get the loss function from the registry.
         # We then wrap it in a DeepSupervisionLoss, which will handle
         # deep supervision if the model supports it.
-        loss_function = get_loss(training["loss"]["name"])
+        loss_function = get_loss(training["loss"]["name"])()
         loss_function = DeepSupervisionLoss(loss_function)
 
         # Some composite loss functions require a scheduler for the
@@ -397,6 +397,7 @@ class BaseTrainer(ABC):
         optimizer = get_optimizer(
             name=training["optimizer"],
             params=model.parameters(),
+            learning_rate=training["learning_rate"],
             weight_decay=training["l2_penalty"],
             eps=eps,
         )
@@ -409,7 +410,7 @@ class BaseTrainer(ABC):
         )
 
         # Get gradient scaler if AMP is enabled.
-        scaler = torch.amp.GradScaler("cuda", enabled=training["amp"])
+        scaler = torch.amp.GradScaler("cuda") if training["amp"] else None
 
         return {
             "model": model,

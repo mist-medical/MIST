@@ -137,7 +137,7 @@ def test_on_fold(
 
     # Construct paths to preprocessed .npy image volumes.
     test_image_paths = training_utils.get_npy_paths(
-        data_dir=numpy_dir,
+        data_dir=os.path.join(numpy_dir, "images"),
         patient_ids=list(test_df["id"]),
     )
 
@@ -164,6 +164,9 @@ def test_on_fold(
     # inference. This is the default mode of operation for MIST, but future
     # versions may allow for other modes.
     config["inference"]["inferer"]["params"]["device"] = device
+    config["inference"]["inferer"]["params"]["patch_size"] = (
+        config["model"]["params"]["patch_size"]
+    )
     inferer = get_inferer(config["inference"]["inferer"]["name"])(
         **config["inference"]["inferer"]["params"],
     )
