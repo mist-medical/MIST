@@ -195,7 +195,7 @@ class BaseTrainer(ABC):
             self.config["training"]["loss"]["params"]["use_dtms"] = True
 
         if self.mist_args.composite_loss_weighting is not None:
-            self.config["training"]["loss"]["composite_loss_weighting"] = (
+            self.config["training"]["loss"]["params"]["composite_loss_weighting"] = (
                 self.mist_args.composite_loss_weighting
             )
 
@@ -388,7 +388,8 @@ class BaseTrainer(ABC):
             # training.
             composite_loss_weighting = (
                 get_alpha_scheduler(
-                    training["loss"]["params"]["composite_loss_weighting"]
+                    training["loss"]["params"]["composite_loss_weighting"],
+                    num_epochs=training["epochs"],
                 )
             )
         else:

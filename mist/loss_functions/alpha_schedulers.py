@@ -19,7 +19,7 @@ class ConstantScheduler:
     Attributes:
         value: The constant alpha value to be used.
     """
-    def __init__(self, value: float=0.5):
+    def __init__(self, num_epochs: int,  value: float=0.5):
         """Initialize the ConstantScheduler.
 
         Args:

@@ -115,7 +115,7 @@ class Patch3DTrainer(BaseTrainer):
         optimizer = state["optimizer"]
         scaler = state["scaler"]
         criterion = state["loss_function"]
-        composite_loss_weighting = state.get("composite_loss_weighting", None)
+        composite_loss_weighting = state["composite_loss_weighting"]
 
         image = batch["image"]
         label = batch["label"]
