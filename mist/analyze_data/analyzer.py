@@ -56,7 +56,7 @@ class Analyzer:
         self._check_dataset_info()
 
         # Load the base configuration file.
-        self.config = io.read_json_file("base_config.json")
+        self.config = io.read_json_file(constants.BASE_CONFIG_JSON_PATH)
 
         # Initialize the dataframe with the file paths for the images and masks.
         self.paths_df = analyzer_utils.get_files_df(
