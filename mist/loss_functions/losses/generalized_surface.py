@@ -33,7 +33,7 @@ class GenSurfLoss(DiceCELoss):
     """
     def __init__(self, exclude_background: bool=False):
         """Initialize Generalized Surface Loss.
-        
+
         Args:
             exclude_background: Whether to exclude the background class
                 (channel 0) from the loss computation.
@@ -51,7 +51,7 @@ class GenSurfLoss(DiceCELoss):
         """Compute the Generalized Surface Loss (GSL).
 
         Args:
-            y_true: Ground truth tensor of shape (B, H, W, D).
+            y_true: Ground truth tensor of shape (B, 1, H, W, D).
             y_pred: Logits tensor of shape (B, C, H, W, D).
             dtm: Distance transform map of shape (B, C, H, W, D).
             alpha: Weight for region loss (0 ≤ alpha ≤ 1).

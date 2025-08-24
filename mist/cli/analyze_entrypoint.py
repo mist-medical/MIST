@@ -33,10 +33,7 @@ def analyze_entry(argv: Optional[List[str]] = None) -> None:
         formatter_class=ArgumentDefaultsHelpFormatter,
         description="MIST Analyze pipeline.",
     )
-    argmod.add_io_args(parser)
-    argmod.add_cv_args(parser)
-    argmod.add_preprocessing_args(parser)  # Override skip-preprocessing flag.
-    argmod.add_training_args(parser)       # Allow overriding patch size.
+    argmod.add_analyzer_args(parser)
 
     # Parse CLI (argv is optional for testability).
     cli = parser.parse_args(argv)

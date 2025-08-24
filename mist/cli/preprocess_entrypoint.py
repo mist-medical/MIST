@@ -27,9 +27,8 @@ def _parse_preprocess_args(
         formatter_class=ArgumentDefaultsHelpFormatter,
         description="Preprocess a dataset into NumPy tensors for MIST.",
     )
-    # We only need results/numpy + preprocessing flags.
-    argmod.add_io_args(parser)             # --results, --numpy, --overwrite
-    argmod.add_preprocessing_args(parser)  # --no-preprocess, --compute-dtms
+    # Add preprocessing-specific args.
+    argmod.add_preprocess_args(parser)
 
     ns = parser.parse_args(argv)
 

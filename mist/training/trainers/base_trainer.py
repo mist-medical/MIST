@@ -77,6 +77,20 @@ class BaseTrainer(ABC):
         # Set up console for rich text output.
         self.console = rich.console.Console()
 
+    def __getstate__(self):
+        """Customize pickling so mp.spawn can serialize this object."""
+        state = self.__dict__.copy()
+        # Drop unpicklable attributes (contain thread locks, file handles, etc.)
+        state["console"] = None
+        return state
+
+    def __setstate__(self, state):
+        """Recreate transient/unpicklable attributes after unpickling."""
+        self.__dict__.update(state)
+        # Recreate the console on the child process.
+        if self.__dict__.get("console") is None:
+            self.console = rich.console.Console()
+
     @abstractmethod
     def build_dataloaders(self, fold_data, rank, world_size):
         """Abstract method to build data loaders for training and validation."""
@@ -108,11 +122,9 @@ class BaseTrainer(ABC):
         # Determine rank (works before/after dist.init_process_group).
         rank = int(os.environ.get("RANK", 0))
         try:
-            if getattr(dist, "is_initialized", lambda: False)():
-                get_rank = getattr(dist, "get_rank", None)
-                if callable(get_rank):
-                    rank = int(get_rank())
-        except Exception:
+            if dist.is_initialized():
+                rank = dist.get_rank()
+        except (AttributeError, RuntimeError, ValueError, TypeError):
             pass
 
         final_seed = int(seed) + int(rank)
@@ -239,8 +251,7 @@ class BaseTrainer(ABC):
         if num_gpus <= 0:
             raise ValueError(
                 "torch.cuda.is_available() is True but device_count() == 0. "
-                "Check CUDA_VISIBLE_DEVICES, container runtime GPU flags, or "
-                "MIG config."
+                "Check CUDA_VISIBLE_DEVICES or container runtime GPU flags"
             )
 
         # If there are GPUs available, update the configuration with the number
@@ -371,7 +382,7 @@ class BaseTrainer(ABC):
 
         # Set up model for distributed data parallel training.
         if use_ddp:
-            model = DDP(model, device_ids=[rank], find_unused_parameters=True)
+            model = DDP(model, device_ids=[rank])
 
         # Get loss function. First get the loss function from the registry.
         # We then wrap it in a DeepSupervisionLoss, which will handle
@@ -416,7 +427,7 @@ class BaseTrainer(ABC):
         )
 
         # Get gradient scaler if AMP is enabled.
-        scaler = torch.amp.GradScaler("cuda") if training["amp"] else None
+        scaler = torch.amp.GradScaler("cuda") if training["amp"] else None # type: ignore
 
         return {
             "model": model,
@@ -675,7 +686,7 @@ class BaseTrainer(ABC):
         """Run cross-validation for selected folds."""
         # Display the start of training message.
         if rank == 0:
-            self.console.print("[bold green]Starting training[/bold green]\n")
+            self.console.print("\n[bold]Starting training[/bold]\n")
 
         for fold in self.config["training"]["folds"]:
             # Train the model for the current fold.

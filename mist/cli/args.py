@@ -95,90 +95,53 @@ class ArgParser(ArgumentParser):
         )
 
 # pylint: disable=line-too-long
-def add_io_args(parser: ArgParser) -> None:
-    """Add input/output arguments to the parser.
-
-    Pipelines that use these arguments are:
-        - Analyze
-        - Preprocess
-        - Train
-    """
-    g = parser.add_argument_group("I/O")
+def add_analyzer_args(parser: ArgParser) -> None:
+    """Add arguments for the Analyzer class."""
+    g = parser.add_argument_group("Analyzer")
     g.add_argument("--data", type=str, help="Path to dataset JSON file.")
     g.add_argument("--results", type=str, help="Path to output of MIST pipeline.")
-    g.add_argument("--numpy", type=str, help="Path to save preprocessed NumPy data.")
+    g.add_argument("--nfolds", type=int, help="Number of cross-validation folds.")
     parser.boolean_flag("--overwrite", default=False, help="Overwrite previous configuration/results.")
 
 
-def add_hardware_args(parser: ArgParser) -> None:
-    """Add hardware-related arguments to the parser.
+def add_preprocess_args(parser: ArgParser) -> None:
+    """Add arguments for the preprocessing pipeline."""
+    g = parser.add_argument_group("Preprocess")
+    g.add_argument("--results", type=str, help="Path to output of MIST pipeline.")
+    g.add_argument("--numpy", type=str, help="Path to save preprocessed NumPy data.")
+    parser.boolean_flag("--no-preprocess", default=False, help="Turn off most preprocessing.")
+    parser.boolean_flag("--compute-dtms", default=False, help="Compute DTMs.")
+    parser.boolean_flag("--overwrite", default=False, help="Overwrite previous configuration/results.")
 
-    Pipelines that use these arguments are:
-        - Train
-    """
-    g = parser.add_argument_group("Hardware")
-    g.add_argument("--gpus", nargs="+", default=[-1], type=int, help="IDs of GPUs to use; use -1 for CPU.")
 
+def add_train_args(parser: ArgParser) -> None:
+    """Add arguments for the training pipeline."""
+    g = parser.add_argument_group("Train")
+    # Input data.
+    g.add_argument("--results", type=str, help="Path to output of MIST pipeline.")
+    g.add_argument("--numpy", type=str, help="Path to save preprocessed NumPy data.")
 
-def add_training_args(parser: ArgParser) -> None:
-    """Add training-related arguments to the parser.
+    # Hardware.
+    g.add_argument("--gpus", nargs="+", default=[-1], type=int, help="IDs of GPUs to use; use -1 for all GPUs.")
 
-    Pipelines that use these arguments are:
-        - Analyze
-        - Train
-    """
-    g = parser.add_argument_group("Training")
+    # Model.
+    g.add_argument("--model", type=str, choices=list_registered_models(), help="Network architecture.")
+    parser.boolean_flag("--pocket", default=False, help="Use pocket version of model (if available).")
+    g.add_argument("--patch-size", nargs=3, type=positive_int, metavar=("X", "Y", "Z"), help="Patch size as three ints: X Y Z.")
+
+    # Loss function.
+    g.add_argument("--loss", type=str, choices=list_registered_losses(), help="Loss function for training.")
+    parser.boolean_flag("--use-dtms", default=False, help="Use DTMs during training.")
+    g.add_argument("--composite-loss-weighting", type=str, choices=list_alpha_schedulers(), help="Weighting schedule for composite losses.")
+
+    # Training loop.
     g.add_argument("--epochs", type=non_negative_int, help="Number of epochs per fold.")
     g.add_argument("--batch-size-per-gpu", type=positive_int, help="Batch size per GPU/CPU worker.")
-    g.add_argument("--patch-size", nargs=3, type=positive_int, metavar=("X", "Y", "Z"), help="Patch size as three ints: X Y Z.")
     g.add_argument("--learning-rate", type=positive_float, help="Learning rate.")
     g.add_argument("--lr-scheduler", type=str, choices=list_lr_schedulers(), help="Learning rate scheduler.")
     g.add_argument("--optimizer", type=str, choices=list_optimizers(), help="Optimizer to use.")
     g.add_argument("--l2-penalty", type=positive_float, help="L2 penalty (weight decay).")
-    parser.boolean_flag("--use-dtms", default=False, help="Use DTMs during training.")
-
-
-def add_model_args(parser: ArgParser) -> None:
-    """Add model-related arguments to the parser.
-
-    Pipelines that use these arguments are:
-        - Train
-    """
-    g = parser.add_argument_group("Model")
-    g.add_argument("--model", type=str, choices=list_registered_models(), help="Network architecture.")
-    parser.boolean_flag("--pocket", default=False, help="Use pocket version of model (if available).")
-
-
-def add_preprocessing_args(parser: ArgParser) -> None:
-    """Add preprocessing-related arguments to the parser.
-
-    Pipelines that use these arguments are:
-        - Analyze
-        - Preprocess
-    """
-    g = parser.add_argument_group("Preprocessing") # pylint: disable=unused-variable
-    parser.boolean_flag("--no-preprocess", default=False, help="Turn off preprocessing.")
-    parser.boolean_flag("--compute-dtms", default=False, help="Compute DTMs during preprocessing.")
-
-
-def add_loss_args(parser: ArgParser) -> None:
-    """Add loss function arguments to the parser.
-
-    Pipelines that use these arguments are:
-        - Train
-    """
-    g = parser.add_argument_group("Loss")
-    g.add_argument("--loss", type=str, choices=list_registered_losses(), help="Loss function for training.")
-    g.add_argument("--composite-loss-weighting", type=str, choices=list_alpha_schedulers(), help="Weighting schedule for composite losses.")
-
-
-def add_cv_args(parser: ArgParser) -> None:
-    """Add cross-validation arguments to the parser.
-
-    Pipelines that use these arguments are:
-        - Analyze
-        - Train
-    """
-    g = parser.add_argument_group("Cross-Validation")
-    g.add_argument("--nfolds", type=positive_int, default=5, help="Number of cross-validation folds.")
     g.add_argument("--folds", nargs="+", type=int, help="Specify which folds to run.")
+
+    # Overwrite.
+    parser.boolean_flag("--overwrite", default=False, help="Overwrite previous configuration/results.")

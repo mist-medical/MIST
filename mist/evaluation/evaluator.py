@@ -10,6 +10,7 @@
 # limitations under the License.
 """Evaluation class for computing segmentation accuracy metrics."""
 from typing import Dict, List, Tuple, Union, Optional
+from pathlib import Path
 import os
 import ants
 import pandas as pd
@@ -53,7 +54,7 @@ class Evaluator:
         self,
         filepaths_dataframe: pd.DataFrame,
         evaluation_classes: Dict[str, List[int]],
-        output_csv_path: str,
+        output_csv_path: Union[str, Path],
         selected_metrics: List[str],
         **metric_kwargs,
     ):

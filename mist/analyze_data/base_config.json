@@ -36,7 +36,7 @@
   "training": {
     "seed": 42,
     "nfolds": 5,
-    "folds": [0, 1, 2, 3, 4],
+    "folds": null,
     "val_percent": 0.0,
     "epochs": 1000,
     "min_steps_per_epoch": 250,
@@ -54,7 +54,6 @@
     "lr_scheduler": "cosine",
     "l2_penalty": 0.00001,
     "amp": true,
-    "oversampling": 0.6,
     "augmentation": {
       "enabled": true,
       "transforms": {

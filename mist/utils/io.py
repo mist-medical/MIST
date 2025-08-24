@@ -9,11 +9,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Input output utilities for MIST runtime IO operations."""
-from typing import Dict, Any
+from typing import Dict, Any, Union
+from pathlib import Path
 import json
 
 
-def read_json_file(json_file: str) -> Dict[str, Any]:
+def read_json_file(json_file: Union[str, Path]) -> Dict[str, Any]:
     """Read json file and output it as a dictionary.
 
     Args:
@@ -27,7 +28,9 @@ def read_json_file(json_file: str) -> Dict[str, Any]:
     return json_data
 
 
-def write_json_file(json_file: str, json_data: Dict[str, Any]) -> None:
+def write_json_file(
+    json_file: Union[str, Path], json_data: Dict[str, Any]
+) -> None:
     """Write dictionary as json file.
 
     Args:

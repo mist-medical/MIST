@@ -1,6 +1,6 @@
 # Copyright (c) MIST Imaging LLC.
 # Licensed under the Apache License, Version 2.0 (the "License");
-# You may not use this file except in compliance with the License.
+# you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #     http://www.apache.org/licenses/LICENSE-2.0
 # Unless required by applicable law or agreed to in writing, software
@@ -8,58 +8,91 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Run analyze → preprocess → train in one command."""
+"""Run analyze, preprocess, and train in one command."""
+import argparse
 from argparse import ArgumentDefaultsHelpFormatter
 from pathlib import Path
 from typing import List, Optional
 
-# MIST imports.
+from mist.cli import args as argmod
 from mist.cli.analyze_entrypoint import analyze_entry
 from mist.cli.preprocess_entrypoint import preprocess_entry
 from mist.cli.train_entrypoint import train_entry
-from mist.cli import args as argmod
 
 
-def _make_forwarded_argv(argv: Optional[List[str]]) -> List[str]:
-    """Parse only I/O flags to inject robust defaults, forward the rest.
+def _ns_to_argv(ns: argparse.Namespace, keys: List[str]) -> List[str]:
+    """Convert a subset of Namespace fields into an argv list."""
+    argv: List[str] = []
+    for k in keys:
+        if not hasattr(ns, k):
+            continue
+        v = getattr(ns, k)
+        if v is None:
+            continue
+        flag = f"--{k.replace('_', '-')}"
+        if isinstance(v, bool):
+            if v:
+                argv.append(flag)
+        elif isinstance(v, (list, tuple)):
+            if len(v) == 0:
+                continue
+            argv.append(flag)
+            argv.extend(str(x) for x in v)
+        else:
+            argv.extend([flag, str(v)])
+    return argv
 
-    We keep *all* other user-provided flags intact and pass them through
-    to each sub-pipeline.
-    """
+
+def _parse_run_all_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+    """Build and parse args for the run-all entrypoint."""
     parser = argmod.ArgParser(
+        prog="mist_run_all",
+        description="Run Analyzer → Preprocess → Train in one go.",
+        conflict_handler="resolve",  # critical: resolve duplicates
         formatter_class=ArgumentDefaultsHelpFormatter,
-        description="MIST run-all pipeline (analyze → preprocess → train).",
     )
-    # Only parse I/O-related flags here; everything else is passed through.
-    argmod.add_io_args(parser)  # --results, --numpy, --overwrite
-    cli, passthrough = parser.parse_known_args(argv or [])
 
-    # Defaults for consistency across pipelines.
-    results = cli.results or str(Path("./results").expanduser().resolve())
-    numpy_dir = cli.numpy or str(Path("./numpy").expanduser().resolve())
+    # Add all stage args directly into this parser (no parents).
+    argmod.add_analyzer_args(parser)
+    argmod.add_preprocess_args(parser)
+    argmod.add_train_args(parser)
 
-    forwarded: List[str] = ["--results", results, "--numpy", numpy_dir]
-    if getattr(cli, "overwrite", False):
-        forwarded.append("--overwrite")
+    ns = parser.parse_args(argv)
 
-    # Keep all other user flags as-is (folds, gpus, model, loss, etc.).
-    forwarded += passthrough
-    return forwarded
+    # Provide defaults expected downstream.
+    if not getattr(ns, "results", None):
+        ns.results = str(Path("./results").expanduser().resolve())
+    if not getattr(ns, "numpy", None):
+        ns.results = str(Path("./numpy").expanduser().resolve())
+
+    # Minimal top-level validation.
+    if not getattr(ns, "data", None):
+        parser.error("Missing required argument for analyze: --data")
+    return ns
 
 
 def run_all_entry(argv: Optional[List[str]] = None) -> None:
     """Entrypoint for running analyze, preprocess, and train sequentially."""
-    fwd = _make_forwarded_argv(argv)
+    ns = _parse_run_all_args(argv)
 
-    # 1) Analyze (creates/overwrites config.json, train_paths.csv,
-    # fg_bboxes.csv).
-    analyze_entry(fwd)
+    analyzer_keys = ["data", "results", "nfolds", "overwrite"]
+    preprocess_keys = [
+        "results", "numpy", "no_preprocess", "compute_dtms", "overwrite"
+    ]
+    train_keys = [
+        "results", "numpy",
+        "gpus",
+        "model", "pocket", "patch_size",
+        "loss", "use_dtms", "composite_loss_weighting",
+        "epochs", "batch_size_per_gpu", "learning_rate",
+        "lr_scheduler", "optimizer", "l2_penalty",
+        "folds", "overwrite",
+    ]
 
-    # 2) Preprocess (writes NumPy arrays under ./numpy by default).
-    preprocess_entry(fwd)
-
-    # 3) Train (verifies required artifacts from analyze & preprocess).
-    train_entry(fwd)
+    # Run each stage with the appropriate subset of args.
+    analyze_entry(_ns_to_argv(ns, analyzer_keys))
+    preprocess_entry(_ns_to_argv(ns, preprocess_keys))
+    train_entry(_ns_to_argv(ns, train_keys))
 
 
 if __name__ == "__main__":

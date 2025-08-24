@@ -390,8 +390,7 @@ class Analyzer:
         progress = progress_bar.get_progress_bar(
             "Checking resampled dimensions"
         )
-        messages = ""
-
+        messages = []
         with progress as pb:
             for i in pb.track(range(len(self.paths_df))):
                 patient = self.paths_df.iloc[i].to_dict()
@@ -427,19 +426,20 @@ class Analyzer:
                     image_memory_size > constants.MAX_RECOMMENDED_MEMORY_SIZE
                 ):
                     print_patient_id = patient["id"]
-                    messages += (
-                        f"[Warning] In {print_patient_id}: Resampled example "
-                        "is larger than the recommended memory size of "
+                    messages.append(
+                        f"[yellow][Warning] In {print_patient_id}: Resampled "
+                        "example is larger than the recommended memory size of "
                         f"{constants.MAX_RECOMMENDED_MEMORY_SIZE/1e9} "
-                        "GB. Consider coarsening or removing this example.\n"
+                        "GB. Consider coarsening or removing this "
+                        "example.[/yellow]"
                     )
 
                 # Collect the new resampled dimensions.
                 resampled_dims[i, :] = new_dims
 
-        if len(messages) > 0:
-            text = rich.text.Text(messages) # type: ignore
-            self.console.print(text)
+        if messages:
+            for message in messages:
+                self.console.print(message)
 
         median_resampled_dims = list(np.median(resampled_dims, axis=0))
         return median_resampled_dims
@@ -518,15 +518,6 @@ class Analyzer:
         )
         self.config["dataset_info"]["labels"] = self.dataset_info["labels"]
 
-        # Update the preprocessing section in the configuration.
-        # If the user has specified that they want to skip preprocessing, then
-        # update this in the configuration. However, this pipeline will still
-        # compute the preprocessing parameters, but it will not apply them to
-        # the images later during the preprocessing step.
-        self.config["preprocessing"]["skip"] = (
-            bool(self.mist_arguments.no_preprocess)
-        )
-
         # Get the target spacing for the dataset.
         target_spacing = self.get_target_spacing()
         self.config["preprocessing"]["target_spacing"] = [
@@ -568,19 +559,13 @@ class Analyzer:
             self.config["dataset_info"]["labels"]
         )
 
-        # If the patch size size is not specified by the user, we compute a
-        # recommended patch size based on the median dimensions of the resampled
-        # images. If the patch size is specified by the user, we use that patch
-        # size.
-        if self.mist_arguments.patch_size is None:
-            patch_size = analyzer_utils.get_best_patch_size(median_dims)
-            self.config["model"]["params"]["patch_size"] = [
-                int(size) for size in patch_size
-            ]
-        else:
-            self.config["model"]["params"]["patch_size"] = [
-                int(size) for size in self.mist_arguments.patch_size
-            ]
+        # Set a default patch size based on the median resampled image size.
+        # The patch size can be overridden by the user in the config file or in
+        # the command line arguments for the training pipeline.
+        patch_size = analyzer_utils.get_best_patch_size(median_dims)
+        self.config["model"]["params"]["patch_size"] = [
+            int(size) for size in patch_size
+        ]
 
         # Set the patch size for inference to be the same as training.
         self.config["inference"]["inferer"]["params"]["patch_size"] = (
@@ -615,7 +600,7 @@ class Analyzer:
         dataset_labels_set = set(self.dataset_info["labels"])
 
         bad_data = set()
-        messages = ""
+        messages = []
         with progress as pb:
             for i in pb.track(range(len(self.paths_df))):
                 # Get patient information.
@@ -629,24 +614,28 @@ class Analyzer:
                     mask_header = ants.image_header_info(patient["mask"])
                     image_header = ants.image_header_info(image_list[0])
                 except RuntimeError as e:
-                    messages += f"In {patient['id']}: {e}\n"
+                    messages.append(
+                        f"[red]In {patient['id']}: {e}"
+                        "[/red]"
+                    )
                     bad_data.add(i)
                     continue
 
                 # Check if labels are correct.
                 if not mask_labels.issubset(dataset_labels_set):
-                    messages += (
-                        f"In {patient['id']}: Labels in mask do not match those"
-                        f" specified in {self.mist_arguments.data}\n"
+                    messages.append(
+                        f"[red]In {patient['id']}: Labels in mask do not match "
+                        f" those specified in {self.mist_arguments.data}"
+                        "[/red]"
                     )
                     bad_data.add(i)
                     continue
 
                 # Check that the mask is 3D.
                 if not analyzer_utils.is_image_3d(mask_header):
-                    messages += (
-                        f"In {patient['id']}: Got 4D mask, make sure all"
-                        "images are 3D\n"
+                    messages.append(
+                        f"[red]In {patient['id']}: Got 4D mask, make sure all"
+                        "images are 3D[/red]"
                     )
                     bad_data.add(i)
                     continue
@@ -658,17 +647,17 @@ class Analyzer:
                     if not analyzer_utils.compare_headers(
                         mask_header, image_header
                     ):
-                        messages += (
-                            f"In {patient['id']}: Mismatch between image and"
-                            " mask header information\n"
+                        messages.append(
+                            f"[red]In {patient['id']}: Mismatch between image "
+                            " and mask header information[/red]"
                         )
                         bad_data.add(i)
                         break
 
                     if not analyzer_utils.is_image_3d(image_header):
-                        messages += (
-                            f"In {patient['id']}: Got 4D image, make"
-                            " sure all images are 3D\n"
+                        messages.append(
+                            f"[red]In {patient['id']}: Got 4D image, make"
+                            " sure all images are 3D[/red]"
                         )
                         bad_data.add(i)
                         break
@@ -685,18 +674,21 @@ class Analyzer:
                         if not analyzer_utils.compare_headers(
                             anchor_header, image_header
                         ):
-                            messages += (
-                                f"In {patient['id']}: Mismatch between images' "
-                                "header information\n"
+                            messages.append(
+                                f"[red]In {patient['id']}: Mismatch between "
+                                "images' header information[/red]"
                             )
                             bad_data.add(i)
                             break
 
         # If there are any bad examples, print their ids.
-        if len(messages) > 0:
-            messages += "Excluding these from training\n"
-            text = rich.text.Text(messages) # type: ignore
-            self.console.print(text)
+        if messages:
+            for message in messages:
+                self.console.print(message)
+            self.console.print(
+                f"[bold red]Excluding {len(bad_data)} example(s) from "
+                "training.[/bold red]"
+            )
 
         # If all of the data is bad, then raise an error.
         assert len(bad_data) < len(self.paths_df), (
@@ -720,21 +712,18 @@ class Analyzer:
 
         # Step 2: Add folds to the paths dataframe and update the configuration
         # with the number of folds that we are using for training.
+        if self.mist_arguments.nfolds is not None:
+            self.config["training"]["nfolds"] = int(self.mist_arguments.nfolds)
         self.paths_df = analyzer_utils.add_folds_to_df(
-            self.paths_df, n_splits=self.mist_arguments.nfolds
+            self.paths_df, n_splits=self.config["training"]["nfolds"]
         )
-        self.config["training"]["nfolds"] = int(self.mist_arguments.nfolds)
 
         # By default, we assume that we are running all folds for training.
-        # This can be overridden by the user in the MIST arguments.
-        if self.mist_arguments.folds is not None:
-            self.config["training"]["folds"] = [
-                int(fold) for fold in self.mist_arguments.folds
-            ]
-        else:
-            self.config["training"]["folds"] = (
-                list(range(self.config["training"]["nfolds"]))
-            )
+        # This can be overridden by the user in the config file or in the
+        # command line arguments for the training pipeline.
+        self.config["training"]["folds"] = (
+            list(range(self.config["training"]["nfolds"]))
+        )
 
         # Step 3: Analyze the dataset to prepare the configuration file.
         self.analyze_dataset()

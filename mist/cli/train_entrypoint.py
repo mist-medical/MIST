@@ -36,13 +36,8 @@ def _parse_train_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         formatter_class=ArgumentDefaultsHelpFormatter,
         description="MIST training pipeline.",
     )
-    # Common groups (defined in mist.runtime.args).
-    argmod.add_io_args(parser)           # --results, --numpy, --overwrite
-    argmod.add_hardware_args(parser)     # --gpus
-    argmod.add_cv_args(parser)           # --nfolds, --folds
-    argmod.add_training_args(parser)     # --epochs, --batch-size-per-gpu, etc.
-    argmod.add_model_args(parser)        # --model, --pocket
-    argmod.add_loss_args(parser)         # --loss, --composite-loss-weighting
+    # Add training-specific args.
+    argmod.add_train_args(parser)
     ns = parser.parse_args(argv)
 
     # Fallbacks for convenience/consistency with other entrypoints.
@@ -168,7 +163,7 @@ def train_entry(argv: Optional[List[str]] = None) -> None:
 
     # Evaluate CV predictions
     filepaths_df, warnings = evaluation_utils.build_evaluation_dataframe(
-        train_paths_csv=str(results_dir / "train_paths.csv"), 
+        train_paths_csv=str(results_dir / "train_paths.csv"),
         prediction_folder=str(results_dir / "predictions" / "train" / "raw"),
     )
 

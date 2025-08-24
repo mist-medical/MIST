@@ -61,7 +61,7 @@ class Patch3DTrainer(BaseTrainer):
             label_paths=fold_data["train_labels"],
             dtm_paths=fold_data["train_dtms"],
             batch_size=training["batch_size_per_gpu"],
-            oversampling=training["oversampling"],
+            oversampling=training["dali_foreground_prob"],
             labels=train_labels,
             roi_size=self.config["model"]["params"]["patch_size"],
             seed=training["seed"],
