@@ -276,3 +276,13 @@ def test_get_best_patch_size_assertions():
     """Input validation: min(med) > 1."""
     with pytest.raises(AssertionError):
         au.get_best_patch_size([1, 64, 64])  # Too small.
+
+
+def test_build_base_config():
+    """Builds a default config dictionary."""
+    cfg = au.build_base_config()
+
+    # Spot check some nested values.
+    assert cfg["dataset_info"]["modality"] is None
+    assert not cfg["preprocessing"]["skip"]
+    assert cfg["model"]["architecture"] == "nnunet"
