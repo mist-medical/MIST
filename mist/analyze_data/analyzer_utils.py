@@ -216,3 +216,111 @@ def get_best_patch_size(med_img_size: List[int]) -> List[int]:
     return [
         int(2 ** np.floor(np.log2(med_sz))) for med_sz in med_img_size
     ]
+
+
+def build_base_config() -> Dict[str, Any]:
+    """Build base configuration dictionary.
+
+    Returns:
+        base_config: Base configuration dictionary.
+    """
+    return {
+        "mist_version": None,
+        "dataset_info": {
+            "task": None,
+            "modality": None,
+            "images": None,
+            "labels": None,
+        },
+        "preprocessing": {
+            "skip": False,
+            "target_spacing": None,
+            "crop_to_foreground": None,
+            "median_resampled_image_size": None,
+            "normalize_with_nonzero_mask": None,
+            "ct_normalization": {
+                "window_min": None,
+                "window_max": None,
+                "z_score_mean": None,
+                "z_score_std": None,
+            },
+            "compute_dtms": False,
+            "normalize_dtms": True,
+        },
+        "model": {
+            "architecture": "nnunet",
+            "params": {
+                "in_channels": None,
+                "out_channels": None,
+                "patch_size": None,
+                "target_spacing": None,
+                "use_deep_supervision": True,
+                "use_residual_blocks": True,
+                "use_pocket_model": False,
+            },
+        },
+        "training": {
+            "seed": 42,
+            "nfolds": 5,
+            "folds": None,
+            "val_percent": 0.0,
+            "epochs": 1000,
+            "min_steps_per_epoch": 250,
+            "batch_size_per_gpu": 2,
+            "dali_foreground_prob": 0.6,
+            "loss": {
+                "name": "dice_ce",
+                "params": {
+                    "use_dtms": False,
+                    "composite_loss_weighting": None
+                },
+            },
+            "optimizer": "adam",
+            "learning_rate": 0.001,
+            "lr_scheduler": "cosine",
+            "l2_penalty": 0.00001,
+            "amp": True,
+            "augmentation": {
+                "enabled": True,
+                "transforms": {
+                    "flips": True,
+                    "zoom": True,
+                    "noise": True,
+                    "blur": True,
+                    "brightness": True,
+                    "contrast": True,
+                },
+            },
+            "hardware": {
+                "num_gpus": None,
+                "num_cpu_workers": 8,
+                "master_addr": "localhost",
+                "master_port": 12345,
+                "communication_backend": "nccl",
+            },
+        },
+        "inference": {
+            "inferer": {
+                "name": "sliding_window",
+                "params": {
+                    "patch_size": None,
+                    "patch_blend_mode": "gaussian",
+                    "patch_overlap": 0.5,
+                },
+            },
+            "ensemble": {
+                "strategy": "mean",
+            },
+            "tta": {
+                "enabled": True,
+                "strategy": "all_flips",
+            },
+        },
+        "evaluation": {
+            "metrics": ["dice", "haus95"],
+            "final_classes": None,
+            "params": {
+                "surf_dice_tol": 1.0,
+            },
+        },
+    }
