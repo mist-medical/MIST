@@ -46,7 +46,7 @@ def valid_mist_config():
 def legacy_mist_config():
     """Fixture for a legacy MIST model configuration."""
     return {
-        "model": "fmgnet",
+        "model_name": "fmgnet",
         "n_channels": 1,
         "n_classes": 2,
         "deep_supervision": False,
@@ -166,8 +166,8 @@ def test_convert_legacy_model_config_success(legacy_mist_config):
 
 def test_convert_legacy_model_config_missing_keys(legacy_mist_config):
     """Test conversion raises ValueError for missing keys."""
-    legacy_mist_config.pop("model")
+    legacy_mist_config.pop("model_name")
     with pytest.raises(
-        ValueError, match="Missing required key 'model' in legacy model config."
+        ValueError, match="Missing required key 'model_name' in legacy model"
     ):
         convert_legacy_model_config(legacy_mist_config)
