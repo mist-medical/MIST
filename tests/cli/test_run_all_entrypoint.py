@@ -8,154 +8,305 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for mist.scripts.run_all_entrypoint."""
-from typing import List
+"""Tests for mist_run_all CLI entrypoint."""
 import argparse
+from pathlib import Path
 import pytest
 
 # MIST imports.
-from mist.cli import run_all_entrypoint as entry
+import mist.cli.run_all_entrypoint as entry
 
 
-@pytest.fixture
-def patch_argmod(monkeypatch):
-    """Provide a minimal arg parser via mist.runtime.args helpers."""
-    def _ArgParser(*a, **kw):
-        return argparse.ArgumentParser(*a, **kw)
+# pylint: disable=protected-access
+# =============================================================================
+# Minimal CLI patching
+# =============================================================================
 
-    def _add_io_args(p: argparse.ArgumentParser) -> None:
-        # All optional; run_all should fall back to ./results and ./numpy.
-        p.add_argument("--results")
-        p.add_argument("--numpy")
-        p.add_argument("--overwrite", action="store_true", default=False)
 
-    def _add_hardware_args(p: argparse.ArgumentParser) -> None:
-        p.add_argument("--gpus", nargs="*", type=int, default=None)
+def _patch_minimal_cli(monkeypatch) -> None:
+    """Patch argmod.* to a minimal CLI for deterministic parsing."""
+    def _mk_parser(**kwargs):
+        return argparse.ArgumentParser(**kwargs)
 
-    def _add_cv_args(p: argparse.ArgumentParser) -> None:
-        p.add_argument("--nfolds", type=int, default=5)
-        p.add_argument("--folds", nargs="*", type=int, default=None)
+    def _add_analyzer_args(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("--data", type=str)
+        parser.add_argument("--results", type=str)
+        parser.add_argument("--nfolds", type=int)
+        parser.add_argument("--overwrite", action="store_true")
 
-    def _add_preprocessing_args(p: argparse.ArgumentParser) -> None:
-        # Keep these optional; run_all shouldn’t rely on them.
-        p.add_argument("--compute-dtms", action="store_true", default=False)
-        p.add_argument("--no-preprocess", action="store_true", default=False)
+    def _add_preprocess_args(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("--results", type=str)
+        parser.add_argument("--numpy", type=str)
+        parser.add_argument("--no-preprocess", action="store_true")
+        parser.add_argument("--compute-dtms", action="store_true")
+        parser.add_argument("--overwrite", action="store_true")
 
-    def _add_training_args(p: argparse.ArgumentParser) -> None:
-        p.add_argument("--epochs", type=int, default=1)
-        p.add_argument("--batch-size-per-gpu", type=int, default=1)
+    def _add_train_args(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("--results", type=str)
+        parser.add_argument("--numpy", type=str)
+        parser.add_argument("--gpus", nargs="+", type=int)
+        parser.add_argument("--model", type=str)
+        parser.add_argument("--pocket", action="store_true")
+        parser.add_argument("--patch-size", nargs=3, type=int)
+        parser.add_argument("--loss", type=str)
+        parser.add_argument("--use-dtms", action="store_true")
+        parser.add_argument("--composite-loss-weighting", type=str)
+        parser.add_argument("--epochs", type=int)
+        parser.add_argument("--batch-size-per-gpu", type=int)
+        parser.add_argument("--learning-rate", type=float)
+        parser.add_argument("--lr-scheduler", type=str)
+        parser.add_argument("--optimizer", type=str)
+        parser.add_argument("--l2-penalty", type=float)
+        parser.add_argument("--folds", nargs="+", type=int)
+        parser.add_argument("--overwrite", action="store_true")
 
-    def _add_model_args(p: argparse.ArgumentParser) -> None:
-        p.add_argument("--model", default="unet3d")
-        p.add_argument("--pocket", action="store_true", default=False)
-
-    def _add_loss_args(p: argparse.ArgumentParser) -> None:
-        p.add_argument("--loss", default="ce")
-        p.add_argument(
-            "--composite-loss-weighting", nargs="*", type=float, default=None
-        )
-
-    monkeypatch.setattr(entry.argmod, "ArgParser", _ArgParser, raising=True)
-    monkeypatch.setattr(entry.argmod, "add_io_args", _add_io_args, raising=True)
+    monkeypatch.setattr(entry.argmod, "ArgParser", _mk_parser, raising=True)
     monkeypatch.setattr(
-        entry.argmod, "add_hardware_args", _add_hardware_args, raising=True
+        entry.argmod, "add_analyzer_args", _add_analyzer_args, raising=True
     )
-    monkeypatch.setattr(entry.argmod, "add_cv_args", _add_cv_args, raising=True)
     monkeypatch.setattr(
-        entry.argmod,
-        "add_preprocessing_args",
-        _add_preprocessing_args,
+        entry.argmod, "add_preprocess_args", _add_preprocess_args, raising=True
+    )
+    monkeypatch.setattr(
+        entry.argmod, "add_train_args", _add_train_args, raising=True
+    )
+
+
+# =============================================================================
+# Tests for _ns_to_argv.
+# =============================================================================
+
+def test_ns_to_argv_includes_scalars_bools_lists_and_converts_dashes():
+    """Converts scalars, True flags, lists/tuples and underscores -> dashes."""
+    ns = argparse.Namespace(
+        data="ds.json",
+        nfolds=5,
+        overwrite=True,             # Boolean True included.
+        gpus=[0, 1],                # List flattened.
+        patch_size=(32, 32, 32),    # Tuple flattened.
+        pocket=False,               # Boolean False omitted.
+        model="mednext",
+    )
+    keys = [
+        "data", "nfolds", "overwrite", "gpus", "patch_size", "pocket", "model"
+    ]
+    out = entry._ns_to_argv(ns, keys)
+    assert out == [
+        "--data", "ds.json",
+        "--nfolds", "5",
+        "--overwrite",
+        "--gpus", "0", "1",
+        "--patch-size", "32", "32", "32",
+        "--model", "mednext",
+    ]
+
+
+def test_ns_to_argv_skips_missing_none_false_and_empty_list():
+    """Skip missing attributes, None values, False booleans, and empty lists."""
+    ns = argparse.Namespace(
+        data=None,              # Skipped.
+        overwrite=False,        # Skipped.
+        folds=[],               # Skipped.
+        results="out",          # Included.
+    )
+    keys = ["data", "overwrite", "folds", "results", "not_present"]
+    out = entry._ns_to_argv(ns, keys)
+    assert out == ["--results", "out"]
+
+
+# =============================================================================
+# Tests for _parse_run_all_args.
+# =============================================================================
+
+def test_parse_run_all_args_requires_data(monkeypatch):
+    """It raises SystemExit when --data is missing."""
+    _patch_minimal_cli(monkeypatch)
+    with pytest.raises(SystemExit):
+        entry._parse_run_all_args(argv=[])
+
+
+def test_parse_run_all_args_defaults_results(tmp_path, monkeypatch):
+    """It supplies a default results path when --results is not given."""
+    _patch_minimal_cli(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    ns = entry._parse_run_all_args(argv=["--data", "d.json"])
+    assert Path(ns.results) == (tmp_path / "results").resolve()
+    assert Path(ns.numpy) == (tmp_path / "numpy").resolve()
+
+
+def test_parse_run_all_args_explicit_values(monkeypatch, tmp_path):
+    """It retains explicit values for all provided arguments."""
+    _patch_minimal_cli(monkeypatch)
+    res = tmp_path / "r"
+    npy = tmp_path / "n"
+    ns = entry._parse_run_all_args(
+        argv=[
+            "--data", "d.json",
+            "--results", str(res),
+            "--numpy", str(npy),
+            "--nfolds", "3",
+            "--overwrite",
+            "--gpus", "0", "1",
+            "--pocket",
+            "--use-dtms",
+            "--epochs", "10",
+            "--batch-size-per-gpu", "2",
+        ]
+    )
+    assert ns.data == "d.json"
+    assert ns.results == str(res)
+    assert ns.numpy == str(npy)
+    assert ns.nfolds == 3
+    assert ns.overwrite is True
+    assert ns.gpus == [0, 1]
+    assert ns.pocket is True
+    assert ns.use_dtms is True
+    assert ns.epochs == 10
+    assert ns.batch_size_per_gpu == 2
+
+
+# =============================================================================
+# Tests for run_all_entry.
+# =============================================================================
+
+def test_run_all_entry_forwards_subsets_correctly(monkeypatch, tmp_path):
+    """It forwards correct subsets to analyze, preprocess, and train."""
+    _patch_minimal_cli(monkeypatch)
+
+    # Capture argv passed to stage entrypoints.
+    calls = {"analyze": None, "preprocess": None, "train": None}
+
+    def _an(argv):
+        calls["analyze"] = list(argv)
+
+    def _pre(argv):
+        calls["preprocess"] = list(argv)
+
+    def _tr(argv):
+        calls["train"] = list(argv)
+
+    monkeypatch.setattr(entry, "analyze_entry", _an, raising=True)
+    monkeypatch.setattr(entry, "preprocess_entry", _pre, raising=True)
+    monkeypatch.setattr(entry, "train_entry", _tr, raising=True)
+
+    argv = [
+        # Analyzer.
+        "--data", "d.json",
+        "--results", str(tmp_path / "out"),
+        "--nfolds", "4",
+        "--overwrite",
+        # Preprocess.
+        "--numpy", str(tmp_path / "np"),
+        "--no-preprocess",
+        "--compute-dtms",
+        # Train.
+        "--gpus", "0", "1",
+        "--model", "mednext",
+        "--patch-size", "48", "64", "32",
+        "--loss", "dice",
+        "--use-dtms",       # True -> include.
+        "--epochs", "20",
+        "--batch-size-per-gpu", "2",
+        "--learning-rate", "0.001",
+        "--lr-scheduler", "cos",
+        "--optimizer", "adam",
+        "--l2-penalty", "0.0005",
+        "--folds", "0", "2",
+        "--overwrite",     # Appears multiple times; conflict_handler=resolve.
+    ]
+
+    # Build expected subsets from the parsed Namespace.
+    ns = entry._parse_run_all_args(argv=argv)
+    analyzer_keys = ["data", "results", "nfolds", "overwrite"]
+    preprocess_keys = [
+        "results", "numpy", "no_preprocess", "compute_dtms", "overwrite"
+    ]
+    train_keys = [
+        "results", "numpy",
+        "gpus",
+        "model", "pocket", "patch_size",
+        "loss", "use_dtms", "composite_loss_weighting",
+        "epochs", "batch_size_per_gpu", "learning_rate",
+        "lr_scheduler", "optimizer", "l2_penalty",
+        "folds", "overwrite",
+    ]
+    expected_an = entry._ns_to_argv(ns, analyzer_keys)
+    expected_pre = entry._ns_to_argv(ns, preprocess_keys)
+    expected_tr = entry._ns_to_argv(ns, train_keys)
+
+    # Now actually run orchestrator.
+    entry.run_all_entry(argv=argv)
+
+    # Verify exact argv passed into each stage.
+    assert calls["analyze"] == expected_an
+    assert calls["preprocess"] == expected_pre
+    assert calls["train"] == expected_tr
+
+
+def test_run_all_entry_handles_false_flags_and_empty_lists(monkeypatch):
+    """Omit False boolean flags and empty list-valued args from stage argv."""
+    _patch_minimal_cli(monkeypatch)
+
+    calls = {"analyze": None, "preprocess": None, "train": None}
+    monkeypatch.setattr(
+        entry,
+        "analyze_entry",
+        lambda a: calls.__setitem__("analyze", a),
         raising=True,
     )
     monkeypatch.setattr(
-        entry.argmod, "add_training_args", _add_training_args, raising=True
+        entry,
+        "preprocess_entry",
+        lambda a: calls.__setitem__("preprocess", a),
+        raising=True,
     )
     monkeypatch.setattr(
-        entry.argmod, "add_model_args", _add_model_args, raising=True
+        entry,
+        "train_entry",
+        lambda a: calls.__setitem__("train", a),
+        raising=True,
     )
-    monkeypatch.setattr(
-        entry.argmod, "add_loss_args", _add_loss_args, raising=True
-    )
 
-
-@pytest.fixture
-def patch_sub_entrypoints(monkeypatch):
-    """Patch analyze/preprocess/train entry calls to record argv & order."""
-    calls = {"order": [], "analyze": None, "preprocess": None, "train": None}
-
-    def _rec(name):
-        def _fn(argv: List[str] | None):
-            calls["order"].append(name)
-            calls[name] = list(argv) if argv is not None else None
-        return _fn
-
-    monkeypatch.setattr(entry, "analyze_entry", _rec("analyze"), raising=True)
-    monkeypatch.setattr(
-        entry, "preprocess_entry", _rec("preprocess"), raising=True
-    )
-    monkeypatch.setattr(entry, "train_entry", _rec("train"), raising=True)
-    return calls
-
-
-def _val_after(argv_list: List[str], flag: str) -> str:
-    """Return the value immediately following a flag in an argv list."""
-    i = argv_list.index(flag)
-    return argv_list[i + 1]
-
-
-def test_run_all_defaults_to_cwd_results_and_numpy(
-    tmp_path, monkeypatch, patch_argmod, patch_sub_entrypoints
-):
-    """When no --results/--numpy are provided, default to ./results, ./numpy."""
-    monkeypatch.chdir(tmp_path)
-
-    # No flags at all; run_all should default paths and forward to all steps.
-    entry.run_all_entry([])
-
-    # Order is analyze -> preprocess -> train.
-    assert patch_sub_entrypoints["order"] == ["analyze", "preprocess", "train"]
-
-    # Each sub-call received argv with defaulted paths.
-    for step in ("analyze", "preprocess", "train"):
-        argv = patch_sub_entrypoints[step]
-        assert isinstance(argv, list)
-        assert "--results" in argv and "--numpy" in argv
-        assert _val_after(argv, "--results") == str(tmp_path / "results")
-        assert _val_after(argv, "--numpy") == str(tmp_path / "numpy")
-
-    # No overwrite flag injected implicitly.
-    for step in ("analyze", "preprocess", "train"):
-        assert "--overwrite" not in patch_sub_entrypoints[step]
-
-
-def test_run_all_forwards_explicit_paths_and_overwrite(
-    tmp_path, patch_argmod, patch_sub_entrypoints
-):
-    """Explicit --results/--numpy/--overwrite and extra flags are forwarded."""
-    results = tmp_path / "exp_results"
-    numpy = tmp_path / "exp_numpy"
     argv = [
-        "--results", str(results),
-        "--numpy", str(numpy),
-        "--overwrite",
-        "--gpus", "0", "1",
-        "--epochs", "5",
-        "--loss", "dice",
+        "--data", "d.json",
+        "--results", "r",
+        "--numpy", "n",
+        # Explicitly false flags and empty list.
+        # (with our minimal CLI, absence of flag == False; sim. by not passing).
+        "--folds",  # Empty list not representable on CLI, verify via ns below.
     ]
 
-    entry.run_all_entry(argv)
+    # Parse and construct expected.
+    ns = entry._parse_run_all_args(
+        argv=["--data", "d.json", "--results", "r", "--numpy", "n"]
+    )
+    ns.pocket = False
+    ns.use_dtms = False
+    ns.folds = []  # Empty -> should not appear.
 
-    # Order still analyze -> preprocess -> train.
-    assert patch_sub_entrypoints["order"] == ["analyze", "preprocess", "train"]
+    analyze_keys = ["data", "results", "nfolds", "overwrite"]
+    preprocess_keys = [
+        "results", "numpy", "no_preprocess", "compute_dtms", "overwrite"
+    ]
+    train_keys = [
+        "results", "numpy",
+        "gpus",
+        "model", "pocket", "patch_size",
+        "loss", "use_dtms", "composite_loss_weighting",
+        "epochs", "batch_size_per_gpu", "learning_rate",
+        "lr_scheduler", "optimizer", "l2_penalty",
+        "folds", "overwrite",
+    ]
 
-    for step in ("analyze", "preprocess", "train"):
-        argv_out = patch_sub_entrypoints[step]
-        # Paths preserved.
-        assert _val_after(argv_out, "--results") == str(results)
-        assert _val_after(argv_out, "--numpy") == str(numpy)
-        # Overwrite forwarded.
-        assert "--overwrite" in argv_out
-        # Representative extra flags forwarded.
-        assert "--gpus" in argv_out
-        assert _val_after(argv_out, "--epochs") == "5"
-        assert _val_after(argv_out, "--loss") == "dice"
+    expected_an = entry._ns_to_argv(ns, analyze_keys)
+    expected_pre = entry._ns_to_argv(ns, preprocess_keys)
+    expected_tr = entry._ns_to_argv(ns, train_keys)
+
+    # Run orchestrator with minimal args (false/empty are omitted naturally).
+    entry.run_all_entry(
+        argv=["--data", "d.json", "--results", "r", "--numpy", "n"]
+    )
+
+    assert calls["analyze"] == expected_an
+    assert calls["preprocess"] == expected_pre
+    assert calls["train"] == expected_tr

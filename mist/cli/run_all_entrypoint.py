@@ -14,6 +14,7 @@ from argparse import ArgumentDefaultsHelpFormatter
 from pathlib import Path
 from typing import List, Optional
 
+# MIST imports.
 from mist.cli import args as argmod
 from mist.cli.analyze_entrypoint import analyze_entry
 from mist.cli.preprocess_entrypoint import preprocess_entry
@@ -63,7 +64,7 @@ def _parse_run_all_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     if not getattr(ns, "results", None):
         ns.results = str(Path("./results").expanduser().resolve())
     if not getattr(ns, "numpy", None):
-        ns.results = str(Path("./numpy").expanduser().resolve())
+        ns.numpy = str(Path("./numpy").expanduser().resolve())
 
     # Minimal top-level validation.
     if not getattr(ns, "data", None):

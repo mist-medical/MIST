@@ -1,6 +1,6 @@
 # Copyright (c) MIST Imaging LLC.
 # Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
+# You may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #     http://www.apache.org/licenses/LICENSE-2.0
 # Unless required by applicable law or agreed to in writing, software
@@ -8,8 +8,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for mist.cli.args."""
-from typing import List
+"""Tests for MIST arguments handling."""
 import argparse
 import pytest
 
@@ -17,301 +16,430 @@ import pytest
 import mist.cli.args as args_mod
 
 
-@pytest.fixture
-def parser() -> args_mod.ArgParser:
-    """Fresh ArgParser for each test."""
+# =============================================================================
+# Converters / Validators.
+# =============================================================================
+
+
+@pytest.mark.parametrize("val,expected", [(1, 1), ("2", 2), (123, 123)])
+def test_positive_int_success(val, expected):
+    """Valid positive integers are accepted as-is or converted from strings."""
+    assert args_mod.positive_int(val) == expected
+
+
+@pytest.mark.parametrize("val", [0, -1, "-5"])
+def test_positive_int_rejects_non_positive(val):
+    """ Non-positive values raise argparse.ArgumentTypeError."""
+    with pytest.raises(argparse.ArgumentTypeError):
+        args_mod.positive_int(val)
+
+
+@pytest.mark.parametrize("val", ["abc", "3.2.1"])
+def test_positive_int_rejects_non_numeric_string(val):
+    """Non-numeric strings raise ValueError."""
+    with pytest.raises(ValueError):
+        args_mod.positive_int(val)
+
+
+@pytest.mark.parametrize("val,expected", [(0.1, 0.1), ("2.5", 2.5), (3, 3.0)])
+def test_positive_float_success(val, expected):
+    """Valid positive floats are accepted as-is or converted from strings."""
+    assert args_mod.positive_float(val) == expected
+
+
+@pytest.mark.parametrize("val", [0, -0.1, "-2.3"])
+def test_positive_float_rejects_non_positive(val):
+    """ Non-positive values raise argparse.ArgumentTypeError."""
+    with pytest.raises(argparse.ArgumentTypeError):
+        args_mod.positive_float(val)
+
+
+@pytest.mark.parametrize("val", ["abc", "1.2.3"])
+def test_positive_float_rejects_non_numeric_string(val):
+    """Non-numeric strings raise ValueError."""
+    with pytest.raises(ValueError):
+        args_mod.positive_float(val)
+
+
+@pytest.mark.parametrize(
+    "val,expected", [(0, 0), ("0", 0), (5, 5), ("10", 10)]
+)
+def test_non_negative_int_success(val, expected):
+    """Valid non-negative integers accepted as-is or converted from strings."""
+    assert args_mod.non_negative_int(val) == expected
+
+
+@pytest.mark.parametrize("val", [-1, "-7"])
+def test_non_negative_int_rejects_negative(val):
+    """Negative values raise argparse.ArgumentTypeError."""
+    with pytest.raises(argparse.ArgumentTypeError):
+        args_mod.non_negative_int(val)
+
+
+@pytest.mark.parametrize("val", ["abc", "1.0"])
+def test_non_negative_int_rejects_non_int_string(val):
+    """Non-integer strings raise ValueError."""
+    with pytest.raises(ValueError):
+        args_mod.non_negative_int(val)
+
+
+@pytest.mark.parametrize(
+    "val,expected", [(0, 0.0), ("0", 0.0), (0.5, 0.5), ("1", 1.0), (1.0, 1.0)]
+)
+def test_float_0_1_success(val, expected):
+    """Valid floats in [0.0, 1.0] accepted as-is or converted from strings."""
+    assert args_mod.float_0_1(val) == expected
+
+
+@pytest.mark.parametrize("val", [-0.0001, "1.0001"])
+def test_float_0_1_out_of_range(val):
+    """Values outside [0.0, 1.0] raise argparse.ArgumentTypeError."""
+    with pytest.raises(argparse.ArgumentTypeError):
+        args_mod.float_0_1(val)
+
+
+@pytest.mark.parametrize("val", ["abc", "0..5"])
+def test_float_0_1_non_numeric_string(val):
+    """Non-numeric strings raise ValueError."""
+    with pytest.raises(ValueError):
+        args_mod.float_0_1(val)
+
+
+@pytest.mark.parametrize(
+    "val,expected",
+    [
+        (True, True),
+        (False, False),
+        ("yes", True),
+        ("y", True),
+        ("true", True),
+        ("t", True),
+        ("1", True),
+        ("no", False),
+        ("n", False),
+        ("false", False),
+        ("f", False),
+        ("0", False),
+        ("TrUe", True),
+        ("FaLsE", False),
+    ],
+)
+def test_str2bool_success(val, expected):
+    """Valid boolean strings (various cases) are converted correctly."""
+    assert args_mod.str2bool(val) is expected
+
+
+def test_str2bool_rejects_unknown():
+    """Unknown strings raise argparse.ArgumentTypeError."""
+    with pytest.raises(argparse.ArgumentTypeError):
+        args_mod.str2bool("maybe")
+
+
+# =============================================================================
+# ArgParser helper methods.
+# =============================================================================
+
+
+def _mk_parser() -> args_mod.ArgParser:
+    """Create a bare ArgParser for testing."""
     return args_mod.ArgParser(
-        formatter_class=args_mod.ArgumentDefaultsHelpFormatter,
-        description="Test parser.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
+
+
+def test_argparser_arg_adds_argument_and_parses():
+    """arg() adds an argument that can be parsed."""
+    parser = _mk_parser()
+    parser.arg("--value", type=int, default=7)
+    ns = parser.parse_args([])
+    assert ns.value == 7
+    ns = parser.parse_args(["--value", "42"])
+    assert ns.value == 42
+
+
+def test_argparser_flag_store_true():
+    """flag() with store_true creates a boolean flag."""
+    parser = _mk_parser()
+    parser.flag("--debug")
+    ns = parser.parse_args([])
+    assert ns.debug is False
+    ns = parser.parse_args(["--debug"])
+    assert ns.debug is True
+
+
+def test_argparser_boolean_flag_explicit_and_implicit():
+    """boolean_flag() creates a boolean flag with explicit true/false."""
+    parser = _mk_parser()
+    parser.boolean_flag("--feature", default=False, help="Toggle")
+
+    # Default.
+    ns = parser.parse_args([])
+    assert ns.feature is False
+
+    # Implicit true (no value).
+    ns = parser.parse_args(["--feature"])
+    assert ns.feature is True
+
+    # Explicit true/false.
+    ns = parser.parse_args(["--feature", "true"])
+    assert ns.feature is True
+    ns = parser.parse_args(["--feature", "false"])
+    assert ns.feature is False
+
+    # Invalid value -> argparse error (SystemExit).
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--feature", "maybe"])
+
+
+# =============================================================================
+# add_analyzer_args.
+# =============================================================================
+
+
+def test_add_analyzer_args_defaults_and_parsing():
+    """add_analyzer_args adds expected args w/ correct defaults and parsing."""
+    parser = _mk_parser()
+    args_mod.add_analyzer_args(parser)
+
+    # No args specified -> defaults.
+    ns = parser.parse_args([])
+    assert hasattr(ns, "data")
+    assert hasattr(ns, "results")
+    assert hasattr(ns, "nfolds")
+    assert hasattr(ns, "overwrite")
+    assert ns.data is None
+    assert ns.results is None
+    assert ns.nfolds is None
+    assert ns.overwrite is False
+
+    # Explicit values.
+    ns = parser.parse_args(
+        [
+            "--data", "path/to/dataset.json",
+            "--results", "out",
+            "--nfolds", "3",
+            "--overwrite",
+        ]
+    )
+    assert ns.data == "path/to/dataset.json"
+    assert ns.results == "out"
+    assert ns.nfolds == 3
+    assert ns.overwrite is True
+
+
+# =============================================================================
+# add_preprocess_args.
+# =============================================================================
+
+
+def test_add_preprocess_args_defaults_and_parsing():
+    """add_preprocess_args adds expected args/correct defaults and parsing."""
+    parser = _mk_parser()
+    args_mod.add_preprocess_args(parser)
+
+    # Defaults.
+    ns = parser.parse_args([])
+    assert ns.results is None
+    assert ns.numpy is None
+    assert ns.no_preprocess is False
+    assert ns.compute_dtms is False
+    assert ns.overwrite is False
+
+    # Explicit.
+    ns = parser.parse_args(
+        [
+            "--results", "out",
+            "--numpy", "npdir",
+            "--no-preprocess",
+            "--compute-dtms",
+            "--overwrite",
+        ]
+    )
+    assert ns.results == "out"
+    assert ns.numpy == "npdir"
+    assert ns.no_preprocess is True
+    assert ns.compute_dtms is True
+    assert ns.overwrite is True
+
+    # Explicit boolean_flag false.
+    ns = parser.parse_args(["--no-preprocess", "false"])
+    assert ns.no_preprocess is False
+
+
+# =============================================================================
+# add_train_args (with deterministic registries).
+# =============================================================================
 
 
 @pytest.fixture
 def patched_registries(monkeypatch):
-    """Patch registry list functions in add_* so choices are deterministic."""
-    # Model registry.
+    """Patch the registry listing functions to return deterministic values."""
     monkeypatch.setattr(
-        "mist.cli.args.list_registered_models",
-        lambda: ["fmgnet", "mednext"],
-        raising=True,
-    )
-    # Optimizers and LR schedulers.
-    monkeypatch.setattr(
-        "mist.cli.args.list_optimizers",
-        lambda: ["adamw", "sgd"],
+        args_mod,
+        "list_registered_models",
+        lambda: ["mednext", "unet"],
         raising=True,
     )
     monkeypatch.setattr(
-        "mist.cli.args.list_lr_schedulers",
-        lambda: ["cosine", "polynomial", "constant"],
-        raising=True,
-    )
-    # Losses and alpha schedulers.
-    monkeypatch.setattr(
-        "mist.cli.args.list_registered_losses",
-        lambda: ["dice", "focal"],
+        args_mod,
+        "list_registered_losses",
+        lambda: ["dice", "ce"],
         raising=True,
     )
     monkeypatch.setattr(
-        "mist.cli.args.list_alpha_schedulers",
-        lambda: ["linear", "constant"],
+        args_mod,
+        "list_alpha_schedulers",
+        lambda: ["linear", "cosine"],
         raising=True,
+    )
+    monkeypatch.setattr(
+        args_mod, "list_lr_schedulers", lambda: ["cos", "none"], raising=True
+    )
+    monkeypatch.setattr(
+        args_mod, "list_optimizers", lambda: ["adam", "sgd"], raising=True
     )
 
 
-def test_positive_int_valid():
-    """positive_int returns int for valid positive values."""
-    assert args_mod.positive_int("3") == 3
-    assert args_mod.positive_int(7) == 7
+def test_add_train_args_defaults_and_basic_parse(patched_registries):
+    """add_train_args adds expected args/correct defaults and basic parsing."""
+    parser = _mk_parser()
+    args_mod.add_train_args(parser)
 
-
-def test_positive_int_invalid():
-    """positive_int raises on non-positive values."""
-    with pytest.raises(argparse.ArgumentTypeError):
-        args_mod.positive_int("0")
-    with pytest.raises(argparse.ArgumentTypeError):
-        args_mod.positive_int("-2")
-
-
-def test_positive_float_valid():
-    """positive_float returns float for valid positive values."""
-    assert args_mod.positive_float("0.1") == 0.1
-    assert args_mod.positive_float(5.0) == 5.0
-
-
-def test_positive_float_invalid():
-    """positive_float raises on non-positive."""
-    with pytest.raises(argparse.ArgumentTypeError):
-        args_mod.positive_float("0")
-    with pytest.raises(argparse.ArgumentTypeError):
-        args_mod.positive_float("-1.2")
-
-
-def test_non_negative_int_valid():
-    """non_negative_int allows zero and positives."""
-    assert args_mod.non_negative_int("0") == 0
-    assert args_mod.non_negative_int(10) == 10
-
-
-def test_non_negative_int_invalid():
-    """non_negative_int rejects negatives."""
-    with pytest.raises(argparse.ArgumentTypeError):
-        args_mod.non_negative_int("-1")
-
-
-def test_float_0_1_valid():
-    """float_0_1 accepts values in [0, 1]."""
-    assert args_mod.float_0_1("0") == 0.0
-    assert args_mod.float_0_1("1") == 1.0
-    assert args_mod.float_0_1("0.25") == 0.25
-
-
-def test_float_0_1_invalid():
-    """float_0_1 rejects values outside [0, 1]."""
-    with pytest.raises(argparse.ArgumentTypeError):
-        args_mod.float_0_1("-0.01")
-    with pytest.raises(argparse.ArgumentTypeError):
-        args_mod.float_0_1("1.01")
-
-
-def test_str2bool_variants():
-    """str2bool parses common truthy/falsey variants."""
-    truthy = ["yes", "true", "t", "y", "1", True]
-    falsey = ["no", "false", "f", "n", "0", False]
-    for v in truthy:
-        assert args_mod.str2bool(v) is True
-    for v in falsey:
-        assert args_mod.str2bool(v) is False
-    with pytest.raises(argparse.ArgumentTypeError):
-        args_mod.str2bool("maybe")  # Not allowed.
-
-
-def test_flag_and_boolean_flag(parser: args_mod.ArgParser):
-    """Custom flag() and boolean_flag() behavior."""
-    parser.flag("--dry-run", help="Dry run.")
-    parser.boolean_flag("--overwrite", default=False, help="Overwrite.")
-    # No flags provided.
+    # defaults
     ns = parser.parse_args([])
-    assert ns.dry_run is False
-    assert ns.overwrite is False
-    # Provide --dry-run and boolean flag without value (const=True).
-    ns = parser.parse_args(["--dry-run", "--overwrite"])
-    assert ns.dry_run is True
-    assert ns.overwrite is True
-    # Provide explicit boolean values.
-    ns = parser.parse_args(["--overwrite", "false"])
-    assert ns.overwrite is False
-    ns = parser.parse_args(["--overwrite", "true"])
-    assert ns.overwrite is True
-
-
-def test_arg_method_adds_argument():
-    """ArgParser.arg behaves like add_argument."""
-    parser = args_mod.ArgParser()
-    parser.arg("--foo", type=int, default=42, help="Foo argument.")
-    # No flag provided -> default is used.
-    ns = parser.parse_args([])
-    assert ns.foo == 42
-    # With flag -> value is parsed.
-    ns = parser.parse_args(["--foo", "7"])
-    assert ns.foo == 7
-
-
-def test_add_io_args(parser: args_mod.ArgParser):
-    """add_io_args adds the expected options with defaults."""
-    args_mod.add_io_args(parser)
-    ns = parser.parse_args([
-        "--data", "dataset.json",
-        "--results", "outdir",
-        "--numpy", "npdir",
-        "--overwrite",
-    ])
-    assert ns.data == "dataset.json"
-    assert ns.results == "outdir"
-    assert ns.numpy == "npdir"
-    assert ns.overwrite is True
-
-
-def test_add_hardware_args(parser: args_mod.ArgParser):
-    """add_hardware_args adds GPU list with default CPU sentinel."""
-    args_mod.add_hardware_args(parser)
-    # Default: CPU sentinel.
-    ns = parser.parse_args([])
+    assert ns.results is None
+    assert ns.numpy is None
     assert ns.gpus == [-1]
-    # Custom GPUs.
-    ns = parser.parse_args(["--gpus", "0", "1"])
-    assert ns.gpus == [0, 1]
-
-
-def test_add_training_args(parser: args_mod.ArgParser, patched_registries):
-    """add_training_args parses core training and registry-driven choices."""
-    args_mod.add_training_args(parser)
-    argv: List[str] = [
-        "--epochs", "10",
-        "--batch-size-per-gpu", "2",
-        "--patch-size", "64", "64", "32",
-        "--learning-rate", "0.001",
-        "--lr-scheduler", "cosine",
-        "--optimizer", "adamw",
-        "--l2-penalty", "0.01",
-        "--use-dtms",
-    ]
-    ns = parser.parse_args(argv)
-    assert ns.epochs == 10
-    assert ns.batch_size_per_gpu == 2
-    assert ns.patch_size == [64, 64, 32]
-    assert ns.learning_rate == 0.001
-    assert ns.lr_scheduler == "cosine"
-    assert ns.optimizer == "adamw"
-    assert ns.l2_penalty == 0.01
-    assert ns.use_dtms is True
-
-
-def test_add_model_args(parser: args_mod.ArgParser, patched_registries):
-    """add_model_args exposes model registry choices."""
-    args_mod.add_model_args(parser)
-    ns = parser.parse_args(["--model", "fmgnet"])
-    assert ns.model == "fmgnet"
-    with pytest.raises(SystemExit):
-        # argparse exits on invalid choice.
-        parser.parse_args(["--model", "unknown_model"])
-
-
-def test_add_preprocessing_args(parser: args_mod.ArgParser):
-    """add_preprocessing_args toggles preprocessing switches."""
-    args_mod.add_preprocessing_args(parser)
-    # Defaults.
-    ns = parser.parse_args([])
-    assert ns.no_preprocess is False
-    assert ns.compute_dtms is False
-    # Enable both.
-    ns = parser.parse_args(["--no-preprocess", "--compute-dtms"])
-    assert ns.no_preprocess is True
-    assert ns.compute_dtms is True
-
-
-def test_add_loss_args(parser: args_mod.ArgParser, patched_registries):
-    """add_loss_args uses loss and alpha-scheduler registries for choices."""
-    args_mod.add_loss_args(parser)
-    ns = parser.parse_args([
-        "--loss", "dice",
-        "--composite-loss-weighting", "linear",
-    ])
-    assert ns.loss == "dice"
-    assert ns.composite_loss_weighting == "linear"
-
-
-def test_add_cv_args(parser: args_mod.ArgParser):
-    """add_cv_args parses nfolds and folds list."""
-    args_mod.add_cv_args(parser)
-    # Defaults.
-    ns = parser.parse_args([])
-    assert ns.nfolds == 5
+    assert ns.model is None
+    assert ns.pocket is False
+    assert ns.patch_size is None
+    assert ns.loss is None
+    assert ns.use_dtms is False
+    assert ns.composite_loss_weighting is None
+    assert ns.epochs is None
+    assert ns.batch_size_per_gpu is None
+    assert ns.learning_rate is None
+    assert ns.lr_scheduler is None
+    assert ns.optimizer is None
+    assert ns.l2_penalty is None
     assert ns.folds is None
-    # Custom folds.
-    ns = parser.parse_args(["--nfolds", "3", "--folds", "0", "2"])
-    assert ns.nfolds == 3
-    assert ns.folds == [0, 2]
+    assert ns.overwrite is False
 
 
-def test_compose_common_parser_and_parse_minimal(patched_registries):
-    """Compose a full parser with all groups and parse a realistic CLI line."""
-    p = args_mod.ArgParser(
-        formatter_class=args_mod.ArgumentDefaultsHelpFormatter,
-        description="Composed test.",
-    )
-    # Add all groups (as a train-like entrypoint would).
-    args_mod.add_io_args(p)
-    args_mod.add_hardware_args(p)
-    args_mod.add_training_args(p)
-    args_mod.add_model_args(p)
-    args_mod.add_preprocessing_args(p)
-    args_mod.add_loss_args(p)
-    args_mod.add_cv_args(p)
+def test_add_train_args_full_parse_success(patched_registries):
+    """add_train_args correctly parses a full set of valid arguments."""
+    parser = _mk_parser()
+    args_mod.add_train_args(parser)
 
     argv = [
-        "--data", "dataset.json",
-        "--results", "outdir",
+        "--results", "out",
         "--numpy", "npdir",
-        "--overwrite",
-        "--gpus", "0",
-        "--epochs", "2",
-        "--batch-size-per-gpu", "1",
-        "--patch-size", "32", "32", "32",
-        "--learning-rate", "1e-3",
-        "--lr-scheduler", "constant",
-        "--optimizer", "sgd",
-        "--l2-penalty", "0.0" if False else "0.001",
-        "--use-dtms",
+        "--gpus", "0", "1",
         "--model", "mednext",
-        "--no-preprocess",
-        "--compute-dtms",
+        "--pocket",
+        "--patch-size", "32", "64", "48",
         "--loss", "dice",
-        "--composite-loss-weighting", "constant",
-        "--nfolds", "3",
-        "--folds", "0", "1",
+        "--use-dtms",
+        "--composite-loss-weighting", "linear",
+        "--epochs", "10",
+        "--batch-size-per-gpu", "2",
+        "--learning-rate", "0.001",
+        "--lr-scheduler", "cos",
+        "--optimizer", "adam",
+        "--l2-penalty", "0.0005",
+        "--folds", "0", "2", "4",
+        "--overwrite",
     ]
+    ns = parser.parse_args(argv)
 
-    ns = p.parse_args(argv)
-
-    # Spot-check a few values.
-    assert ns.data == "dataset.json"
-    assert ns.results == "outdir"
+    assert ns.results == "out"
     assert ns.numpy == "npdir"
-    assert ns.overwrite is True
-    assert ns.gpus == [0]
-    assert ns.epochs == 2
-    assert ns.batch_size_per_gpu == 1
-    assert ns.patch_size == [32, 32, 32]
-    assert ns.learning_rate == pytest.approx(1e-3)
-    assert ns.lr_scheduler == "constant"
-    assert ns.optimizer == "sgd"
-    assert ns.l2_penalty == pytest.approx(0.001)
-    assert ns.use_dtms is True
+    assert ns.gpus == [0, 1]
     assert ns.model == "mednext"
-    assert ns.no_preprocess is True
-    assert ns.compute_dtms is True
+    assert ns.pocket is True
+    assert ns.patch_size == [32, 64, 48]
     assert ns.loss == "dice"
-    assert ns.composite_loss_weighting == "constant"
-    assert ns.nfolds == 3
-    assert ns.folds == [0, 1]
+    assert ns.use_dtms is True
+    assert ns.composite_loss_weighting == "linear"
+    assert ns.epochs == 10
+    assert ns.batch_size_per_gpu == 2
+    assert ns.learning_rate == pytest.approx(0.001)
+    assert ns.lr_scheduler == "cos"
+    assert ns.optimizer == "adam"
+    assert ns.l2_penalty == pytest.approx(0.0005)
+    assert ns.folds == [0, 2, 4]
+    assert ns.overwrite is True
+
+
+def test_add_train_args_enforces_choices(patched_registries):
+    """add_train_args enforces model, loss, schedulers, optimizer."""
+    parser = _mk_parser()
+    args_mod.add_train_args(parser)
+
+    # Bad model.
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--model", "badmodel"])
+
+    # Bad loss.
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--loss", "badloss"])
+
+    # Bad alpha scheduler.
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--composite-loss-weighting", "badalpha"])
+
+    # Bad lr scheduler.
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--lr-scheduler", "badlr"])
+
+    # Bad optimizer.
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--optimizer", "badopt"])
+
+
+def test_add_train_args_patch_size_validation(patched_registries):
+    """add_train_args enforces patch-size arity and positivity."""
+    parser = _mk_parser()
+    args_mod.add_train_args(parser)
+
+    # invalid (negative) triggers ArgumentTypeError from
+    # positive_int -> SystemExit in argparse.
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--patch-size", "32", "-1", "32"])
+
+    # wrong arity (needs exactly 3)
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--patch-size", "32", "32"])
+
+
+def test_add_train_args_numeric_validators(patched_registries):
+    """add_train_args enforces numeric argument constraints."""
+    parser = _mk_parser()
+    args_mod.add_train_args(parser)
+
+    # epochs must be non-negative int
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--epochs", "-1"])
+
+    # batch-size-per-gpu must be positive int
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--batch-size-per-gpu", "0"])
+
+    # learning-rate must be positive float
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--learning-rate", "0"])
+
+    # l2-penalty must be positive float
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--l2-penalty", "-0.001"])
+
+
+def test_add_train_args_boolean_flags_explicit_false(patched_registries):
+    """add_train_args boolean_flags can be explicitly set to false."""
+    parser = _mk_parser()
+    args_mod.add_train_args(parser)
+
+    # pocket and use-dtms are boolean_flags; ensure explicit false works.
+    ns = parser.parse_args(["--pocket", "false", "--use-dtms", "false"])
+    assert ns.pocket is False
+    assert ns.use_dtms is False
