@@ -301,7 +301,7 @@ def test_training_step_criterion_optimizer_and_scaler(
       - optimizer.step() is called once,
       - when AMP is enabled: torch.autocast is entered (no-op) and scaler
         scale/backward/step/update are each called once,
-      - when AMP is disabled: scaler counters remain zero.
+      - when AMP is disabled: scaler is None (matches production path).
     """
     t = Patch3DTrainer(mist_args)
 
@@ -321,14 +321,12 @@ def test_training_step_criterion_optimizer_and_scaler(
 
     # Fake criterion that records inputs and returns a simple scalar loss.
     called = {}
-
     def fake_criterion(*, y_true, y_pred, y_supervision, alpha, dtm):
         called["y_true"] = y_true
         called["y_pred"] = y_pred
         called["y_sup"] = y_supervision
         called["alpha"] = alpha
         called["dtm"] = dtm
-        # Use MSE-like loss for determinism.
         return (y_pred - y_true).pow(2).mean()
 
     # Scaler and (for AMP) a CPU-safe autocast no-op.
@@ -336,21 +334,20 @@ def test_training_step_criterion_optimizer_and_scaler(
         scaler = FakeScaler(enabled=True)
 
         class _NoOpAutocast:
-            def __enter__(self):
-                return self
-            def __exit__(self, exc_type, exc, tb):
-                return False
+            def __enter__(self): return self
+            def __exit__(self, exc_type, exc, tb): return False
 
         monkeypatch.setattr(torch, "autocast", lambda *a, **k: _NoOpAutocast())
     else:
-        scaler = FakeScaler(enabled=False)
+        # Match production behavior when AMP is disabled.
+        scaler = None
 
     state = {
         "model": model,
         "optimizer": opt,
         "scaler": scaler,
         "loss_function": fake_criterion,
-        "composite_weight_scheduler": None,
+        "composite_loss_weighting": None,
         "epoch": 0,
         "global_step": 0,
     }
@@ -369,15 +366,15 @@ def test_training_step_criterion_optimizer_and_scaler(
     assert called["alpha"] is None
     assert step_calls["count"] == 1  # Optimizer stepped once.
 
-    # Branch-specific scaler assertions.
+    # Branch-specific assertions.
     if amp_enabled:
-        assert scaler._scaled == 1
-        assert scaler._stepped == 1
-        assert scaler._updated == 1
+        assert isinstance(state["scaler"], FakeScaler)
+        assert state["scaler"].enabled is True
+        assert state["scaler"]._scaled == 1
+        assert state["scaler"]._stepped == 1
+        assert state["scaler"]._updated == 1
     else:
-        assert scaler._scaled == 0
-        assert scaler._stepped == 0
-        assert scaler._updated == 0
+        assert state["scaler"] is None
 
 
 @patch("mist.training.trainers.patch_3d_trainer.sliding_window_inference")

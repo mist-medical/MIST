@@ -10,7 +10,10 @@
 # limitations under the License.
 """Tests for the BaseTrainer implementation."""
 import json
+import os
 import math
+import pickle
+import rich
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -55,6 +58,19 @@ class DummyModel(nn.Module):
     def forward(self, x):
         """Forward pass through the dummy linear layer."""
         return self.l(x)
+
+
+class DummyLoss(nn.Module):
+    """Dummy loss that returns a constant value."""
+    def __init__(self, value: float = 1.0, **kwargs):
+        super().__init__()  # <-- important
+        self.value = value
+
+    def forward(self, y_true, y_pred):
+        """Return a constant loss value."""
+        # Ensure it's a proper tensor on the same device as predictions.
+        dev = y_pred.device if isinstance(y_pred, torch.Tensor) else "cpu"
+        return torch.tensor(self.value, device=dev, dtype=torch.float32)
 
 
 class DummyDDP(nn.Module):
@@ -183,12 +199,16 @@ def tmp_pipeline(tmp_path: Path) -> Tuple[Path, Path]:
     df.to_csv(results / "train_paths.csv", index=False)
 
     config = {
-        "model": {"architecture": "dummy", "params": {}},
+        "model": {
+            "architecture": "dummy",
+            "params": {"patch_size": [16, 16, 16]}
+        },
         "training": {
             "nfolds": 2,
             "folds": [0],
             "epochs": 1,
             "batch_size_per_gpu": 1,
+            "learning_rate": 0.01,
             "hardware": {
                 "master_addr": "127.0.0.1",
                 "master_port": 12355,
@@ -210,6 +230,23 @@ def tmp_pipeline(tmp_path: Path) -> Tuple[Path, Path]:
             "lr_scheduler": "constant",
             "amp": False,
         },
+        "inference": {
+            "inferer": {
+                "name": "sliding_window",
+                "params": {
+                    "patch_size": [16, 16, 16],
+                    "patch_blend_mode": "gaussian",
+                    "patch_overlap": 0.5,
+                },
+            },
+            "ensemble": {
+                "strategy": "mean",
+            },
+            "tta": {
+                "enabled": True,
+                "strategy": "all_flips",
+            },
+        }
     }
     (results / "config.json").write_text(json.dumps(config))
 
@@ -260,14 +297,14 @@ def patch_path_resolver(monkeypatch):
 def patch_registries(monkeypatch):
     """Patch registries: model, loss, optimizer, and LR scheduler."""
     monkeypatch.setattr(bt, "get_model", lambda arch, **p: DummyModel())
-    monkeypatch.setattr(bt, "get_loss", lambda name: object())
+    monkeypatch.setattr(bt, "get_loss", lambda name: DummyLoss)
     monkeypatch.setattr(bt, "get_alpha_scheduler", lambda cfg: object())
 
     def fake_get_optimizer(
-        name, params, weight_decay, eps, lr=None, l2_penalty=None
+        name, params, weight_decay, eps, learning_rate=None, l2_penalty=None
     ):
         """Fake optimizer that returns a dummy SGD."""
-        lr = 0.1 if lr is None else float(lr)
+        lr = 0.1 if learning_rate is None else float(learning_rate)
         wd = float(weight_decay if l2_penalty is None else l2_penalty)
         return torch.optim.SGD(params, lr=lr, weight_decay=wd)
 
@@ -364,6 +401,58 @@ def patch_dist(monkeypatch):
     return calls
 
 
+
+def test_getstate_drops_console(tmp_pipeline, mist_args, monkeypatch):
+    """__getstate__ should drop/neutralize the unpicklable console attribute."""
+    trainer = DummyTrainer(mist_args)
+    # Sanity: console is created during __init__.
+    assert trainer.console is not None
+
+    state = trainer.__getstate__()
+    # console must be removed/neutralized for pickling.
+    assert "console" in state
+    assert state["console"] is None
+
+    # Ensure other representative fields survive.
+    assert "config" in state
+    assert isinstance(state["config"], dict)
+    assert "training" in state["config"]
+
+
+def test_pickling_roundtrip_recreates_console(tmp_pipeline, mist_args):
+    """Pickle/unpickle round-trip should recreate a proper rich Console."""
+    trainer = DummyTrainer(mist_args)
+
+    # Round-trip through pickle (simulating mp.spawn serialization).
+    blob = pickle.dumps(trainer)
+    restored = pickle.loads(blob)
+
+    # Console must be reconstructed on load.
+    assert restored.console is not None
+    assert isinstance(restored.console, rich.console.Console)
+
+    # And core state should be preserved.
+    assert restored.config == trainer.config
+    assert restored.batch_size == trainer.batch_size
+    assert type(restored) is type(trainer)
+
+
+def test_setstate_respects_non_none_console(tmp_pipeline, mist_args):
+    """__setstate__ should NOT overwrite an existing non-None console."""
+    trainer = DummyTrainer(mist_args)
+
+    # Build a fake state that already carries a (non-None) console sentinel.
+    sentinel_console = object()
+    state = trainer.__dict__.copy()
+    state["console"] = sentinel_console
+
+    # Apply setstate on an already-constructed object.
+    trainer.__setstate__(state)
+
+    # Because console in state was not None, it must be preserved.
+    assert trainer.console is sentinel_console
+
+
 def test_update_num_gpus_and_batchsize(tmp_pipeline, mist_args, monkeypatch):
     """Test that num_gpus and batch size are set correctly."""
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 1, raising=False)
@@ -410,8 +499,7 @@ def test_build_components_single_gpu(tmp_pipeline, mist_args, monkeypatch):
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 1, raising=False)
     trainer = DummyTrainer(mist_args)
     state = trainer.build_components(rank=0, world_size=1)
-    assert not isinstance(state["model"], DummyDDP)
-    assert state["scaler"].is_enabled() is False
+    assert isinstance(state["model"], DummyModel)
 
 
 def test_build_components_multi_gpu_wraps_with_ddp(
@@ -498,7 +586,10 @@ def test_overwrite_config_from_args(tmp_pipeline, mist_args, monkeypatch):
     assert cfg["training"]["batch_size_per_gpu"] == 2
     assert cfg["training"]["loss"]["name"] == "my_loss"
     assert cfg["training"]["loss"]["params"]["use_dtms"] is True
-    assert cfg["training"]["loss"]["composite_loss_weighting"] == "linear"
+    assert (
+        cfg["training"]["loss"]["params"]["composite_loss_weighting"] ==
+        "linear"
+    )
     assert cfg["training"]["optimizer"] == "adamw"
     assert cfg["training"]["l2_penalty"] == pytest.approx(0.01)
     assert cfg["training"]["learning_rate"] == pytest.approx(0.005)
@@ -795,8 +886,10 @@ def test_build_components_composite_loss_scheduler(
     calls = {"args": []}
     sentinel = object()
 
-    def spy_get_alpha_scheduler(arg):
-        calls["args"].append(arg)
+
+    def spy_get_alpha_scheduler(schedule, **kwargs):
+        # record both the schedule and any named kwargs (e.g., num_epochs)
+        calls["args"].append({"schedule": schedule, **kwargs})
         return sentinel
 
     monkeypatch.setattr(bt, "get_alpha_scheduler", spy_get_alpha_scheduler)
@@ -809,12 +902,14 @@ def test_build_components_composite_loss_scheduler(
         assert not calls["args"]
     else:
         assert state["composite_loss_weighting"] is sentinel
-        assert calls["args"] == [schedule_cfg]
+        assert calls["args"][0]["schedule"] == schedule_cfg
+        # Optional sanity checks (keep or drop as you like):
+        assert "num_epochs" in calls["args"][0]
+        assert isinstance(calls["args"][0]["num_epochs"], int)
 
 
 def test_set_seed_swallows_dist_errors(tmp_pipeline, mist_args, monkeypatch):
     """_set_seed should ignore exceptions from torch.distributed calls."""
-    import os
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 1, raising=False)
     trainer = DummyTrainer(mist_args)
 
