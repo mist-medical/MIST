@@ -273,6 +273,7 @@ def mist_args(tmp_pipeline):
         l2_penalty=None,
         learning_rate=None,
         lr_scheduler=None,
+        val_percent=None,
     )
 
 
@@ -574,6 +575,7 @@ def test_overwrite_config_from_args(tmp_pipeline, mist_args, monkeypatch):
     mist_args.learning_rate = 0.005
     mist_args.lr_scheduler = "cosine"
     mist_args.pocket = True
+    mist_args.val_percent = 0.025
 
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 1, raising=False)
     trainer = DummyTrainer(mist_args)
@@ -594,6 +596,7 @@ def test_overwrite_config_from_args(tmp_pipeline, mist_args, monkeypatch):
     assert cfg["training"]["l2_penalty"] == pytest.approx(0.01)
     assert cfg["training"]["learning_rate"] == pytest.approx(0.005)
     assert cfg["training"]["lr_scheduler"] == "cosine"
+    assert cfg["training"]["val_percent"] == pytest.approx(0.025)
 
 
 def test_fit_single_gpu_calls_run_directly(

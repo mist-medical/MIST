@@ -213,6 +213,7 @@ def mist_args(tmp_pipeline):
         l2_penalty=None,
         learning_rate=None,
         lr_scheduler=None,
+        val_percent=None,
     )
 
 

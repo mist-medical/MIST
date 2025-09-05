@@ -142,6 +142,7 @@ def add_train_args(parser: ArgParser) -> None:
     g.add_argument("--optimizer", type=str, choices=list_optimizers(), help="Optimizer to use.")
     g.add_argument("--l2-penalty", type=positive_float, help="L2 penalty (weight decay).")
     g.add_argument("--folds", nargs="+", type=int, help="Specify which folds to run.")
+    g.add_argument("--val-percent", type=float_0_1, help="Percent of training set to use for validation (0.0-1.0).")
 
     # Overwrite.
     parser.boolean_flag("--overwrite", default=False, help="Overwrite previous configuration/results.")

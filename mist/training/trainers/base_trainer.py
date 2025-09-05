@@ -233,6 +233,12 @@ class BaseTrainer(ABC):
                 self.mist_args.lr_scheduler
             )
 
+        # Overwrite the validation percentage if specified in command line.
+        if self.mist_args.val_percent is not None:
+            self.config["training"]["val_percent"] = float(
+                self.mist_args.val_percent
+            )
+
         # Write the updated configuration to the config.json file.
         io.write_json_file(self.config_json, self.config)
 
