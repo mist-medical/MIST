@@ -1,11 +1,6 @@
 Medical Imaging Segmentation Toolkit
 ===
 
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/mist-medical/MIST/python-publish.yml)
-![Read the Docs](https://img.shields.io/readthedocs/mist-medical?style=flat)
-![GitHub Repo stars](https://img.shields.io/github/stars/mist-medical/MIST?style=flat)
-![Coverage](coverage.svg)
-
 ## About
 The Medical Imaging Segmentation Toolkit (MIST) is a simple, scalable, and end-to-end 3D medical imaging segmentation 
 framework. MIST allows researchers to seamlessly train, evaluate, and deploy state-of-the-art deep learning models for 3D 
@@ -16,9 +11,6 @@ Please cite the following papers if you use this code for your work:
 [A. Celaya et al., "PocketNet: A Smaller Neural Network For Medical Image Analysis," in IEEE Transactions on Medical Imaging, doi: 10.1109/TMI.2022.3224873.](https://ieeexplore.ieee.org/document/9964128)
 
 [A. Celaya et al. "MIST: A Simple and Scalable End-To-End 3D Medical Imaging Segmentation Framework," arXiv preprint arXiv:2407.21343](https://www.arxiv.org/abs/2407.21343)
-
-## Documentation
-Please see our Read the Docs page [**here**](https://mist-medical.readthedocs.io/).
 
 ## What's New
 * November 2024 - MedNeXt models (small, base, medium, and large) added to MIST.
