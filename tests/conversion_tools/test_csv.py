@@ -9,14 +9,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tests for converting CSV files to MIST format."""
-import os
 import shutil
 import json
 import pandas as pd
 import pytest
 
+# MIST imports.
+from mist.utils import io, progress_bar
+from mist.conversion_tools import conversion_utils
 from mist.conversion_tools.csv import convert_csv, copy_csv_data
-from mist.runtime import utils
 
 
 @pytest.fixture
@@ -52,10 +53,10 @@ def temp_csv_data(tmp_path):
 def patch_utils(monkeypatch):
     """Patch utility functions to avoid actual file operations."""
     monkeypatch.setattr(
-        utils, "get_progress_bar", lambda msg: DummyProgressBar()
+        progress_bar, "get_progress_bar", lambda msg: DummyProgressBar()
     )
     monkeypatch.setattr(
-        utils,
+        conversion_utils,
         "copy_image_from_source_to_dest",
         lambda src, dst: shutil.copy(src, dst)
     )
@@ -64,7 +65,7 @@ def patch_utils(monkeypatch):
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
 
-    monkeypatch.setattr(utils, "write_json_file", fake_write_json_file)
+    monkeypatch.setattr(io, "write_json_file", fake_write_json_file)
 
 
 class DummyProgressBar:
@@ -95,7 +96,7 @@ def test_convert_csv_creates_correct_structure(temp_csv_data):
     # Check dataset.json.
     dataset_json_path = output_dir / "dataset.json"
     assert dataset_json_path.exists()
-    with open(dataset_json_path) as f:
+    with open(dataset_json_path, encoding="utf-8") as f:
         data = json.load(f)
     assert data["mask"] == ["mask.nii.gz"]
     assert "train-data" in data and "test-data" in data
@@ -110,7 +111,7 @@ def test_convert_csv_without_test_csv(temp_csv_data):
     # Check dataset.json.
     dataset_json_path = output_dir / "dataset.json"
     assert dataset_json_path.exists()
-    with open(dataset_json_path) as f:
+    with open(dataset_json_path, encoding="utf-8") as f:
         data = json.load(f)
     assert "test-data" not in data
 

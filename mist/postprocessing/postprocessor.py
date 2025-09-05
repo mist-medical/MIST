@@ -12,16 +12,15 @@
 from typing import List, cast
 import os
 import shutil
-
 import ants
 from rich.console import Console
 from rich.text import Text
 from rich.table import Table
 
 # MIST imports.
+from mist.utils import io, progress_bar
 from mist.postprocessing.transform_registry import get_transform
 from mist.postprocessing.postprocessing_utils import StrategyStep
-from mist.runtime import utils
 
 
 class Postprocessor:
@@ -76,7 +75,7 @@ class Postprocessor:
             ValueError: If the strategy is not a list of valid steps.
         """
         # Load the raw strategy from the JSON file.
-        raw_strategy = utils.read_json_file(strategy_path)
+        raw_strategy = io.read_json_file(strategy_path)
 
         # Ensure the loaded data is a list of dicts.
         if not isinstance(raw_strategy, list):
@@ -244,8 +243,9 @@ class Postprocessor:
             )
 
         # Apply postprocessing strategy to each mask in the directory.
-        progress_bar = utils.get_progress_bar("Applying strategy to examples")
-        with progress_bar as pb:
+        with (
+            progress_bar.get_progress_bar("Applying strategy to examples") as pb
+        ):
             for mask_path in pb.track(
                 base_filepaths, total=len(base_filepaths)
             ):

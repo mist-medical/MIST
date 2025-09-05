@@ -8,35 +8,60 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for the Analyzer class in mist.analyze_data.analyze."""
-import os
+"""Tests for the Analyzer class and its methods."""
+from typing import Union
+import argparse
 import shutil
 import json
-import argparse
-
+import os
+from pathlib import Path
+from importlib import metadata
 import numpy as np
 import pandas as pd
 import pytest
 import ants
 
+# MIST imports.
 from mist.analyze_data.analyzer import Analyzer
-from mist.runtime import utils
-from importlib import metadata
+from mist.utils import io as io_mod, progress_bar
+from mist.preprocessing import preprocessing_utils
+from mist.analyze_data import analyzer_utils as au
+
+# Constants.
+TRAIN_N = 5
+TEST_N = 3
 
 
-def fake_read_json_file(filepath):
-    """Return a valid dataset information dictionary."""
-    # Create a temporary directory for train-data.
-    train_data_dir = os.path.join(os.path.dirname(filepath), "train_data")
-    os.makedirs(train_data_dir, exist_ok=True)
-    # Create a dummy file inside train-data so that it is not empty.
-    dummy_file = os.path.join(train_data_dir, "dummy.txt")
-    with open(dummy_file, "w") as f:
-        f.write("dummy")
+# Helper functions for setting up test data.
+def _ensure_dir(p: Path) -> Path:
+    """Ensure directory exists."""
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _ensure_train_dir_for(path_like: Union[str, Path]) -> Path:
+    """Ensure a train_data directory exists next to the given path."""
+    p = Path(path_like)
+    d = _ensure_dir(p.parent / "train_data")
+    (d / "placeholder.txt").write_text("x")
+    return d
+
+
+def _ensure_test_dir_for(path_like: Union[str, Path]) -> Path:
+    """Ensure a test_data directory exists next to the given path."""
+    p = Path(path_like)
+    d = _ensure_dir(p.parent / "test_data")
+    (d / "placeholder.txt").write_text("y")
+    return d
+
+
+def fake_dataset_json(path: Union[str, Path]) -> dict:
+    """Return a fake dataset.json dictionary."""
+    tdir = _ensure_train_dir_for(path)
     return {
         "task": "segmentation",
         "modality": "ct",
-        "train-data": train_data_dir,
+        "train-data": str(tdir),
         "mask": ["mask.nii.gz"],
         "images": {"ct": ["image.nii.gz"]},
         "labels": [0, 1],
@@ -44,1035 +69,687 @@ def fake_read_json_file(filepath):
     }
 
 
-def fake_get_files_df(data, split):
-    """Return a dummy dataframe for file paths."""
-    df = pd.DataFrame({
-        "id": [0, 1, 2, 3, 4],
-        "fold": [0, 1, 2, 3, 4],  # Dummy folds for testing.
-        "mask": [
-            "0_mask.nii.gz",
-            "1_mask.nii.gz",
-            "2_mask.nii.gz",
-            "3_mask.nii.gz",
-            "4_mask.nii.gz"
-        ],
-        "ct": [
-            "0_image.nii.gz",
-            "1_image.nii.gz",
-            "2_image.nii.gz",
-            "3_image.nii.gz",
-            "4_image.nii.gz"
-        ],
-    })
-    return df
+def fake_build_base_config() -> dict:
+    """Return a fake base configuration dictionary."""
+    return {
+        "mist_version": "0.0.0",
+        "dataset_info": {},
+        "preprocessing": {
+            "target_spacing": [1.0, 1.0, 1.0],
+            "ct_normalization": {},
+            "crop_to_foreground": False,
+            "median_resampled_image_size": [8, 8, 8],
+            "normalize_with_nonzero_mask": False,
+        },
+        "model": {"name": "mednext", "params": {}},
+        "training": {"nfolds": 5},
+        "inference": {
+            "inferer": {
+                "name": "sliding_window", "params": {"patch_size": [8, 8, 8]}
+            }
+        },
+        "evaluation": {"final_classes": {}, "metrics": ["dice"]},
+    }
 
 
-class DummyProgressBar:
-    """A dummy progress bar that does nothing.
+def fake_get_files_df(_dataset_json_path: str, split: str) -> pd.DataFrame:
+    """Return a fake dataframe of file paths for training or testing."""
+    # IMPORTANT: keep order ["id", "fold", "mask", <images...>]
+    n = TRAIN_N if split == "train" else TEST_N
+    return pd.DataFrame(
+        {
+            "id": list(range(n)),
+            "fold": list(range(n)),
+            "mask": [f"{i}_mask.nii.gz" for i in range(n)],
+            "ct": [f"{i}_ct.nii.gz" for i in range(n)],
+        }
+    )
 
-    This is used to avoid dependencies on rich or other progress bar libraries
-    in unit tests. It provides a no-op context manager and a track method
-    that simply returns the iterable passed to it.
-    """
-    def __init__(self, iterable=None):
-        self.iterable = iterable
 
-    def __enter__(self):
+class _PB:
+    """Fake progress bar context manager."""
+    def __enter__(self): 
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
+    def __exit__(self, *a): 
+        return False
 
-    def track(self, iterable):
-        return iterable
-
-
-def fake_get_progress_bar(text):
-    """Return a dummy progress bar."""
-    return DummyProgressBar()
+    def track(self, it):
+        """Yield items from the given iterable."""
+        return it
 
 
-def fake_add_folds_to_df(df, n_splits):
-    """Add a dummy 'fold' column to the dataframe."""
-    return df
+def fake_get_progress_bar(_text: str) -> _PB:
+    """Return a fake progress bar context manager."""
+    return _PB()
 
 
-def fake_compare_headers(header1, header2):
-    """Fake comparison of two headers."""
+def fake_compare_headers(_h1, _h2) -> bool:
+    """Always return True for header comparison."""
     return True
 
 
-def fake_is_image_3d(header):
-    """Fake check if an image header is 3D."""
-    # Assume header is a dict with a "dimensions" entry.
-    dims = header.get("dimensions", ())
-    return len(dims) == 3
+def fake_is_image_3d(h: dict) -> bool:
+    """Return True if the image header indicates a 3D image."""
+    return len(h.get("dimensions", ())) == 3
 
 
-def fake_get_float32_example_memory_size(new_dims, n_channels, n_labels):
-    """Fake function to return a fixed memory size."""
-    # This function is supposed to return the memory size of a float32 example.
-    # For testing, return a fixed number below the threshold.
-    return 1e8
+def fake_get_resampled_image_dimensions(curr_dims, curr_spacing, target_spacing):
+    """Calculate resampled image dimensions given current and target spacing."""
+    scale = np.array(curr_spacing, float) / np.array(target_spacing, float)
+    return (np.array(curr_dims, float) * scale).round().astype(int)
 
 
-def fake_image_read(path):
-    """Return a dummy ANTs image of shape (10, 10, 10)."""
-    arr = np.ones((10, 10, 10), dtype=np.float32)
-    return ants.from_numpy(arr)
+def fake_get_float32_example_memory_size(dims, nch, _nlabels) -> int:
+    """Compute the memory size in bytes of a float32 example."""
+    return int(np.prod(dims) * max(1, nch) * 4)
 
 
-def fake_image_header_info(path):
-    """Return a dummy header with fixed dimensions and spacing."""
+def make_ants_image(shape=(10, 10, 10), spacing=(1.0, 1.0, 1.0), fill=1.0):
+    """Create a fake ANTs image with given shape, spacing, and fill value."""
+    arr = np.full(shape, fill, dtype=np.float32)
+    img = ants.from_numpy(arr)
+    img.set_spacing(spacing)
+    return img
+
+
+def fake_image_header_info(_p: str) -> dict:
+    """Return a fake image header info dictionary."""
     return {"dimensions": (10, 10, 10), "spacing": (1.0, 1.0, 1.0)}
 
 
-def fake_reorient_image2(image, orient):
-    """Fake reorient function that returns the image unchanged."""
+def fake_reorient_image2(image, _orient):
+    """Fake reorient_image2 function that returns the image unchanged."""
     return image
 
 
-def fake_get_fg_mask_bbox(image):
-    """Return a fixed bounding box for the foreground mask."""
+def fake_get_fg_mask_bbox(_image) -> dict:
+    """Return a fake bounding box for the foreground mask."""
     return {
-        "x_start": 2,
-        "x_end": 4,
-        "y_start": 2,
-        "y_end": 4,
-        "z_start": 2,
-        "z_end": 4,
-        "x_og_size": 10,
-        "y_og_size": 10,
-        "z_og_size": 10,
+        "x_start": 2, "x_end": 4,
+        "y_start": 2, "y_end": 4,
+        "z_start": 2, "z_end": 4,
+        "x_og_size": 10, "y_og_size": 10, "z_og_size": 10,
     }
-
-
-def fake_metadata_version(package_name):
-    """Return a fixed version for the package."""
-    return "1.0.0"
-
-
-@pytest.fixture(autouse=True)
-def patch_utils(monkeypatch):
-    monkeypatch.setattr(utils, "read_json_file", fake_read_json_file)
-    monkeypatch.setattr(utils, "get_files_df", fake_get_files_df)
-    monkeypatch.setattr(utils, "get_progress_bar", fake_get_progress_bar)
-    monkeypatch.setattr(utils, "compare_headers", fake_compare_headers)
-    monkeypatch.setattr(utils, "is_image_3d", fake_is_image_3d)
-    monkeypatch.setattr(
-        utils,
-        "get_resampled_image_dimensions",
-        lambda dims, sp, tsp: (10, 10, 10)
-    )
-    monkeypatch.setattr(
-        utils,
-        "get_float32_example_memory_size",
-        fake_get_float32_example_memory_size
-    )
-    monkeypatch.setattr(utils, "get_fg_mask_bbox", fake_get_fg_mask_bbox)
-
-
-@pytest.fixture(autouse=True)
-def patch_ants(monkeypatch):
-    monkeypatch.setattr(ants, "image_read", fake_image_read)
-    monkeypatch.setattr(ants, "image_header_info", fake_image_header_info)
-    monkeypatch.setattr(ants, "reorient_image2", fake_reorient_image2)
-
-
-@pytest.fixture(autouse=True)
-def patch_metadata(monkeypatch):
-    """Patch metadata.version to return a fixed version."""
-    monkeypatch.setattr(metadata, "version", fake_metadata_version)
 
 
 @pytest.fixture
-def dummy_mist_args(tmp_path):
-    results_dir = tmp_path / "results"
-    results_dir.mkdir()
-    # Use the temporary directory for results.
+def capture_console(monkeypatch):
+    """Capture console output by monkeypatching rich.console.Console.print."""
+    logs = []
+    def _fake_print(self, *a, **k):
+        """Capture printed messages."""
+        logs.append(" ".join(str(x) for x in a))
+    monkeypatch.setattr("rich.console.Console.print", _fake_print)
+    return logs
+
+
+def assert_exclusion_summary(logs, n):
+    """Assert the logs contain a summary line about excluding n examples."""
+    assert any(f"Excluding {n} example(s) from training." in m for m in logs)
+
+
+# Centralized patching.
+# pylint: disable=line-too-long
+@pytest.fixture(autouse=True)
+def _patch_env(monkeypatch, tmp_path):
+    """Patch environment for all tests."""
+    monkeypatch.chdir(tmp_path)
+    # IO.
+    def _read_json(path: str):
+        """Dispatch reading dataset.json to the fake function."""
+        if "dataset.json" in str(path) or "dummy_dataset" in str(path):
+            return fake_dataset_json(path)
+        return {}
+    monkeypatch.setattr(io_mod, "read_json_file", _read_json, raising=True)
+    monkeypatch.setattr(
+        io_mod, "write_json_file",
+        lambda p, d: Path(p).write_text(json.dumps(d), encoding="utf-8"),
+        raising=True
+    )
+
+    # Analyzer utils.
+    monkeypatch.setattr(au, "build_base_config", fake_build_base_config, raising=True)
+    monkeypatch.setattr(au, "get_files_df", fake_get_files_df, raising=True)
+    monkeypatch.setattr(
+        au, "add_folds_to_df",
+        lambda df, n_splits=None, **__: df if "fold" in df.columns else df.assign(fold=list(range(len(df)))),
+        raising=True,
+    )
+    monkeypatch.setattr(au, "compare_headers", fake_compare_headers, raising=True)
+    monkeypatch.setattr(au, "is_image_3d", fake_is_image_3d, raising=True)
+    monkeypatch.setattr(au, "get_resampled_image_dimensions", fake_get_resampled_image_dimensions, raising=True)
+    monkeypatch.setattr(au, "get_float32_example_memory_size", fake_get_float32_example_memory_size, raising=True)
+    monkeypatch.setattr(au, "get_best_patch_size", lambda _dims: [16, 16, 16], raising=True)
+
+    # ANTs / progress / version.
+    monkeypatch.setattr(ants, "image_read", lambda _p: make_ants_image(), raising=True)
+    monkeypatch.setattr(ants, "image_header_info", fake_image_header_info, raising=True)
+    monkeypatch.setattr(ants, "reorient_image2", fake_reorient_image2, raising=True)
+    monkeypatch.setattr(progress_bar, "get_progress_bar", fake_get_progress_bar, raising=True)
+    monkeypatch.setattr(preprocessing_utils, "get_fg_mask_bbox", fake_get_fg_mask_bbox, raising=True)
+    monkeypatch.setattr(metadata, "version", lambda _pkg: "0.9.0", raising=True)
+# pylint: enable=line-too-long
+
+
+# Shared args fixture.
+@pytest.fixture
+def args(tmp_path):
+    """Return argparse.Namespace with default arguments."""
     return argparse.Namespace(
-        data=str(tmp_path / "dummy_dataset.json"),
-        results=str(results_dir),
+        data=str(tmp_path / "dataset.json"),
+        results=str(_ensure_dir(tmp_path / "results")),
         nfolds=5,
         no_preprocess=False,
         patch_size=None,
-        max_patch_size=[5, 5, 5],
+        folds=None,
+        overwrite=True,
     )
 
 
-def test_init_valid(dummy_mist_args):
-    """Test that Analyzer initializes correctly with valid arguments."""
-    # Create an instance of Analyzer with dummy arguments.
-    analyzer = Analyzer(dummy_mist_args)
-
-    # Check that file_paths has the expected keys.
-    expected_keys = {
-        "configuration",
-        "foreground_bounding_boxes",
-        "image_mask_paths",
-    }
-    assert set(analyzer.file_paths.keys()) == expected_keys
-
-    # Check that config is initially empty.
-    assert analyzer.config == {}
-
-    # Check that paths_dataframe is a dataframe.
-    assert isinstance(analyzer.paths_dataframe, pd.DataFrame)
-
-
-def test_missing_required_field(monkeypatch, dummy_mist_args):
-    # Remove a required field from dataset information.
-    def fake_bad_read_json(_):
-        info = fake_read_json_file("")
-        del info["task"]
-        return info
-
-    monkeypatch.setattr(utils, "read_json_file", fake_bad_read_json)
-    with pytest.raises(KeyError) as excinfo:
-        Analyzer(dummy_mist_args)
-    assert "Dataset description JSON file must contain a entry 'task'" in str(
-        excinfo.value
-    )
-
-
-def test_required_field_is_none(monkeypatch, dummy_mist_args):
-    # Set a required field to None.
-    def fake_bad_read_json(_):
-        info = fake_read_json_file("")
-        info["task"] = None
-        return info
-
-    monkeypatch.setattr(utils, "read_json_file", fake_bad_read_json)
-    with pytest.raises(ValueError) as excinfo:
-        Analyzer(dummy_mist_args)
-    assert "Dataset description JSON file must contain a entry 'task'" in str(
-        excinfo.value
-    )
-
-
-def test_train_data_directory_does_not_exist(monkeypatch, dummy_mist_args):
-    """Test FileNotFoundError if train-data directory does not exist."""
-
-    def fake_bad_read_json(_):
-        info = fake_read_json_file("")
-        # Set a non-existent directory path
-        info["train-data"] = "/this/path/does/not/exist"
-        return info
-
-    monkeypatch.setattr(utils, "read_json_file", fake_bad_read_json)
-
-    with pytest.raises(FileNotFoundError) as excinfo:
-        Analyzer(dummy_mist_args)
-
-    assert "In the 'train-data' entry, the directory does not exist." in str(
-        excinfo.value
-    )
-
-
-def test_train_data_directory_empty(monkeypatch, tmp_path, dummy_mist_args):
-    """Test FileNotFoundError is raised if train-data directory is empty."""
-
-    def fake_bad_read_json(_):
-        info = fake_read_json_file("")
-        # Create an empty directory
-        empty_train_data_dir = tmp_path / "empty_train_data"
-        empty_train_data_dir.mkdir(parents=True, exist_ok=True)
-        info["train-data"] = str(empty_train_data_dir)
-        return info
-
-    monkeypatch.setattr(utils, "read_json_file", fake_bad_read_json)
-
-    with pytest.raises(FileNotFoundError) as excinfo:
-        Analyzer(dummy_mist_args)
-
-    assert "In the 'train-data' entry, the directory is empty:" in str(
-        excinfo.value
-    )
-
-
-def test_mask_entry_not_list(monkeypatch, dummy_mist_args):
-    """Test TypeError is raised if 'mask' entry is not a list."""
-
-    def fake_bad_read_json(_):
-        info = fake_read_json_file("")
-        info["mask"] = "not_a_list"  # Invalid: should be a list
-        return info
-
-    monkeypatch.setattr(utils, "read_json_file", fake_bad_read_json)
-
-    with pytest.raises(TypeError) as excinfo:
-        Analyzer(dummy_mist_args)
-
-    assert "The 'mask' entry must be a list of mask names" in str(excinfo.value)
-
-
-def test_mask_entry_empty_list(monkeypatch, dummy_mist_args):
-    """Test ValueError is raised if 'mask' entry is an empty list."""
-
-    def fake_bad_read_json(_):
-        info = fake_read_json_file("")
-        info["mask"] = []  # Invalid: empty list
-        return info
-
-    monkeypatch.setattr(utils, "read_json_file", fake_bad_read_json)
-
-    with pytest.raises(ValueError) as excinfo:
-        Analyzer(dummy_mist_args)
-
-    assert "The 'mask' entry is empty." in str(excinfo.value)
-
-
-def test_images_entry_not_dict(monkeypatch, dummy_mist_args):
-    """Test TypeError is raised if 'images' entry is not a dictionary."""
-
-    def fake_bad_read_json(_):
-        info = fake_read_json_file("")
-        info["images"] = ["Not a dict"]  # Invalid: list instead of dict.
-        return info
-
-    monkeypatch.setattr(utils, "read_json_file", fake_bad_read_json)
-    with pytest.raises(TypeError) as excinfo:
-        Analyzer(dummy_mist_args)
-
-    assert (
-        "The 'images' entry must be a dictionary of the format"
-        in str(excinfo.value)
-    )
-
-
-def test_images_entry_empty_dict(monkeypatch, dummy_mist_args):
-    """Test ValueError is raised if 'images' entry is an empty dictionary."""
-
-    def fake_bad_read_json(_):
-        info = fake_read_json_file("")
-        info["images"] = {}  # Invalid: empty dictionary.
-        return info
-
-    monkeypatch.setattr(utils, "read_json_file", fake_bad_read_json)
-
-    with pytest.raises(ValueError) as excinfo:
-        Analyzer(dummy_mist_args)
-
-    assert "The 'images' entry is empty." in str(excinfo.value)
-
-
-def test_labels_entry_not_list(monkeypatch, dummy_mist_args):
-    """Test TypeError is raised if 'labels' entry is not a list."""
-
-    def fake_bad_read_json(_):
-        info = fake_read_json_file("")
-        info["labels"] = "not_a_list"  # Invalid: should be a list.
-        return info
-
-    monkeypatch.setattr(utils, "read_json_file", fake_bad_read_json)
-
-    with pytest.raises(TypeError) as excinfo:
-        Analyzer(dummy_mist_args)
-
-    assert "The 'labels' entry must be a list of labels" in str(excinfo.value)
-
-
-def test_labels_entry_empty_list(monkeypatch, dummy_mist_args):
-    """Test ValueError is raised if 'labels' entry is an empty list."""
-
-    def fake_bad_read_json(_):
-        info = fake_read_json_file("")
-        info["labels"] = []  # Invalid: empty list.
-        return info
-
-    monkeypatch.setattr(utils, "read_json_file", fake_bad_read_json)
-
-    with pytest.raises(ValueError) as excinfo:
-        Analyzer(dummy_mist_args)
-
-    assert "The 'labels' entry must be a list of labels" in str(excinfo.value)
-    assert "The list is empty." in str(excinfo.value)
-
-
-def test_labels_entry_no_zero_label(monkeypatch, dummy_mist_args):
-    """Test ValueError is raised if 'labels' entry does not contain zero."""
-
-    def fake_bad_read_json(_):
-        info = fake_read_json_file("")
-        info["labels"] = [1, 2, 3]  # Invalid: missing 0.
-        return info
-
-    monkeypatch.setattr(utils, "read_json_file", fake_bad_read_json)
-
-    with pytest.raises(ValueError) as excinfo:
-        Analyzer(dummy_mist_args)
-
-    assert "The 'labels' entry must be a list of labels" in str(excinfo.value)
-    assert "No zero label found in the list." in str(excinfo.value)
-
-
-def test_final_classes_entry_not_dict(monkeypatch, dummy_mist_args):
-    """Test TypeError is raised if 'final_classes' entry is not a dictionary."""
-
-    def fake_bad_read_json(_):
-        info = fake_read_json_file("")
-        info["final_classes"] = ["should_be_a_dict"]
-        return info
-
-    monkeypatch.setattr(utils, "read_json_file", fake_bad_read_json)
-
-    with pytest.raises(TypeError) as excinfo:
-        Analyzer(dummy_mist_args)
-
-    assert (
-        "The 'final_classes' entry must be a dictionary of the format"
-        in str(excinfo.value)
-    )
-
-
-def test_final_classes_entry_empty_dict(monkeypatch, dummy_mist_args):
-    """Test ValueError raised if 'final_classes' entry is empty dictionary."""
-
-    def fake_bad_read_json(_):
-        info = fake_read_json_file("")
-        info["final_classes"] = {}  # Invalid: empty dict
-        return info
-
-    monkeypatch.setattr(utils, "read_json_file", fake_bad_read_json)
-
-    with pytest.raises(ValueError) as excinfo:
-        Analyzer(dummy_mist_args)
-
-    assert (
-        "The 'final_classes' entry must be a dictionary of the format"
-        in str(excinfo.value)
-    )
-    assert "The dictionary is empty." in str(excinfo.value)
-
-
-def test_get_target_spacing_anisotropic(monkeypatch, dummy_mist_args):
-    """Test that get_target_spacing adjusts target_spacing if anisotropic."""
-    # Patch ants.image_read to just return a dummy image with anisotropic
-    # spacing.
-    def fake_image_read(path):
-        arr = np.ones((10, 10, 10), dtype=np.float32)
-        arr = ants.from_numpy(arr, spacing=(1.0, 1.0, 5.0))
-        return arr
-    monkeypatch.setattr(ants, "image_read", fake_image_read)
-
-    # Patch numpy percentile to return a fixed value for low_res_axis.
-    def fake_percentile(arr, q):
-        return 3.0  # Fixed low resolution axis spacing.
-    monkeypatch.setattr(np, "percentile", fake_percentile)
-
-    analyzer = Analyzer(dummy_mist_args)
-
-    # Now call get_target_spacing, which should adjust due to anisotropy
-    target_spacing = analyzer.get_target_spacing()
-
-    # Check that target_spacing is a list of length 3
-    assert isinstance(target_spacing, list)
-    assert len(target_spacing) == 3
-
-    # Check that the largest axis spacing is adjusted below the original (5.0)
-    # Note: The low_res_axis that had 5.0 should now be adjusted to 3.0.
-    assert max(target_spacing) == 3.0
-
-
-def test_check_crop_fg_is_triggered(monkeypatch, dummy_mist_args):
-    """Test check_crop_fg returns expected outputs and saves bbox CSV."""
-    # Patch ants.image_read to just return a dummy image
-    def fake_image_read(path):
-        arr = np.zeros((10, 10, 10), dtype=np.float32)
-        arr[2:4, 2:4, 2:4] = 1  # Create a small foreground region.
-        return ants.from_numpy(arr)
-    monkeypatch.setattr(ants, "image_read", fake_image_read)
-
-    analyzer = Analyzer(dummy_mist_args)
-    crop_to_fg, cropped_dims = analyzer.check_crop_fg()
-
-    # Check crop_to_fg is triggered in this case.
-    assert crop_to_fg == True
-
-    # Check cropped_dims shape (should be Nx3)
-    assert isinstance(cropped_dims, np.ndarray)
-    assert cropped_dims.shape == (len(analyzer.paths_dataframe), 3)
-
-    # Check the bounding box CSV was created
-    bbox_csv_path = analyzer.file_paths["foreground_bounding_boxes"]
-    assert os.path.exists(bbox_csv_path)
-
-    # Check the saved CSV has expected columns
-    bbox_df = pd.read_csv(bbox_csv_path)
-    expected_columns = [
-        "id", "x_start", "x_end", "y_start", "y_end", "z_start", "z_end",
-        "x_og_size", "y_og_size", "z_og_size"
-    ]
-    assert all(col in bbox_df.columns for col in expected_columns)
-
-    # Check that number of rows matches number of patients
-    assert len(bbox_df) == len(analyzer.paths_dataframe)
-
-
-def test_check_crop_fg_is_not_triggered(monkeypatch, dummy_mist_args):
-    """Test check_crop_fg returns expected outputs and saves bbox CSV."""
-    # Patch ants.image_read to just return a dummy image
-    def fake_image_read(path):
-        arr = np.zeros((100, 100, 100), dtype=np.float32)
-        return ants.from_numpy(arr)
-
-    def fake_get_fg_mask_bbox(image):
-        """Return a fixed bounding box for the foreground mask."""
-        return {
-            "x_start": 1,
-            "x_end": 98,
-            "y_start": 1,
-            "y_end": 98,
-            "z_start": 1,
-            "z_end": 98,
-            "x_og_size": 100,
-            "y_og_size": 100,
-            "z_og_size": 100,
-        }
-
-    monkeypatch.setattr(ants, "image_read", fake_image_read)
-    monkeypatch.setattr(utils, "get_fg_mask_bbox", fake_get_fg_mask_bbox)
-
-    analyzer = Analyzer(dummy_mist_args)
-    crop_to_fg, _ = analyzer.check_crop_fg()
-
-    # Check crop_to_fg is triggered in this case.
-    assert crop_to_fg == False
-
-
-def test_check_nz_ratio_is_triggered(monkeypatch, dummy_mist_args):
-    """Test check_nz_ratio returns True when nz_ratio is set."""
-    # Patch ants.image_read to just return a dummy image
-    def fake_image_read(path):
-        arr = np.zeros((10, 10, 10), dtype=np.float32)
-        arr[2:4, 2:4, 2:4] = 1  # Create a small foreground region.
-        return ants.from_numpy(arr)
-
-    monkeypatch.setattr(ants, "image_read", fake_image_read)
-
-    analyzer = Analyzer(dummy_mist_args)
-    use_nz_mask = analyzer.check_nz_ratio()
-
-    # Check that use_nz_mask is True
-    assert use_nz_mask == True
-
-
-def test_check_nz_ratio_is_not_triggered(monkeypatch, dummy_mist_args):
-    """Test check_nz_ratio returns False when nz_ratio is not set."""
-    # Patch ants.image_read to just return a dummy image
-    def fake_image_read(path):
-        arr = np.ones((10, 10, 10), dtype=np.float32)
-        return ants.from_numpy(arr)
-
-    monkeypatch.setattr(ants, "image_read", fake_image_read)
-
-    analyzer = Analyzer(dummy_mist_args)
-    use_nz_mask = analyzer.check_nz_ratio()
-
-    # Check that use_nz_mask is False
-    assert use_nz_mask == False
-
-
-def test_check_resampled_dims_normal(dummy_mist_args):
-    """Test check_resampled_dims returns correct output with no warnings."""
-    analyzer = Analyzer(dummy_mist_args)
-
-    # Setup analyzer config needed
-    analyzer.config["use_nz_mask"] = False
-    analyzer.config["target_spacing"] = [1.0, 1.0, 1.0]
-
-    # Fake cropped_dims (could be anything since use_nz_mask=False here)
-    cropped_dims = np.ones((len(analyzer.paths_dataframe), 3)) * 10
-
-    # Run the method
-    median_resampled_dims = analyzer.check_resampled_dims(cropped_dims)
-
-    # Check output
-    assert isinstance(median_resampled_dims, list)
-    assert len(median_resampled_dims) == 3
-    for val in median_resampled_dims:
-        assert isinstance(val, (float, int))
-
-
-def test_check_resampled_dims_normal_with_cropped_dims(dummy_mist_args):
-    """Test check_resampled_dims returns correct output with use_nz_mask on."""
-    analyzer = Analyzer(dummy_mist_args)
-
-    # Setup analyzer config needed
-    analyzer.config["use_nz_mask"] = True
-    analyzer.config["target_spacing"] = [1.0, 1.0, 1.0]
-
-    # Fake cropped_dims (could be anything since use_nz_mask=False here)
-    cropped_dims = np.ones((len(analyzer.paths_dataframe), 3)) * 10
-
-    # Run the method
-    median_resampled_dims = analyzer.check_resampled_dims(cropped_dims)
-
-    # Check output
-    assert isinstance(median_resampled_dims, list)
-    assert len(median_resampled_dims) == 3
-    for val in median_resampled_dims:
-        assert isinstance(val, (float, int))
-
-
-def test_check_resampled_dims_triggers_warning(monkeypatch, dummy_mist_args):
-    """Test check_resampled_dims triggers a memory warning."""
-    # Monkeypatch get_float32_example_memory_size to return a large number.
-    def fake_large_memory_size(new_dims, n_channels, n_labels):
-        return 1e10  # 10 GB -> much larger than any reasonable max size.
+# Tests — Init / schema / filesystem checks.
+def test_init_and_paths(args):
+    """Test basic initialization and path attributes."""
+    a = Analyzer(args)
+    assert a.paths_df.columns.tolist()[:4] == ["id", "fold", "mask", "ct"]
+    assert a.paths_csv.endswith("train_paths.csv")
+    assert a.fg_bboxes_csv.endswith("fg_bboxes.csv")
+    assert a.config_json.endswith("config.json")
+
+
+def test_missing_required_field_raises(args, monkeypatch):
+    """Test that missing required fields in dataset.json raise KeyError."""
+    def _bad(path):
+        d = fake_dataset_json(path); d.pop("task"); return d
+    monkeypatch.setattr(io_mod, "read_json_file", _bad, raising=True)
+    with pytest.raises(KeyError):
+        Analyzer(args)
+
+
+@pytest.mark.parametrize(
+    "key,bad_val,exc",
+    [
+        ("mask", "not_a_list", TypeError),
+        ("mask", [], ValueError),
+        ("images", ["not_a_dict"], TypeError),
+        ("images", {}, ValueError),
+        ("labels", "nah", TypeError),
+        ("labels", [], ValueError),
+        ("labels", [1, 2], ValueError),
+        ("final_classes", ["dict_expected"], TypeError),
+        ("final_classes", {}, ValueError),
+    ],
+)
+def test_dataset_schema_type_checks(args, monkeypatch, key, bad_val, exc):
+    """Test invalid types/values for required fields raises exceptions."""
+    def _bad(path):
+        d = fake_dataset_json(path); d[key] = bad_val; return d
+    monkeypatch.setattr(io_mod, "read_json_file", _bad, raising=True)
+    with pytest.raises(exc):
+        Analyzer(args)
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["task", "modality", "train-data", "mask", "images", "labels", "final_classes"]
+)
+def test_required_field_is_none_raises_value_error(args, monkeypatch, field):
+    """Test that required fields set to None raise ValueError."""
+    def _bad_read(path: str):
+        d = fake_dataset_json(path); d[field] = None; return d
+    monkeypatch.setattr(io_mod, "read_json_file", _bad_read, raising=True)
+    with pytest.raises(ValueError) as e:
+        Analyzer(args)
+    assert f"Got None for '{field}'" in str(e.value)
+
+
+def test_train_data_directory_checks(args, monkeypatch, tmp_path):
+    """Test misssing/empty train-data directory raises FileNotFoundError."""
+    def _missing(path):
+        """Return dataset.json with non-existent train-data path."""
+        d = fake_dataset_json(path)
+        d["train-data"] = str(tmp_path / "does_not_exist")
+        return d
+    monkeypatch.setattr(io_mod, "read_json_file", _missing, raising=True)
+    with pytest.raises(FileNotFoundError): Analyzer(args)
+
+    empty = _ensure_dir(tmp_path / "empty_train")
+    def _empty(path):
+        """Return dataset.json with empty train-data directory."""
+        d = fake_dataset_json(path)
+        d["train-data"] = str(empty)
+        return d
+    monkeypatch.setattr(io_mod, "read_json_file", _empty, raising=True)
+    with pytest.raises(FileNotFoundError): Analyzer(args)
+
+
+def test_init_warns_if_overwriting_config(args, monkeypatch):
+    """Test that overwrite=True triggers a warning if config.json exists."""
+    config_path = Path(args.results) / "config.json"; config_path.write_text("{}")
+    captured = {"msg": None}
     monkeypatch.setattr(
-        utils, "get_float32_example_memory_size", fake_large_memory_size
+        "rich.console.Console.print",
+        lambda self, *a, **k: captured.__setitem__("msg", " ".join(map(str, a)))
+    )
+    _ = Analyzer(args)
+    assert (
+        captured["msg"]
+        and "Overwriting existing configuration at" in captured["msg"]
+        and str(config_path) in captured["msg"]
     )
 
-    analyzer = Analyzer(dummy_mist_args)
 
-    # Setup analyzer config needed
-    analyzer.config["use_nz_mask"] = False
-    analyzer.config["target_spacing"] = [1.0, 1.0, 1.0]
-
-    cropped_dims = np.ones((len(analyzer.paths_dataframe), 3)) * 10
-
-    # Run the method
-    median_resampled_dims = analyzer.check_resampled_dims(cropped_dims)
-
-    # Check output
-    assert isinstance(median_resampled_dims, list)
-    assert len(median_resampled_dims) == 3
-
-
-def test_get_ct_normalization_parameters(monkeypatch, dummy_mist_args):
-    """Test get_ct_normalization_parameters returns expected keys and types."""
-    # Patch ants.image_read to return controlled image/mask pairs
-    def fake_image_read(path):
-        if "mask" in path:
-            # Return a binary mask
-            arr = np.zeros((10, 10, 10), dtype=np.float32)
-            arr[2:8, 2:8, 2:8] = 1  # Foreground region
-        else:
-            # Return corresponding CT image with known values
-            arr = np.ones((10, 10, 10), dtype=np.float32) * 1000
-        return ants.from_numpy(arr)
-    monkeypatch.setattr(ants, "image_read", fake_image_read)
-
-    analyzer = Analyzer(dummy_mist_args)
-
-    ct_params = analyzer.get_ct_normalization_parameters()
-
-    # Check that ct_params is a dictionary
-    assert isinstance(ct_params, dict)
-
-    # Check that all expected keys exist
-    expected_keys = {
-        "ct_global_z_score_mean",
-        "ct_global_z_score_std",
-        "ct_global_clip_min",
-        "ct_global_clip_max",
-    }
-    assert set(ct_params.keys()) == expected_keys
-
-    # Check that all values are floats
-    for value in ct_params.values():
-        assert isinstance(value, (float, np.floating))
-
-
-def test_config_if_no_preprocess(dummy_mist_args):
-    """Test config_if_no_preprocess sets correct keys."""
-    analyzer = Analyzer(dummy_mist_args)
-    analyzer.config_if_no_preprocess()
-
-    expected_keys = {
-        "modality",
-        "labels",
-        "final_classes",
-        "crop_to_fg",
-        "use_nz_mask",
-        "target_spacing",
-        "window_range",
-        "global_z_score_mean",
-        "global_z_score_std",
-        "median_image_size",
-        "mist_version",
-    }
-    assert set(analyzer.config.keys()) == expected_keys
-
-
-def test_analyze_dataset_ct(dummy_mist_args):
-    """Test analyze_dataset generates complete config for CT modality."""
-
-    analyzer = Analyzer(dummy_mist_args)
-    analyzer.dataset_information["modality"] = "ct"  # Explicitly set CT.
-
-    # Run analyze_dataset
-    analyzer.analyze_dataset()
-
-    # Check that expected keys are present
-    expected_keys = {
-        "modality",
-        "window_range",
-        "global_z_score_mean",
-        "global_z_score_std",
-        "labels",
-        "final_classes",
-        "crop_to_fg",
-        "use_nz_mask",
-        "target_spacing",
-        "median_image_size",
-        "patch_size",
-        "mist_version",
-    }
-    assert set(expected_keys).issubset(set(analyzer.config.keys()))
-
-    # Check types for critical fields
-    assert isinstance(analyzer.config["modality"], str)
-    assert isinstance(analyzer.config["window_range"], list)
-    assert isinstance(
-        analyzer.config["global_z_score_mean"], (float, np.floating)
+def test_init_does_not_warn_without_overwrite(args, monkeypatch):
+    """Test that ovewrite=False does not trigger a warning."""
+    config_path = Path(args.results) / "config.json"
+    config_path.write_text("{}", encoding="utf-8")
+    args.overwrite = False
+    calls = []
+    monkeypatch.setattr(
+        "rich.console.Console.print", lambda self, *a, **k: calls.append(a)
     )
-    assert isinstance(
-        analyzer.config["global_z_score_std"], (float, np.floating)
+    _ = Analyzer(args)
+    assert calls == []
+
+
+# Tests — Per-sample analysis helpers.
+def test_check_crop_fg_writes_csv_and_decides(args):
+    """Test check_crop_fg method writes CSV and returns expected values."""
+    a = Analyzer(args)
+    crop, cropped = a.check_crop_fg()
+    assert isinstance(crop, (bool, np.bool_))
+    assert cropped.shape == (len(a.paths_df), 3)
+    df = pd.read_csv(a.fg_bboxes_csv)
+    assert {
+        "id",
+        "x_start","x_end","y_start",
+        "y_end","z_start","z_end",
+        "x_og_size","y_og_size","z_og_size"
+    }.issubset(df.columns)
+
+
+def test_check_nz_ratio_sparse_and_dense(args, monkeypatch):
+    """Test check_nz_ratio method with sparse and dense images."""
+    def _sparse_or_dense(p):
+        """Return a sparse or dense ANTs image based on the path."""
+        if "ct" in str(p):
+            img = make_ants_image(fill=0.0)
+            img.numpy()[2:4,2:4,2:4] = 1.0
+            return img
+        return make_ants_image(fill=0.0)
+    monkeypatch.setattr(ants, "image_read", _sparse_or_dense, raising=True)
+    assert bool(Analyzer(args).check_nz_ratio())
+
+    monkeypatch.setattr(ants, "image_read", lambda p: make_ants_image(fill=1.0), raising=True)
+    assert not bool(Analyzer(args).check_nz_ratio())
+
+
+def test_get_target_spacing_handles_anisotropy(args, monkeypatch):
+    """Test get_target_spacing method with anisotropic images."""
+    monkeypatch.setattr(
+        ants, "image_read",
+        lambda _p: make_ants_image(spacing=(1.0,1.0,5.0)),
+        raising=True
     )
-    assert isinstance(analyzer.config["crop_to_fg"], bool)
-    assert isinstance(analyzer.config["use_nz_mask"], bool)
-    assert isinstance(analyzer.config["target_spacing"], list)
-    assert len(analyzer.config["target_spacing"]) == 3
-    assert isinstance(analyzer.config["median_image_size"], list)
-    assert len(analyzer.config["median_image_size"]) == 3
-    assert isinstance(analyzer.config["patch_size"], list)
-    assert len(analyzer.config["patch_size"]) == 3
-    assert isinstance(analyzer.config["mist_version"], str)
+    monkeypatch.setattr(np, "percentile", lambda a, q: 3.0, raising=True)
+    assert max(Analyzer(args).get_target_spacing()) == 3.0
 
 
-def test_analyze_dataset_non_ct(dummy_mist_args):
-    """Test analyze_dataset generates config for non-CT modality."""
-
-    analyzer = Analyzer(dummy_mist_args)
-    analyzer.dataset_information["modality"] = "mr"  # Set to non-ct modality.
-
-    # Run analyze_dataset
-    analyzer.analyze_dataset()
-
-    # Check that CT-specific keys are not included
-    assert "window_range" not in analyzer.config
-    assert "global_z_score_mean" not in analyzer.config
-    assert "global_z_score_std" not in analyzer.config
-
-    # Check that expected basic keys are still present
-    expected_keys = {
-        "modality",
-        "labels",
-        "final_classes",
-        "crop_to_fg",
-        "use_nz_mask",
-        "target_spacing",
-        "median_image_size",
-        "patch_size",
-        "mist_version",
-    }
-    assert set(expected_keys).issubset(set(analyzer.config.keys()))
-
-    # Check types
-    assert isinstance(analyzer.config["modality"], str)
-    assert isinstance(analyzer.config["crop_to_fg"], bool)
-    assert isinstance(analyzer.config["use_nz_mask"], bool)
-    assert isinstance(analyzer.config["target_spacing"], list)
-    assert len(analyzer.config["target_spacing"]) == 3
-    assert isinstance(analyzer.config["median_image_size"], list)
-    assert len(analyzer.config["median_image_size"]) == 3
-    assert isinstance(analyzer.config["patch_size"], list)
-    assert len(analyzer.config["patch_size"]) == 3
-    assert isinstance(analyzer.config["mist_version"], str)
+def test_check_resampled_dims_warns_when_large(args, monkeypatch, capsys):
+    """Test check_resampled_dims warns when resampled size is too large."""
+    monkeypatch.setattr(
+        au,
+        "get_float32_example_memory_size",
+        lambda *_: int(2e10),
+        raising=True
+    )
+    monkeypatch.setattr(
+        au,
+        "get_resampled_image_dimensions",
+        lambda *_a, **_k: (128, 128, 128),
+        raising=True
+    )
+    _ = Analyzer(args).check_resampled_dims(np.ones((TRAIN_N, 3)) * 5)
+    assert (
+        "Resampled example is larger than the recommended memory size"
+        in capsys.readouterr().out
+    )
 
 
-def test_analyze_dataset_with_manual_patch_size(dummy_mist_args):
-    """Test analyze_dataset sets patch_size directly if provided by user."""
+# Tests — analyze_dataset and run() behavior.
+def test_analyze_dataset_updates_config(args, monkeypatch):
+    monkeypatch.setattr(au, "get_best_patch_size", lambda _d: [24,24,24], raising=True)
+    monkeypatch.setattr(au, "get_resampled_image_dimensions", lambda *_: (10,10,10), raising=True)
+    monkeypatch.setattr(au, "get_float32_example_memory_size", lambda *_: int(1e6), raising=True)
+    monkeypatch.setattr(Analyzer, "get_target_spacing", lambda self: [1.0,1.0,1.0], raising=True)
+    monkeypatch.setattr(Analyzer, "check_crop_fg", lambda self: (True, np.ones((len(self.paths_df),3))*8), raising=True)
+    monkeypatch.setattr(Analyzer, "check_resampled_dims", lambda self,_d: [10,10,10], raising=True)
+    monkeypatch.setattr(Analyzer, "check_nz_ratio", lambda self: True, raising=True)
+    monkeypatch.setattr(
+        Analyzer,
+        "get_ct_normalization_parameters",
+        lambda self: {
+            "window_min":-1000,
+            "window_max":1000,
+            "z_score_mean":0.0,
+            "z_score_std":1.0
+        },
+        raising=True,
+    )
+    monkeypatch.setattr(metadata, "version", lambda _pkg: "0.9.0", raising=True)
 
-    # Manually specify a patch_size
-    dummy_mist_args.patch_size = [32, 32, 32]  # User-provided patch size
-
-    analyzer = Analyzer(dummy_mist_args)
-    analyzer.dataset_information["modality"] = "mr"  # Non-CT example.
-
-    analyzer.analyze_dataset()
-
-    # Check that patch_size matches exactly the user-specified values
-    assert analyzer.config["patch_size"] == [32, 32, 32]
-
-
-def test_validate_dataset_all_good(dummy_mist_args):
-    """Test validate_dataset keeps all patients if data is valid."""
-    analyzer = Analyzer(dummy_mist_args)
-
-    initial_count = len(analyzer.paths_dataframe)
-
-    analyzer.validate_dataset()
-
-    # No patients should have been dropped
-    assert len(analyzer.paths_dataframe) == initial_count
-
-
-def test_validate_dataset_mask_label_mismatch(monkeypatch, dummy_mist_args):
-    """Test validate_dataset drops patients if mask labels do not match data."""
-    # Patch ants.image_read to return a mask with invalid label.
-    def fake_mask_label_mismatch(path):
-        arr = np.ones((10, 10, 10), dtype=np.float32)
-        arr[5, 5, 5] = 99  # Set a pixel to an invalid label (not in [0,1])
-        arr = ants.from_numpy(arr)
-        return arr
-    monkeypatch.setattr(ants, "image_read", fake_mask_label_mismatch)
-
-    with pytest.raises(AssertionError) as excinfo:
-        Analyzer(dummy_mist_args).validate_dataset()
-    assert "All examples were excluded from training." in str(excinfo.value)
+    a = Analyzer(args); a.analyze_dataset(); cfg = a.config
+    assert cfg["mist_version"] == "0.9.0"
+    assert cfg["dataset_info"]["images"] == ["ct"]
+    assert cfg["preprocessing"]["crop_to_foreground"] is True
+    assert cfg["preprocessing"]["median_resampled_image_size"] == [10,10,10]
+    assert cfg["model"]["params"]["patch_size"] == [24,24,24]
+    assert cfg["inference"]["inferer"]["params"]["patch_size"] == [24,24,24]
+    assert (
+        cfg["evaluation"]["final_classes"] ==
+        {"background":[0],"foreground":[1]}
+    )
 
 
-def test_validate_dataset_mask_not_3d(monkeypatch, dummy_mist_args):
-    """Test validate_dataset drops patients if mask is not 3D."""
-    def fake_image_header_info(path):
-        # Create a fake header with 4D dimensions.
-        return {"dimensions": (10, 10, 10, 1), "spacing": (1.0, 1.0, 1.0, 1.0)}
-    monkeypatch.setattr(ants, "image_header_info", fake_image_header_info)
-
-    with pytest.raises(AssertionError) as excinfo:
-        Analyzer(dummy_mist_args).validate_dataset()
-    assert "All examples were excluded from training." in str(excinfo.value)
-
-
-def test_validate_dataset_mask_image_header_mismatch(
-        monkeypatch, dummy_mist_args
-):
-    """Test validate_dataset drops patients if mask/image headers mismatch."""
-    def fake_compare_headers_bad(header1, header2):
-        return False
-    monkeypatch.setattr(utils, "compare_headers", fake_compare_headers_bad)
-
-    with pytest.raises(AssertionError) as excinfo:
-        Analyzer(dummy_mist_args).validate_dataset()
-    assert "All examples were excluded from training." in str(excinfo.value)
+def test_run_writes_config_and_paths_and_uses_nfolds(args, monkeypatch):
+    """run() writes config.json and train_paths.csv, and respects nfolds."""
+    monkeypatch.setattr(
+        au,
+        "get_files_df",
+        lambda _d, _s: pd.DataFrame({
+            "id": [0, 1],
+            "fold": [0, 1],
+            "mask": ["m0.nii.gz", "m1.nii.gz"],
+            "ct": ["i0.nii.gz", "i1.nii.gz"]
+        }),
+        raising=True,
+    )
+    a = Analyzer(args); a.run()
+    cfg = json.loads(Path(a.config_json).read_text(encoding="utf-8"))
+    assert cfg["training"]["nfolds"] == args.nfolds
+    assert cfg["training"]["folds"] == list(range(args.nfolds))
+    df = pd.read_csv(a.paths_csv)
+    assert not df.empty and "fold" in df.columns
 
 
-def test_validate_dataset_image_not_3d(monkeypatch, dummy_mist_args):
-    """Test validate_dataset drops patients if image is not 3D."""
-    def fake_is_image_3d(header):
-        # Simulate not 3D for images.
-        return False
-    monkeypatch.setattr(utils, "is_image_3d", fake_is_image_3d)
+def test_run_with_test_data_writes_test_paths(args, monkeypatch):
+    """If test-data is provided, run() writes test_paths.csv."""
+    train_dir = _ensure_train_dir_for(args.data)
+    test_dir = _ensure_test_dir_for(args.data)
 
-    with pytest.raises(AssertionError) as excinfo:
-        Analyzer(dummy_mist_args).validate_dataset()
-    assert "All examples were excluded from training." in str(excinfo.value)
-
-
-def test_validate_dataset_runtime_error(monkeypatch, dummy_mist_args):
-    """Test validate_dataset handles RuntimeError by dropping patient."""
-    def fake_image_read_raise(path):
-        raise RuntimeError("Simulated read error")
-    monkeypatch.setattr(ants, "image_read", fake_image_read_raise)
-
-    with pytest.raises(AssertionError) as excinfo:
-        Analyzer(dummy_mist_args).validate_dataset()
-    assert "All examples were excluded from training." in str(excinfo.value)
-
-
-def test_validate_dataset_image_in_list_not_3d(monkeypatch, dummy_mist_args):
-    """Test validate_dataset drops patient if any image in the list is not 3D."""
-    def fake_image_read(path):
-        # Always return a valid 3D mask or image.
-        arr = np.ones((10, 10, 10), dtype=np.float32)
-        return ants.from_numpy(arr)
-
-    def fake_image_header_info(path):
-        if "0_image" in path:
-            # Simulate first image 3D.
-            return {"dimensions": (10, 10, 10), "spacing": (1.0, 1.0, 1.0)}
-        elif "1_image" in path:
-            # Simulate second image 4D (bad).
+    def _read_json(path: str):
+        if "dataset.json" in path:
             return {
-                "dimensions": (10, 10, 10, 1), "spacing": (1.0, 1.0, 1.0, 1.0)
+                "task": "segmentation",
+                "modality": "ct",
+                "train-data": str(train_dir),
+                "test-data": str(test_dir),
+                "mask": ["mask.nii.gz"],
+                "images": {"ct": ["image.nii.gz"]},
+                "labels": [0, 1],
+                "final_classes": {"background": [0], "foreground": [1]},
             }
-        else:
-            # Default good 3D.
+        return {}
+    monkeypatch.setattr(io_mod, "read_json_file", _read_json, raising=True)
+
+    calls = []
+    monkeypatch.setattr(
+        au,
+        "get_files_df",
+        lambda _d, split: (calls.append(split) or True)
+        and pd.DataFrame(
+            {
+                "id": list(range(2 if split == "train" else 1)),
+                "fold": list(range(2 if split == "train" else 1)),
+                "mask": [
+                    f"m{i}.nii.gz" for i in range(2 if split == "train" else 1)
+                ],
+                "ct": [
+                    f"i{i}.nii.gz" for i in range(2 if split == "train" else 1)
+                ],
+            }
+        ),
+        raising=True,
+    )
+
+    Analyzer(args).run()
+    assert (Path(args.results) / "test_paths.csv").exists()
+    assert "train" in calls and "test" in calls
+
+
+def test_run_raises_if_test_dir_missing(args, monkeypatch):
+    """If test-data directory is missing, run() raises FileNotFoundError."""
+    train_dir = _ensure_train_dir_for(args.data)
+    missing = Path(args.data).parent / "missing_test"
+
+    def _read_json(path: str):
+        if "dataset.json" in path:
+            return {
+                "task": "segmentation",
+                "modality": "ct",
+                "train-data": str(train_dir),
+                "test-data": str(missing),
+                "mask": ["mask.nii.gz"],
+                "images": {"ct": ["image.nii.gz"]},
+                "labels": [0, 1],
+                "final_classes": {"background": [0], "foreground": [1]},
+            }
+        return {}
+    monkeypatch.setattr(io_mod, "read_json_file", _read_json, raising=True)
+    with pytest.raises(FileNotFoundError):
+        Analyzer(args).run()
+
+
+# Tests — validate_dataset error cases.
+def test_validate_dataset_happy_path(args):
+    """Test validate_dataset passes when all samples are valid."""
+    a = Analyzer(args)
+    initial = len(a.paths_df)
+    a.validate_dataset()
+    assert len(a.paths_df) == initial
+
+
+def test_validate_dataset_label_mismatch_excludes(args, monkeypatch):
+    """If a mask has illegal labels, exclude it and log a message."""
+    # First mask has illegal label 99, others have proper label 1
+    def _dispatch(path: str):
+        if "mask" in path:
+            arr = np.zeros((10, 10, 10), dtype=np.float32)
+            arr[2:4, 2:4, 2:4] = (
+                99 if path.startswith("0_") or "/0_mask.nii.gz" in path else 1
+            )
+            return ants.from_numpy(arr)
+        return make_ants_image(fill=1.0)
+
+    monkeypatch.setattr(ants, "image_read", _dispatch, raising=True)
+
+    a = Analyzer(args)
+    a.validate_dataset()
+    assert len(a.paths_df) == (TRAIN_N - 1)
+
+
+def test_validate_dataset_runtime_error_excludes_one_and_logs(
+    args, monkeypatch, capture_console
+):
+    """If reading raises RuntimeError for one sample, exclude it and log."""
+    def _read_dispatch(path: str):
+        """Raise RuntimeError for one specific mask file."""
+        if "0_mask.nii.gz" in str(path):
+            raise RuntimeError("corrupted NIfTI header")
+        return ants.from_numpy(np.ones((10, 10, 10), dtype=np.float32))
+
+    monkeypatch.setattr(ants, "image_read", _read_dispatch, raising=True)
+
+    a = Analyzer(args)
+    a.validate_dataset()
+    assert len(a.paths_df) == (TRAIN_N - 1)
+    assert any(
+        "In 0:" in m and "corrupted NIfTI header" in m for m in capture_console
+    )
+    assert_exclusion_summary(capture_console, 1)
+
+
+def test_validate_dataset_runtime_error_all_raise(args, monkeypatch):
+    """If RuntimeError occurs for all samples, validate_dataset raises."""
+    monkeypatch.setattr(
+        ants,
+        "image_read",
+        lambda _p: (_ for _ in ()).throw(RuntimeError("boom")),
+        raising=True,
+    )
+    with pytest.raises(AssertionError):
+        Analyzer(args).validate_dataset()
+
+
+def test_validate_dataset_header_mismatch_excludes_one_and_logs(
+    args, monkeypatch, capture_console
+):
+    """If one sample has mismatched headers, exclude it and log a message."""
+    def _hdr_with_path(path: str):
+        """Return different header info based on the file path."""
+        spacing = (2.0, 2.0, 2.0) if "0_ct.nii.gz" in path else (1.0, 1.0, 1.0)
+        return {"dimensions": (10, 10, 10), "spacing": spacing}
+
+    def _compare_by_spacing(h1: dict, h2: dict) -> bool:
+        """Compare headers by spacing only."""
+        return tuple(h1.get("spacing", ())) == tuple(h2.get("spacing", ()))
+
+    monkeypatch.setattr(
+        ants, "image_header_info", _hdr_with_path, raising=True
+    )
+    monkeypatch.setattr(
+        au, "compare_headers", _compare_by_spacing, raising=True
+    )
+
+    a = Analyzer(args)
+    a.validate_dataset()
+    assert len(a.paths_df) == (TRAIN_N - 1)
+    assert any(
+        "In 0:" in m
+        and "Mismatch between image  and mask header information" in m
+        for m in capture_console
+    )
+    assert_exclusion_summary(capture_console, 1)
+
+
+def test_validate_dataset_header_mismatch_all_raises(args, monkeypatch):
+    """If all samples have mismatched headers, validate_dataset raises."""
+    def _mask_hdr(_p):
+        """Return a standard mask header."""
+        return {"dimensions": (10, 10, 10), "spacing": (1.0, 1.0, 1.0)}
+
+    def _img_hdr(_p):
+        """Return a header that always mismatches the mask header."""
+        return {"dimensions": (10, 10, 10), "spacing": (2.0, 2.0, 2.0)}
+
+    def _compare_by_spacing(h1: dict, h2: dict) -> bool:
+        """Compare headers by spacing only."""
+        return tuple(h1.get("spacing", ())) == tuple(h2.get("spacing", ()))
+
+    def _hdr_router(path: str):
+        """Route to image or mask header function based on path."""
+        return (
+            _img_hdr(path)
+            if path.endswith(".nii.gz") and "mask" not in path
+            else _mask_hdr(path)
+        )
+
+    monkeypatch.setattr(ants, "image_header_info", _hdr_router, raising=True)
+    monkeypatch.setattr(
+        au, "compare_headers", _compare_by_spacing, raising=True
+    )
+
+    with pytest.raises(AssertionError):
+        Analyzer(args).validate_dataset()
+
+
+def test_validate_dataset_image_not_3d_excludes_one_and_logs(
+    args, monkeypatch, capture_console
+):
+    """If one image is 4D, exclude it and log a message."""
+    def _hdr_router(path: str):
+        """Return 4D header for one image, 3D for all others."""
+        if "mask" in path:
             return {"dimensions": (10, 10, 10), "spacing": (1.0, 1.0, 1.0)}
+        if "0_ct.nii.gz" in path or path.startswith("0_"):
+            return {
+                "dimensions": (10, 10, 10, 1),
+                "spacing": (1.0, 1.0, 1.0, 1.0),
+            }
+        return {"dimensions": (10, 10, 10), "spacing": (1.0, 1.0, 1.0)}
 
-    def fake_is_image_3d(header):
-        return len(header["dimensions"]) == 3
+    monkeypatch.setattr(
+        au, "compare_headers", lambda h1, h2: True, raising=True
+    )
+    monkeypatch.setattr(ants, "image_header_info", _hdr_router, raising=True)
 
-    monkeypatch.setattr(ants, "image_read", fake_image_read)
-    monkeypatch.setattr(ants, "image_header_info", fake_image_header_info)
-    monkeypatch.setattr(utils, "is_image_3d", fake_is_image_3d)
-
-    analyzer = Analyzer(dummy_mist_args)
-    analyzer.validate_dataset()
-
-    # After validation, only 4 patients should remain
-    # (1 dropped due to 4D image).
-    assert len(analyzer.paths_dataframe) == 4
-
-
-def test_run_with_preprocessing(monkeypatch, dummy_mist_args, tmp_path):
-    """Test Analyzer.run() with full preprocessing workflow."""
-    # Patch the get_files_df function to return without the folds column.
-    def fake_get_files_df(data, split):
-        """Return a dummy dataframe for file paths."""
-        df = pd.DataFrame({
-            "id": [0, 1, 2, 3, 4],
-            "mask": [
-                "0_mask.nii.gz",
-                "1_mask.nii.gz",
-                "2_mask.nii.gz",
-                "3_mask.nii.gz",
-                "4_mask.nii.gz"
-            ],
-            "ct": [
-                "0_image.nii.gz",
-                "1_image.nii.gz",
-                "2_image.nii.gz",
-                "3_image.nii.gz",
-                "4_image.nii.gz"
-            ],
-        })
-        return df
-
-    def fake_add_folds_to_df(df, n_splits):
-        df = pd.DataFrame({
-            "id": [0, 1, 2, 3, 4],
-            "fold": [0, 1, 2, 3, 4],
-            "mask": [
-                "0_mask.nii.gz",
-                "1_mask.nii.gz",
-                "2_mask.nii.gz",
-                "3_mask.nii.gz",
-                "4_mask.nii.gz"
-            ],
-            "ct": [
-                "0_image.nii.gz",
-                "1_image.nii.gz",
-                "2_image.nii.gz",
-                "3_image.nii.gz",
-                "4_image.nii.gz"
-            ],
-        })
-        return df
-
-    monkeypatch.setattr(utils, "get_files_df", fake_get_files_df)
-    monkeypatch.setattr(utils, "add_folds_to_df", fake_add_folds_to_df)
-
-    # Run the analyzer.
-    analyzer = Analyzer(dummy_mist_args)
-    analyzer.run()
-
-    # Check that config file was created
-    config_path = analyzer.file_paths["configuration"]
-    assert os.path.exists(config_path)
-
-    # Load config and check that keys were added
-    with open(config_path, "r") as f:
-        config = json.load(f)
-
-    expected_keys = {
-        "modality",
-        "labels",
-        "final_classes",
-        "crop_to_fg",
-        "use_nz_mask",
-        "target_spacing",
-        "median_image_size",
-        "patch_size",
-        "mist_version",
-    }
-    # (If CT, also window_range, global_z_score_mean, global_z_score_std)
-
-    assert expected_keys.issubset(set(config.keys()))
-
-    # Check that image_mask_paths CSV exists
-    paths_csv_path = analyzer.file_paths["image_mask_paths"]
-    assert os.path.exists(paths_csv_path)
-
-    df = pd.read_csv(paths_csv_path)
-    assert not df.empty
-
-def test_run_with_no_preprocessing(monkeypatch, dummy_mist_args, tmp_path):
-    """Test Analyzer.run() with full preprocessing workflow."""
-    # Patch the get_files_df function to return without the folds column.
-    def fake_get_files_df(data, split):
-        """Return a dummy dataframe for file paths."""
-        df = pd.DataFrame({
-            "id": [0, 1, 2, 3, 4],
-            "mask": [
-                "0_mask.nii.gz",
-                "1_mask.nii.gz",
-                "2_mask.nii.gz",
-                "3_mask.nii.gz",
-                "4_mask.nii.gz"
-            ],
-            "ct": [
-                "0_image.nii.gz",
-                "1_image.nii.gz",
-                "2_image.nii.gz",
-                "3_image.nii.gz",
-                "4_image.nii.gz"
-            ],
-        })
-        return df
-
-    def fake_add_folds_to_df(df, n_splits):
-        df = pd.DataFrame({
-            "id": [0, 1, 2, 3, 4],
-            "fold": [0, 1, 2, 3, 4],
-            "mask": [
-                "0_mask.nii.gz",
-                "1_mask.nii.gz",
-                "2_mask.nii.gz",
-                "3_mask.nii.gz",
-                "4_mask.nii.gz"
-            ],
-            "ct": [
-                "0_image.nii.gz",
-                "1_image.nii.gz",
-                "2_image.nii.gz",
-                "3_image.nii.gz",
-                "4_image.nii.gz"
-            ],
-        })
-        return df
-
-    monkeypatch.setattr(utils, "get_files_df", fake_get_files_df)
-    monkeypatch.setattr(utils, "add_folds_to_df", fake_add_folds_to_df)
-
-    # Run the analyzer.
-    dummy_mist_args.no_preprocess = True  # Disable preprocessing.
-    analyzer = Analyzer(dummy_mist_args)
-    analyzer.run()
-
-    # Check that config file was created.
-    config_path = analyzer.file_paths["configuration"]
-    assert os.path.exists(config_path)
-
-    with open(config_path, "r") as f:
-        config = json.load(f)
-
-    # Check that no preprocessing fields exist (they should be None).
-    assert config["crop_to_fg"] is None
-    assert config["use_nz_mask"] is None
-    assert config["target_spacing"] is None
-    assert config["window_range"] is None
-    assert config["global_z_score_mean"] is None
-    assert config["global_z_score_std"] is None
-    assert config["median_image_size"] is None
-
-    # Check that image_mask_paths CSV exists.
-    paths_csv_path = analyzer.file_paths["image_mask_paths"]
-    assert os.path.exists(paths_csv_path)
-
-    df = pd.read_csv(paths_csv_path)
-    assert not df.empty
+    a = Analyzer(args)
+    a.validate_dataset()
+    assert len(a.paths_df) == (TRAIN_N - 1)
+    assert any(
+        "In 0:" in m and "Got 4D image, make sure all images are 3D" in m
+        for m in capture_console
+    )
+    assert_exclusion_summary(capture_console, 1)
 
 
-def test_cleanup_generated_files():
-    """Dummy test to clean up temporary files created during testing."""
-    if os.path.exists("train_data"):
-        shutil.rmtree("train_data")
+def test_validate_dataset_mask_not_3d_excludes_one_and_logs(
+    args, monkeypatch, capture_console
+):
+    """If the MASK (not the image) 4D, exclude it and log a message."""
+    def _hdr_router(path: str):
+        """Return 4D header for one mask, 3D for all others."""
+        if "mask" in path:
+            if "0_mask.nii.gz" in path or path.startswith("0_"):
+                return {
+                    "dimensions": (10, 10, 10, 1),
+                    "spacing": (1.0, 1.0, 1.0, 1.0),
+                }  # 4D mask
+            return {
+                "dimensions": (10, 10, 10),
+                "spacing": (1.0, 1.0, 1.0),
+            }  # 3D mask
+        # images always 3D
+        return {"dimensions": (10, 10, 10), "spacing": (1.0, 1.0, 1.0)}
 
-    if os.path.exists("results"):
-        shutil.rmtree("results")
+    monkeypatch.setattr(
+        au, "compare_headers", lambda h1, h2: True, raising=True
+    )
+    monkeypatch.setattr(ants, "image_header_info", _hdr_router, raising=True)
 
-    # No actual assertions; just cleanup.
+    a = Analyzer(args)
+    a.validate_dataset()
+
+    assert len(a.paths_df) == 4
+    assert any(
+        "In 0:" in m and "Got 4D mask" in m and "images are 3D" in m
+        for m in capture_console
+    )
+    assert any(
+        "Excluding 1 example(s) from training." in m for m in capture_console
+    )
+
+
+def test_validate_dataset_image_not_3d_all_raise(args, monkeypatch):
+    """If all images are 4D, validate_dataset raises."""
+    def _hdr_router(path: str):
+        """Return 4D header for all images, 3D for all masks."""
+        if "mask" in path:
+            return {"dimensions": (10, 10, 10), "spacing": (1.0, 1.0, 1.0)}
+        return {"dimensions": (10, 10, 10, 1), "spacing": (1.0, 1.0, 1.0, 1.0)}
+
+    monkeypatch.setattr(
+        au, "compare_headers", lambda h1, h2: True, raising=True
+    )
+    monkeypatch.setattr(ants, "image_header_info", _hdr_router, raising=True)
+
+    with pytest.raises(AssertionError):
+        Analyzer(args).validate_dataset()
+
+
+# Cleanup.
+def test_cleanup_leaked_dirs():
+    """Remove any leaked directories from tests."""
+    for d in ("train_data", "test_data", "results"):
+        if os.path.exists(d):
+            shutil.rmtree(d)

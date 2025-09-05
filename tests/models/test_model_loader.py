@@ -1,6 +1,6 @@
 # Copyright (c) MIST Imaging LLC.
 # Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
+# You may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #     http://www.apache.org/licenses/LICENSE-2.0
 # Unless required by applicable law or agreed to in writing, software
@@ -14,92 +14,160 @@ import pytest
 import torch
 
 # MIST imports.
-from mist.models.model_loader import get_model, load_model_from_config
+from mist.models.model_loader import (
+    validate_mist_config_for_model_loading,
+    convert_legacy_model_config,
+    get_model,
+    load_model_from_config
+)
 from mist.models.mgnets.mist_mgnets import MGNet
 
 
-def test_get_model_success():
-    """Test model construction from valid configuration."""
-    config = {
+@pytest.fixture
+def valid_mist_config():
+    """Fixture for a valid MIST model configuration."""
+    return {
+        "model": {
+            "architecture": "fmgnet",
+            "params": {
+                "in_channels": 1,
+                "out_channels": 2,
+                "target_spacing": [1.0, 1.0, 1.0],
+                "patch_size": [64, 64, 64],
+                "use_residual_blocks": False,
+                "use_deep_supervision": False,
+                "use_pocket_model": False,
+            }
+        }
+    }
+
+
+@pytest.fixture
+def legacy_mist_config():
+    """Fixture for a legacy MIST model configuration."""
+    return {
         "model_name": "fmgnet",
         "n_channels": 1,
         "n_classes": 2,
-        "use_res_block": False,
         "deep_supervision": False,
+        "pocket": False,
+        "patch_size": [64, 64, 64],
+        "target_spacing": [1.0, 1.0, 1.0],
+        "use_res_block": False,
     }
-    model = get_model(**config)
+
+
+def test_get_model_success(valid_mist_config):
+    """Test model construction from valid configuration."""
+    validate_mist_config_for_model_loading(valid_mist_config)
+    model = get_model(
+        valid_mist_config["model"]["architecture"],
+        **valid_mist_config["model"]["params"],
+    )
     assert isinstance(model, MGNet)
     assert model.mg_net == "fmgnet"
 
 
-def test_get_model_missing_name():
-    """Test ValueError is raised when model_name is missing."""
-    with pytest.raises(ValueError, match="Missing required key 'model_name'"):
-        get_model(n_channels=1)
+def test_validate_missing_model_key(valid_mist_config):
+    """Test ValueError is raised when 'model' key is missing."""
+    valid_mist_config.pop("model")
+    with pytest.raises(
+        ValueError, match="Missing required key 'model' in configuration."
+    ):
+        validate_mist_config_for_model_loading(valid_mist_config)
 
 
-@patch("mist.models.model_loader.read_json_file")
-@patch("mist.models.model_loader.get_model")
+def test_validate_missing_architecture_key(valid_mist_config):
+    """Test ValueError is raised when 'architecture' key is missing."""
+    valid_mist_config["model"].pop("architecture")
+    with pytest.raises(
+        ValueError,
+        match="Missing required key 'architecture' in model section.",
+    ):
+        validate_mist_config_for_model_loading(valid_mist_config)
+
+
+def test_validate_missing_required_params_key(valid_mist_config):
+    """Test ValueError is raised when a required parameter is missing."""
+    valid_mist_config["model"]["params"].pop("in_channels")
+    with pytest.raises(
+        ValueError,
+        match="Missing required key 'in_channels' in model parameters.",
+    ):
+        validate_mist_config_for_model_loading(valid_mist_config)
+
+
 @patch("torch.load")
-def test_load_model_from_config_success(
-    mock_torch_load, mock_get_model, mock_read_json
+def test_load_model_from_config_strips_ddp_prefix(
+    mock_torch_load, valid_mist_config
 ):
-    """Test successful loading of a model from config and checkpoint."""
-    mock_read_json.return_value = {
-        "model_name": "fmgnet",
-        "n_channels": 1,
-        "n_classes": 2,
-        "use_res_block": False,
-        "deep_supervision": False,
-    }
-
+    """DDP checkpoints (with 'module.' prefix) are stripped before loading."""
     dummy_model = MagicMock(spec=MGNet)
-    mock_get_model.return_value = dummy_model
 
-    # Fake DDP-wrapped weights.
-    mock_torch_load.return_value = {
-        "module.conv1.weight": torch.randn(4, 1, 3, 3, 3),
-        "module.conv1.bias": torch.randn(4),
-    }
+    # Return a dummy model instance from registry constructor.
+    with patch("mist.models.model_loader.get_model", return_value=dummy_model):
+        # Fake DDP-wrapped weights.
+        mock_torch_load.return_value = {
+            "module.encoder.weight": torch.randn(4, 1, 3, 3, 3),
+            "module.encoder.bias": torch.randn(4),
+        }
 
-    # Execute
-    model = load_model_from_config("mock_weights.pth", "mock_config.json")
+        model = load_model_from_config("mock_weights.pth", valid_mist_config)
 
-    # Check that the state dict was stripped correctly and loaded.
-    expected_keys = ["conv1.weight", "conv1.bias"]
-    actual_keys = [
-        k for k, _ in dummy_model.load_state_dict.call_args[0][0].items()
-    ]
-    assert actual_keys == expected_keys
-    assert model is dummy_model
-
-
-@patch("mist.models.model_loader.read_json_file", side_effect=FileNotFoundError)
-def test_load_model_from_config_file_not_found(mock_read_json):
-    """Test FileNotFoundError is propagated when config file is missing."""
-    with pytest.raises(FileNotFoundError):
-        load_model_from_config("missing_weights.pth", "missing_config.json")
+        # Verify keys were stripped.
+        loaded_state_dict = dummy_model.load_state_dict.call_args[0][0]
+        assert "encoder.weight" in loaded_state_dict
+        assert "encoder.bias" in loaded_state_dict
+        assert all(
+            not k.startswith("module.") for k in loaded_state_dict.keys()
+        )
+        assert model is dummy_model
 
 
-@patch("mist.models.model_loader.read_json_file")
-@patch("mist.models.model_loader.get_model")
-@patch("torch.load", return_value={"invalid_key": torch.randn(1)})
-def test_load_model_from_config_bad_state_dict(
-    mock_load, mock_get_model, mock_read_json
+@patch("torch.load")
+def test_load_model_from_config_keeps_non_ddp_keys(
+    mock_torch_load, valid_mist_config
 ):
-    """Test ValueError is raised for invalid state dict."""
-    # Valid config.
-    mock_read_json.return_value = {
-        "model_name": "fmgnet",
-        "n_channels": 1,
-        "n_classes": 2,
-        "use_res_block": False,
-        "deep_supervision": False,
-    }
+    """Non-DDP checkpoints are loaded without key modification."""
+    dummy_model = MagicMock(spec=MGNet)
 
-    # Model with strict=True loading.
-    dummy_model = MGNet("fmgnet", 1, 2, depth=2)
-    mock_get_model.return_value = dummy_model
+    with patch("mist.models.model_loader.get_model", return_value=dummy_model):
+        # Raw (non-DDP) state dict.
+        mock_torch_load.return_value = {
+            "encoder.weight": torch.randn(4, 1, 3, 3, 3),
+            "encoder.bias": torch.randn(4),
+        }
 
-    with pytest.raises(RuntimeError):
-        load_model_from_config("mock_weights.pth", "mock_config.json")
+        model = load_model_from_config("mock_weights.pth", valid_mist_config)
+
+        loaded_state_dict = dummy_model.load_state_dict.call_args[0][0]
+        assert "encoder.weight" in loaded_state_dict
+        assert "encoder.bias" in loaded_state_dict
+        # Ensure nothing was stripped.
+        assert all(
+            k in ["encoder.weight", "encoder.bias"]
+            for k in loaded_state_dict.keys()
+        )
+        assert model is dummy_model
+
+
+def test_convert_legacy_model_config_success(legacy_mist_config):
+    """Test conversion of legacy model config to new format."""
+    new_config = convert_legacy_model_config(legacy_mist_config)
+    assert new_config["model"]["architecture"] == "fmgnet"
+    assert new_config["model"]["params"]["in_channels"] == 1
+    assert new_config["model"]["params"]["out_channels"] == 2
+    assert new_config["model"]["params"]["patch_size"] == [64, 64, 64]
+    assert new_config["model"]["params"]["target_spacing"] == [1.0, 1.0, 1.0]
+    assert not new_config["model"]["params"]["use_residual_blocks"]
+    assert not new_config["model"]["params"]["use_deep_supervision"]
+    assert not new_config["model"]["params"]["use_pocket_model"]
+
+
+def test_convert_legacy_model_config_missing_keys(legacy_mist_config):
+    """Test conversion raises ValueError for missing keys."""
+    legacy_mist_config.pop("model_name")
+    with pytest.raises(
+        ValueError, match="Missing required key 'model_name' in legacy model"
+    ):
+        convert_legacy_model_config(legacy_mist_config)

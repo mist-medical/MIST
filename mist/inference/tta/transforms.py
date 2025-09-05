@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Type, TypeVar, Callable
-
 import torch
 
 # Type-safe registry for transform classes

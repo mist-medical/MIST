@@ -18,13 +18,13 @@ from mist.models.nnunet.mist_nnunet import NNUNet
 def valid_config():
     """Returns a valid configuration dictionary for the NNUNet model."""
     return {
-        "n_channels": 4,
-        "n_classes": 3,
+        "in_channels": 4,
+        "out_channels": 3,
         "patch_size": (128, 128, 128),
         "target_spacing": (1.0, 1.0, 1.0),
-        "use_res_block": True,
-        "deep_supervision": False,
-        "pocket": False,
+        "use_residual_blocks": True,
+        "use_deep_supervision": False,
+        "use_pocket_model": False,
     }
 
 
@@ -35,13 +35,13 @@ def test_create_nnunet_success(valid_config):
 
 
 @pytest.mark.parametrize("missing_key", [
-    "n_channels",
-    "n_classes",
+    "in_channels",
+    "out_channels",
     "patch_size",
     "target_spacing",
-    "use_res_block",
-    "deep_supervision",
-    "pocket",
+    "use_residual_blocks",
+    "use_deep_supervision",
+    "use_pocket_model",
 ])
 def test_create_nnunet_missing_keys(valid_config, missing_key):
     """Test create_nnunet raises ValueError if a required key is missing."""

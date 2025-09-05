@@ -9,23 +9,52 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Utility functions for MIST inference modules."""
-# Standard library imports.
-import os
 from typing import Any, Dict, Optional, Tuple, List, Union
 from collections.abc import Callable
-
-# Third-party imports.
+from pathlib import Path
+import os
 import ants
-import torch
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
+import torch
 
 # MIST imports.
+from mist.utils import io
+from mist.analyze_data import analyzer_utils
 from mist.preprocessing import preprocess
-from mist.runtime import utils
 from mist.inference.inference_constants import InferenceConstants as ic
 from mist.models import model_loader
+
+
+def decrop_from_fg(
+    ants_image: ants.core.ants_image.ANTsImage,
+    fg_bbox: Dict[str, int],
+) -> ants.core.ants_image.ANTsImage:
+    """Decrop image to original size using foreground bounding box.
+
+    Args:
+        ants_image: ANTs image object.
+        fg_bbox: Foreground bounding box.
+
+    Returns:
+        Decropped ANTs image object.
+    """
+    padding = [
+        (
+            np.max([0, fg_bbox["x_start"]]),
+            np.max([0, fg_bbox["x_og_size"] - fg_bbox["x_end"]]) - 1
+        ),
+        (
+            np.max([0, fg_bbox["y_start"]]),
+            np.max([0, fg_bbox["y_og_size"] - fg_bbox["y_end"]]) - 1
+        ),
+        (
+            np.max([0, fg_bbox["z_start"]]),
+            np.max([0, fg_bbox["z_og_size"] - fg_bbox["z_end"]]) - 1
+        )
+    ]
+    return ants.pad_image(ants_image, pad_width=padding, return_padvals=False)
 
 
 def back_to_original_space(
@@ -103,7 +132,7 @@ def back_to_original_space(
 
     # Appropriately pad back to original size if necessary.
     if foreground_bounding_box is not None:
-        prediction = utils.decrop_from_fg(prediction, foreground_bounding_box)
+        prediction = decrop_from_fg(prediction, foreground_bounding_box)
 
     # Copy header from original image onto the prediction so they match. This
     # will take care of other details in the header like the origin and the
@@ -113,20 +142,31 @@ def back_to_original_space(
 
 
 def load_test_time_models(
-    models_directory: str,
-    load_first_model_only: bool=False,
+    models_dir: str,
+    mist_config: Dict,
     device: Optional[Union[str, torch.device]]=None,
 ) -> List[Callable[[torch.Tensor], torch.Tensor]]:
     """Load one or more models for test-time inference.
 
     This function loads all models matching the pattern `fold_*.pt` in the
-    specified directory, along with the shared model config JSON.
+    specified directory, along with the shared model config JSON. For versions
+    of MIST prior to 1.0.0b0, the model directory should contain the fold
+    weights (i.e., `fold_0.pt`, `fold_1.pt`, etc.) and a model_config.json
+    file. For MIST 1.0.0b0 and later, the model directory should contain only
+    the model weights (i.e., `fold_0.pt`, `fold_1.pt`, etc.). The model
+    configuration for these newer versions is stored in the MIST configuration
+    file under the "model" key.
+
+    The function will validate the existence of the model directory and the
+    MIST configuration file. It will also ensure that at least one model
+    checkpoint file is found. If `load_first_model_only` is set to True, only
+    the first model (i.e., `fold_0.pt`) will be loaded.
 
     Args:
-        models_directory: Path to directory with `fold_*.pt` and
-            `model_config.json`.
-        load_first_model_only: If True, only the first model (i.e., `fold_0.pt`)
-            is loaded.
+        models_dir: Path to directory with `fold_*.pt` model weights.
+        mist_config: MIST configuration dictionary.
+        device: Device to load the models onto. If None, defaults to CUDA if
+            available, otherwise CPU.
 
     Returns:
         List of loaded PyTorch models, ready for inference.
@@ -135,39 +175,34 @@ def load_test_time_models(
         FileNotFoundError: If model config or model files are missing.
         ValueError: If no model checkpoint files are found.
     """
-    # Set device to CPU if not specified.
-    device = device or (
-        "cuda" if torch.cuda.is_available() else "cpu"
-    )
+    # Set the device if not provided.
+    device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
-    if not os.path.isdir(models_directory):
-        raise FileNotFoundError(
-            f"Model directory not found: {models_directory}"
-        )
+    # Ensure the models directory and config file exist.
+    models_path = Path(models_dir)
+    if not models_path.is_dir():
+        raise FileNotFoundError(f"Model directory not found: {models_path}")
 
-    model_config = os.path.join(models_directory, "model_config.json")
-    if not os.path.isfile(model_config):
-        raise FileNotFoundError(f"Missing model config: {model_config}")
+    # Find all model checkpoint files matching fold_*.pt
+    pt_files = sorted(models_path.glob("fold_*.pt"))
+    pt_files = [f for f in pt_files if not f.name.startswith(".")]
 
-    pt_files = sorted([
-        f for f in utils.listdir_with_no_hidden_files(models_directory)
-        if f.startswith("fold_") and f.endswith(".pt")
-    ])
-
+    # Raise an error if no model files are found.
     if not pt_files:
         raise ValueError(
-            f"No model checkpoints found in {models_directory} "
-            "(expected fold_*.pt)"
+            f"No model checkpoints found in {models_path}, (expected fold_*.pt)"
         )
 
-    if load_first_model_only:
-        pt_files = [pt_files[0]]
-
-    model_paths = [os.path.join(models_directory, f) for f in pt_files]
+    # Check if a legacy model config file exists.
+    config_path = models_path / "model_config.json"
+    if config_path.is_file():
+        legacy_config = io.read_json_file(str(config_path))
+        mist_config = model_loader.convert_legacy_model_config(legacy_config)
 
     models = []
-    for path in model_paths:
-        model = model_loader.load_model_from_config(path, model_config)
+    for model_path in pt_files:
+        model_path = str(model_path)
+        model = model_loader.load_model_from_config(model_path, mist_config)
         models.append(model.to(device).eval())
     return models
 
@@ -238,7 +273,7 @@ def validate_inference_images(
     # Load anchor image. Check if it is 3D before proceeding.
     anchor_filename = os.path.basename(image_paths[0])
     anchor_header = ants.image_header_info(image_paths[0])
-    if not utils.is_image_3d(anchor_header):
+    if not analyzer_utils.is_image_3d(anchor_header):
         raise ValueError(f"Anchor image is not 3D: {anchor_filename}")
     anchor_image = ants.image_read(image_paths[0])
 
@@ -246,10 +281,10 @@ def validate_inference_images(
     for image_path in image_paths[1:]:
         current_filename = os.path.basename(image_path)
         current_header = ants.image_header_info(image_path)
-        if not utils.is_image_3d(current_header):
+        if not analyzer_utils.is_image_3d(current_header):
             raise ValueError(f"Image is not 3D: {current_filename}")
 
-        if not utils.compare_headers(anchor_header, current_header):
+        if not analyzer_utils.compare_headers(anchor_header, current_header):
             raise ValueError(
                 f"Image headers do not match: {anchor_filename} and "
                 f"{current_filename}"

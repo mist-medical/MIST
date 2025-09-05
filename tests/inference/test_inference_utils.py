@@ -9,13 +9,75 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tests for MIST inference utilities."""
-from unittest.mock import patch, MagicMock, call
+from typing import Tuple, Dict
+from unittest.mock import patch, MagicMock
+from pathlib import Path
+import json
+import ants
 import numpy as np
 import pandas as pd
 import pytest
 
 # MIST imports.
 from mist.inference import inference_utils as iu
+
+
+@pytest.fixture()
+def mock_mist_config():
+    """Fixture to provide a mock MIST configuration."""
+    return {
+        "dataset_info": {
+            "modality": "ct",
+        },
+        "preprocessing": {
+            "skip": False,
+            "target_spacing": [1.0, 1.0, 1.0],
+            "crop_to_foreground": False,
+            "normalize_with_nonzero_mask": False,
+            "ct_normalization": {
+            "window_min": -100.0,
+            "window_max": 100.0,
+            "z_score_mean": 0.0,
+            "z_score_std": 1.0,
+            },
+        },
+        "model": {
+            "architecture": "nnunet",
+            "params": {
+            "in_channels": 1,
+            "out_channels": 2,
+            "patch_size": [64, 64, 64],
+            "target_spacing": [1.0, 1.0, 1.0],
+            "use_deep_supervision": False,
+            "use_residual_blocks": False,
+            "use_pocket_model": False,
+            }
+        },
+        "training": {
+            "seed": 42,
+            "hardware": {
+                "num_gpus": 2,
+                "num_cpu_workers": 8
+            }
+        },
+        "inference": {
+            "inferer": {
+                "name": "sliding_window",
+                "params": {
+                    "patch_size": [64, 64, 64],
+                    "patch_blend_mode": "gaussian",
+                    "patch_overlap": 0.5
+                }
+            },
+            "ensemble": {
+                "strategy": "mean"
+            },
+            "tta": {
+                "enabled": True,
+                "strategy": "all_flips"
+            },
+        },
+    }
 
 
 @pytest.mark.parametrize("bbox", [
@@ -26,11 +88,11 @@ from mist.inference import inference_utils as iu
         "x_og_size": 64, "y_og_size": 64, "z_og_size": 64,
     }
 ])
-@patch("mist.inference.inference_utils.utils.decrop_from_fg")
-@patch("mist.inference.inference_utils.preprocess.resample_mask")
-@patch("mist.inference.inference_utils.ants.get_orientation")
-@patch("mist.inference.inference_utils.ants.reorient_image2")
-@patch("mist.inference.inference_utils.ants.from_numpy")
+@patch("mist.inference.inference_utils.decrop_from_fg")
+@patch("mist.preprocessing.preprocess.resample_mask")
+@patch("ants.get_orientation")
+@patch("ants.reorient_image2")
+@patch("ants.from_numpy")
 def test_back_to_original_space(
     mock_from_numpy,
     mock_reorient_image2,
@@ -89,119 +151,156 @@ def test_back_to_original_space(
     original_image.new_image_like.assert_called_once_with("mock_numpy_data")
 
 
-@patch("mist.models.model_loader.load_model_from_config")
-@patch("mist.inference.inference_utils.utils.listdir_with_no_hidden_files")
-@patch("os.path.isfile")
-@patch("os.path.isdir")
-def test_load_test_time_models_success(
-    mock_isdir,
-    mock_isfile,
-    mock_listdir,
-    mock_load_model,
-):
-    """Test loading multiple models from a valid directory."""
-    # Input configuration.
-    model_dir = "/fake/path"
-    pt_files = ["fold_0.pt", "fold_1.pt"]
+class _DummyModel:
+    """Minimal stub for a torch.nn.Module, supporting .to(...).eval()."""
+    def __init__(self):
+        self.device_arg = None
 
-    # Mock directory and file checks.
-    mock_isdir.return_value = True
-    mock_isfile.return_value = True
-    mock_listdir.return_value = pt_files
+    def to(self, device):
+        """Simulate moving model to a device."""
+        self.device_arg = device
+        return self
 
-    # Mock model with to().eval() chain returning final model.
-    mock_model = MagicMock(name="mock_model")
-    mock_model.to.return_value = mock_model
-    mock_model.eval.return_value = mock_model
+    def eval(self):
+        """Simulate setting model to evaluation mode."""
+        return self
 
-    # Instead of reusing the same object, return new mock each time to track
-    # top-level calls cleanly.
-    mock_load_model.side_effect = [mock_model, mock_model]
 
-    # Call function.
-    models = iu.load_test_time_models(models_directory=model_dir)
+def test_load_test_time_models_missing_dir(tmp_path: Path, mock_mist_config):
+    """Raise FileNotFoundError when models_dir is missing."""
+    missing_dir = tmp_path / "nope"
+    with pytest.raises(FileNotFoundError):
+        iu.load_test_time_models(
+            str(missing_dir), mist_config=mock_mist_config, device="cpu"
+        )
 
-    # Assertions.
-    assert len(models) == 2
-    assert all(m is mock_model for m in models)
 
-    # Only assert direct calls to load_model_from_config, not sub-calls like
-    # .to().
-    mock_load_model.assert_has_calls([
-        call(f"{model_dir}/fold_0.pt", f"{model_dir}/model_config.json"),
-        call(f"{model_dir}/fold_1.pt", f"{model_dir}/model_config.json"),
-    ], any_order=False)
+def test_load_test_time_models_no_checkpoints(tmp_path: Path, mock_mist_config):
+    """Raise ValueError when no fold_*.pt files are found."""
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    with pytest.raises(ValueError, match="No model checkpoints"):
+        iu.load_test_time_models(
+            str(models_dir), mist_config=mock_mist_config, device="cpu"
+        )
 
 
 @patch("mist.models.model_loader.load_model_from_config")
-@patch("mist.inference.inference_utils.utils.listdir_with_no_hidden_files")
-@patch("os.path.isfile")
-@patch("os.path.isdir")
-def test_load_test_time_models_single_file(
-    mock_isdir,
-    mock_isfile,
-    mock_listdir,
+@patch("torch.cuda.is_available",return_value=False)
+def test_load_test_time_models_loads_all_on_cpu_when_no_cuda(
+    mock_cuda_available,
     mock_load_model,
+    tmp_path: Path,
+    mock_mist_config,
 ):
-    """Test loading only the first model when load_first_model_only is True."""
-    # Input configuration.
-    model_dir = "/fake/path"
-    pt_files = ["fold_0.pt", "fold_1.pt"]
+    """Load all weights and place models on CPU when CUDA is unavailable."""
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    (models_dir / "fold_0.pt").write_bytes(b"")  # Real file path for discovery.
+    (models_dir / "fold_1.pt").write_bytes(b"")
+    (models_dir / ".fold_hidden.pt").write_bytes(b"")  # Should be ignored.
 
-    # Mocks.
-    mock_isdir.return_value = True
-    mock_isfile.return_value = True
-    mock_listdir.return_value = pt_files
-    mock_model = MagicMock()
-    mock_model.to.return_value = mock_model
-    mock_model.eval.return_value = mock_model
-    mock_load_model.return_value = mock_model
+    dummy = _DummyModel()
+    mock_load_model.return_value = dummy
 
-    # Call function.
     models = iu.load_test_time_models(
-        models_directory=model_dir,
-        load_first_model_only=True
+        str(models_dir),
+        mist_config=mock_mist_config,
+        device=None,  # Trigger internal device resolution -> CPU.
     )
 
-    # Assertions.
-    assert len(models) == 1
-    mock_load_model.assert_called_once_with(
-        f"{model_dir}/fold_0.pt", f"{model_dir}/model_config.json"
-    )
+    assert len(models) == 2
+    assert all(m.device_arg == "cpu" for m in models)
+
+    called_paths = [c.args[0] for c in mock_load_model.call_args_list]
+    assert called_paths == [
+        str(models_dir / "fold_0.pt"),
+        str(models_dir / "fold_1.pt"),
+    ]
 
 
-@patch("os.path.isdir")
-def test_load_test_time_models_missing_dir(mock_isdir):
-    """Test FileNotFoundError when model directory is missing."""
-    mock_isdir.return_value = False
-    with pytest.raises(FileNotFoundError, match="Model directory not found"):
-        iu.load_test_time_models("/invalid/path")
-
-
-@patch("os.path.isfile")
-@patch("os.path.isdir")
-def test_load_test_time_models_missing_config(mock_isdir, mock_isfile):
-    """Test FileNotFoundError when model_config.json is missing."""
-    mock_isdir.return_value = True
-    mock_isfile.side_effect = lambda path: not path.endswith("model_config.json")
-    with pytest.raises(FileNotFoundError, match="Missing model config"):
-        iu.load_test_time_models("/some/path")
-
-
-@patch("mist.inference.inference_utils.utils.listdir_with_no_hidden_files")
-@patch("os.path.isfile")
-@patch("os.path.isdir")
-def test_load_test_time_models_no_checkpoints(
-    mock_isdir,
-    mock_isfile,
-    mock_listdir
+@patch("mist.models.model_loader.load_model_from_config")
+@patch("torch.cuda.is_available")
+def test_load_test_time_models_uses_provided_device(
+    mock_cuda_available,
+    mock_load_model,
+    tmp_path: Path,
+    mock_mist_config,
 ):
-    """Test ValueError when no fold_*.pt files are found."""
-    mock_isdir.return_value = True
-    mock_isfile.return_value = True
-    mock_listdir.return_value = ["readme.txt", "model_config.json"]
-    with pytest.raises(ValueError, match="No model checkpoints found"):
-        iu.load_test_time_models("/some/path")
+    """Use provided device directly without querying CUDA availability."""
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    (models_dir / "fold_0.pt").write_bytes(b"")
+
+    dummy = _DummyModel()
+    mock_load_model.return_value = dummy
+
+    models = iu.load_test_time_models(
+        str(models_dir),
+        mist_config=mock_mist_config,
+        device="cuda:2",  # Explicitly set device.
+    )
+
+    assert len(models) == 1
+    assert models[0].device_arg == "cuda:2"
+    mock_cuda_available.assert_not_called()
+
+    # Optional: confirm correct call into loader.
+    mock_load_model.assert_called_once_with(
+        str(models_dir / "fold_0.pt"),
+        mock_mist_config,
+    )
+
+
+@patch("mist.models.model_loader.load_model_from_config")
+@patch("mist.models.model_loader.convert_legacy_model_config")
+@patch("mist.utils.io.read_json_file")
+def test_load_test_time_models_converts_legacy_model_config(
+    mock_read_json,
+    mock_convert_legacy,
+    mock_load_model,
+    tmp_path: Path,
+    mock_mist_config,
+):
+    """Run with legacy model config, convert it, and load models."""
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    (models_dir / "fold_0.pt").write_bytes(b"")
+
+    legacy_path = models_dir / "model_config.json"
+    legacy_payload = {"model": "legacy_arch", "n_channels": 1, "n_classes": 2}
+    legacy_path.write_text(json.dumps(legacy_payload))
+
+    dummy = _DummyModel()
+    converted = {
+        "model": {
+            "architecture": "converted_arch",
+            "params": {
+                "in_channels": 1,
+                "out_channels": 2,
+                "patch_size": [64, 64, 64],
+                "target_spacing": [1.0, 1.0, 1.0],
+                "use_deep_supervision": False,
+                "use_residual_blocks": False,
+                "use_pocket_model": False,
+            },
+        }
+    }
+
+    mock_read_json.return_value = legacy_payload
+    mock_convert_legacy.return_value = converted
+    mock_load_model.return_value = dummy
+
+    _ = iu.load_test_time_models(
+        str(models_dir),
+        mist_config=mock_mist_config,
+        device="cpu",
+    )
+
+    mock_read_json.assert_called_once_with(str(legacy_path))
+    mock_convert_legacy.assert_called_once_with(legacy_payload)
+    assert mock_load_model.call_args[0][0] == str(models_dir / "fold_0.pt")
+    assert mock_load_model.call_args[0][1] == converted
 
 
 @pytest.mark.parametrize("input_mask,original_labels,expected_output", [
@@ -233,10 +332,10 @@ def test_remap_mask_labels(input_mask, original_labels, expected_output):
     assert result.dtype == input_mask.dtype
 
 
-@patch("mist.inference.inference_utils.utils.compare_headers")
-@patch("mist.inference.inference_utils.utils.is_image_3d")
-@patch("mist.inference.inference_utils.ants.image_read")
-@patch("mist.inference.inference_utils.ants.image_header_info")
+@patch("mist.analyze_data.analyzer_utils.compare_headers")
+@patch("mist.analyze_data.analyzer_utils.is_image_3d")
+@patch("ants.image_read")
+@patch("ants.image_header_info")
 @patch("os.path.isfile")
 def test_validate_inference_images_success(
     mock_isfile,
@@ -256,8 +355,8 @@ def test_validate_inference_images_success(
     mock_isfile.return_value = True
 
     # Mock headers and 3D checks.
-    header1 = {"dim": [3]}
-    header2 = {"dim": [3]}
+    header1 = {"dimensions": [64, 64, 64]}
+    header2 = {"dimensions": [64, 64, 64]}
     mock_image_header_info.side_effect = [header1, header2]
     mock_is_image_3d.return_value = True
     mock_compare_headers.return_value = True
@@ -287,8 +386,8 @@ def test_validate_inference_images_missing_file(mock_isfile):
         iu.validate_inference_images(patient_dict)
 
 
-@patch("mist.inference.inference_utils.utils.is_image_3d")
-@patch("mist.inference.inference_utils.ants.image_header_info")
+@patch("mist.analyze_data.analyzer_utils.is_image_3d")
+@patch("ants.image_header_info")
 @patch("os.path.isfile")
 def test_validate_inference_images_anchor_not_3d(
     mock_isfile,
@@ -304,10 +403,10 @@ def test_validate_inference_images_anchor_not_3d(
         iu.validate_inference_images(patient_dict)
 
 
-@patch("mist.inference.inference_utils.utils.compare_headers")
-@patch("mist.inference.inference_utils.utils.is_image_3d")
-@patch("mist.inference.inference_utils.ants.image_read")
-@patch("mist.inference.inference_utils.ants.image_header_info")
+@patch("mist.analyze_data.analyzer_utils.compare_headers")
+@patch("mist.analyze_data.analyzer_utils.is_image_3d")
+@patch("ants.image_read")
+@patch("ants.image_header_info")
 @patch("os.path.isfile")
 def test_validate_inference_images_header_mismatch(
     mock_isfile,
@@ -344,10 +443,10 @@ def test_validate_inference_images_no_image_columns():
         iu.validate_inference_images(patient_dict)
 
 
-@patch("mist.inference.inference_utils.utils.compare_headers")
-@patch("mist.inference.inference_utils.utils.is_image_3d")
-@patch("mist.inference.inference_utils.ants.image_read")
-@patch("mist.inference.inference_utils.ants.image_header_info")
+@patch("mist.analyze_data.analyzer_utils.compare_headers")
+@patch("mist.analyze_data.analyzer_utils.is_image_3d")
+@patch("ants.image_read")
+@patch("ants.image_header_info")
 @patch("os.path.isfile")
 def test_validate_inference_images_secondary_image_not_3d(
     mock_isfile,
@@ -436,3 +535,132 @@ def test_validate_paths_dataframe_parametrized(df, should_raise, match):
             iu.validate_paths_dataframe(df)
     else:
         iu.validate_paths_dataframe(df)  # Should not raise.
+
+
+def _make_ants_image(
+    arr_xyz: np.ndarray,
+    spacing: Tuple[float, float, float] = (1.0, 1.0, 1.0),
+    origin: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+):
+    """Create an ANTs image with basic metadata."""
+    img = ants.from_numpy(arr_xyz.astype(np.float32))
+    img.set_spacing(spacing)
+    img.set_origin(origin)
+    img.set_direction(np.eye(3))
+    return img
+
+
+def _crop_with_bbox(arr: np.ndarray, bbox: Dict[str, int]) -> np.ndarray:
+    """Numpy crop using the same inclusive end convention as crop_to_fg."""
+    xs, xe = bbox["x_start"], bbox["x_end"]
+    ys, ye = bbox["y_start"], bbox["y_end"]
+    zs, ze = bbox["z_start"], bbox["z_end"]
+    return arr[xs:xe + 1, ys:ye + 1, zs:ze + 1]
+
+
+def _expected_decrop(
+    cropped: np.ndarray,
+    og_shape: Tuple[int, int, int],
+    bbox: Dict[str, int],
+) -> np.ndarray:
+    """Construct the expected zero-padded array according to bbox placement."""
+    out = np.zeros(og_shape, dtype=cropped.dtype)
+    xs, xe = bbox["x_start"], bbox["x_end"]
+    ys, ye = bbox["y_start"], bbox["y_end"]
+    zs, ze = bbox["z_start"], bbox["z_end"]
+    out[xs:xe + 1, ys:ye + 1, zs:ze + 1] = cropped
+    return out
+
+
+def test_decrop_from_fg_restores_original_region():
+    """Decropping pads the cropped block back to its original placement."""
+    og_shape = (12, 10, 8)
+    rng = np.random.default_rng(0)
+    vol = rng.normal(size=og_shape).astype(np.float32)
+
+    # Define a nontrivial bbox strictly inside the volume.
+    bbox = {
+        "x_start": 2, "x_end": 8,
+        "y_start": 1, "y_end": 7,
+        "z_start": 3, "z_end": 6,
+        "x_og_size": og_shape[0],
+        "y_og_size": og_shape[1],
+        "z_og_size": og_shape[2],
+    }
+
+    cropped_np = _crop_with_bbox(vol, bbox)
+    cropped_img = _make_ants_image(cropped_np)
+
+    decropped_img = iu.decrop_from_fg(cropped_img, bbox)
+    decropped_np = decropped_img.numpy()
+
+    assert decropped_np.shape == og_shape
+    expected = _expected_decrop(cropped_np, og_shape, bbox)
+    assert np.allclose(decropped_np, expected)
+
+
+@pytest.mark.parametrize(
+    "bbox",
+    [
+        # Right padding only: starts at 0, ends before last index.
+        {"x_start": 0, "x_end": 7, "y_start": 0, "y_end": 8,
+         "z_start": 1, "z_end": 5},
+        # Left padding only: ends at last index.
+        {"x_start": 3, "x_end": 11, "y_start": 2, "y_end": 9,
+         "z_start": 0, "z_end": 7},
+        # Both sides padding on all axes.
+        {"x_start": 2, "x_end": 9, "y_start": 1, "y_end": 7,
+         "z_start": 1, "z_end": 6},
+    ],
+)
+def test_decrop_from_fg_padding_patterns(bbox):
+    """Decropping handles left-only, right-only, and both-side padding."""
+    og_shape = (12, 10, 8)
+    # Fill in *_og_size keys.
+    bbox = dict(bbox, **{
+        "x_og_size": og_shape[0],
+        "y_og_size": og_shape[1],
+        "z_og_size": og_shape[2],
+    })
+
+    # Use a deterministic pattern so misalignment is obvious.
+    vol = np.zeros(og_shape, dtype=np.float32)
+    xs, xe = bbox["x_start"], bbox["x_end"]
+    ys, ye = bbox["y_start"], bbox["y_end"]
+    zs, ze = bbox["z_start"], bbox["z_end"]
+    vol[xs:xe + 1, ys:ye + 1, zs:ze + 1] = 7.0
+
+    cropped_np = _crop_with_bbox(vol, bbox)
+    cropped_img = _make_ants_image(cropped_np)
+
+    decropped_img = iu.decrop_from_fg(cropped_img, bbox)
+    decropped_np = decropped_img.numpy()
+
+    assert decropped_np.shape == og_shape
+    expected = _expected_decrop(cropped_np, og_shape, bbox)
+    assert np.array_equal(decropped_np, expected)
+
+
+def test_decrop_from_fg_bbox_full_image_is_noop():
+    """When bbox covers full image, decropping returns the same image."""
+    og_shape = (8, 7, 6)
+    rng = np.random.default_rng(123)
+    vol = rng.uniform(size=og_shape).astype(np.float32)
+
+    bbox = {
+        "x_start": 0, "x_end": og_shape[0] - 1,
+        "y_start": 0, "y_end": og_shape[1] - 1,
+        "z_start": 0, "z_end": og_shape[2] - 1,
+        "x_og_size": og_shape[0],
+        "y_og_size": og_shape[1],
+        "z_og_size": og_shape[2],
+    }
+
+    # Cropped equals original region since bbox spans entire volume.
+    cropped_img = _make_ants_image(vol.copy())
+
+    decropped_img = iu.decrop_from_fg(cropped_img, bbox)
+    decropped_np = decropped_img.numpy()
+
+    assert decropped_np.shape == og_shape
+    assert np.allclose(decropped_np, vol)

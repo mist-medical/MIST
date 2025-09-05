@@ -21,7 +21,7 @@ from mist.loss_functions import loss_utils
 
 class SegmentationLoss(nn.Module, ABC):
     """Base class for segmentation loss functions.
-    
+
     This class provides common preprocessing steps for segmentation losses,
     such as one-hot encoding of ground truth labels and applying softmax to
     predictions. It also allows for optional exclusion of the background class

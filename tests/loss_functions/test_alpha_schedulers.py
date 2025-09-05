@@ -17,7 +17,7 @@ from mist.loss_functions import alpha_schedulers
 
 def test_constant_scheduler_returns_fixed_value():
     """Test that the constant scheduler returns a fixed alpha value."""
-    scheduler = alpha_schedulers.ConstantScheduler(value=0.75)
+    scheduler = alpha_schedulers.ConstantScheduler(num_epochs=5, value=0.75)
     for epoch in range(10):
         assert scheduler(epoch) == 0.75
 
@@ -51,7 +51,9 @@ def test_linear_scheduler_decays_to_zero():
 
 def test_get_scheduler_constant():
     """Test factory returns ConstantScheduler."""
-    sched = alpha_schedulers.get_alpha_scheduler("constant", value=0.3)
+    sched = alpha_schedulers.get_alpha_scheduler(
+        "constant", value=0.3, num_epochs=10
+    )
     assert isinstance(sched, alpha_schedulers.ConstantScheduler)
     assert sched(0) == 0.3
 
@@ -67,3 +69,11 @@ def test_get_scheduler_invalid_name_raises():
     """Test that unknown scheduler name raises ValueError."""
     with pytest.raises(ValueError, match="Unknown scheduler:"):
         alpha_schedulers.get_alpha_scheduler("cosine", num_epochs=10)
+
+
+def test_list_registered_schedulers():
+    """Test that the list of registered schedulers is correct."""
+    schedulers = alpha_schedulers.list_alpha_schedulers()
+    assert "constant" in schedulers
+    assert "linear" in schedulers
+    assert len(schedulers) == 2

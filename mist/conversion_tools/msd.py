@@ -11,14 +11,14 @@
 """Converts medical segmentation decathlon dataset to MIST dataset."""
 import os
 from typing import Dict, Any
-
 import pprint
 import rich
 import numpy as np
 import SimpleITK as sitk
 
 # MIST imports.
-from mist.runtime import utils
+from mist.utils import io, progress_bar
+from mist.conversion_tools import conversion_utils
 
 console = rich.console.Console()
 
@@ -45,8 +45,7 @@ def copy_msd_data(
     Returns:
         None. The data is copied to the destination directory.
     """
-    # Set up progress bar and error messages.
-    progress_bar = utils.get_progress_bar(progress_bar_message)
+    # Initialize error messages.
     error_messages = ""
 
     # Pre-compute mode paths and directory locations
@@ -56,7 +55,7 @@ def copy_msd_data(
     is_training = mode == "training"
 
     # Convert MSD data to MIST format and copy to destination
-    with progress_bar as pb:
+    with progress_bar.get_progress_bar(progress_bar_message) as pb:
         for i in pb.track(range(len(msd_json[mode]))):
             # Get patient id and image (and mask if training data) paths.
             patient_id = os.path.basename(
@@ -120,14 +119,14 @@ def copy_msd_data(
                     )
             else:
                 # Directly copy the image if only one modality.
-                utils.copy_image_from_source_to_dest(
+                conversion_utils.copy_image_from_source_to_dest(
                     image_path,
                     os.path.join(patient_directory, f"{modalities[0]}.nii.gz")
                 )
 
             # Copy mask for training data.
             if is_training:
-                utils.copy_image_from_source_to_dest(
+                conversion_utils.copy_image_from_source_to_dest(
                     mask_path,
                     os.path.join(patient_directory, "mask.nii.gz")
                 )
@@ -173,7 +172,7 @@ def convert_msd(
         raise FileNotFoundError(f"{dataset_json_path} does not exist!")
 
     # Load the MSD dataset JSON file.
-    msd_json = utils.read_json_file(dataset_json_path)
+    msd_json = io.read_json_file(dataset_json_path)
 
     # Extract modalities.
     modalities = {int(idx): mod for idx, mod in msd_json["modality"].items()}
@@ -242,5 +241,4 @@ def convert_msd(
     )
     console.print(text)
 
-    utils.write_json_file(dataset_json_filename, dataset_json)
-
+    io.write_json_file(dataset_json_filename, dataset_json)

@@ -26,11 +26,11 @@ from mist.models.mednext.mist_mednext import MedNeXt
 def base_config():
     """Return a minimal valid configuration dictionary for MedNeXt."""
     return {
-        "n_channels": 1,
-        "n_classes": 3,
-        "use_res_block": True,
-        "deep_supervision": False,
-        "pocket": False,
+        "in_channels": 1,
+        "out_channels": 3,
+        "use_residual_blocks": True,
+        "use_deep_supervision": False,
+        "use_pocket_model": False,
     }
 
 
@@ -48,7 +48,11 @@ def test_create_mednext_invalid_variant(base_config):
 
 
 @pytest.mark.parametrize("missing_key", [
-    "n_channels", "n_classes", "use_res_block", "deep_supervision", "pocket"
+    "in_channels",
+    "out_channels",
+    "use_residual_blocks",
+    "use_deep_supervision",
+    "use_pocket_model",
 ])
 def test_create_mednext_missing_keys(base_config, missing_key):
     """Test that missing required config keys raise ValueError."""

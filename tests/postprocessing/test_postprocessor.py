@@ -102,7 +102,7 @@ INVALID_TRANSFORM = [
 )
 def test_load_strategy_validation(strategy_data, should_raise):
     """Test the _load_strategy method of the Postprocessor class."""
-    with patch("mist.runtime.utils.read_json_file", return_value=strategy_data):
+    with patch("mist.utils.io.read_json_file", return_value=strategy_data):
         if should_raise:
             with pytest.raises(ValueError):
                 Postprocessor("_mock_path")
@@ -143,7 +143,7 @@ def patched_console():
         ),
     ]
 )
-@patch("mist.postprocessing.postprocessor.utils.read_json_file")
+@patch("mist.utils.io.read_json_file")
 @patch("mist.postprocessing.postprocessor.Console")  # Suppress rich printing.
 def test_gather_base_filepaths(
     mock_console,
@@ -174,7 +174,7 @@ def test_gather_base_filepaths(
 
 
 # Test the _print_strategy method.
-@patch("mist.postprocessing.postprocessor.utils.read_json_file")
+@patch("mist.utils.io.read_json_file")
 @patch("mist.postprocessing.postprocessor.Console")
 @patch("mist.postprocessing.postprocessor.Table")
 def test_print_strategy(mock_table_class, mock_console_class, mock_read_json):
@@ -233,7 +233,7 @@ def dummy_ants_image():
 
 @pytest.mark.parametrize("simulate_error", [False, True])
 @patch("mist.postprocessing.postprocessor.get_transform")
-@patch("mist.postprocessing.postprocessor.utils.read_json_file")
+@patch("mist.utils.io.read_json_file")
 def test_apply_strategy_to_single_example(
     mock_read_json, mock_get_transform, simulate_error, dummy_ants_image
 ):
@@ -303,10 +303,10 @@ def temp_dirs_with_nii():
         ("fail", True)
     ]
 )
-@patch("mist.postprocessing.postprocessor.utils.read_json_file")
+@patch("mist.utils.io.read_json_file")
 @patch("mist.postprocessing.postprocessor.get_transform")
 @patch("mist.postprocessing.postprocessor.Console")
-@patch("mist.postprocessing.postprocessor.utils.get_progress_bar")
+@patch("mist.utils.progress_bar.get_progress_bar")
 def test_run_postprocessor(
     mock_get_progress_bar,
     mock_console_class,
