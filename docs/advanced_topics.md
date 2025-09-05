@@ -407,6 +407,68 @@ mist_train --numpy /path/to/preprocessed/npy/files \
            --val-percent 0.05
 ```
 
+## Data Augmentation
+
+Data augmentation is controlled through the `training.augmentation` section of
+the `config.json` file. By default, augmentation is enabled with a standard set
+of spatial and intensity transforms designed for medical imaging. The available
+augmentation transforms are:
+
+| Transform    | Description                                      | Config key   |
+|--------------|--------------------------------------------------|--------------|
+| Flips        | Random spatial flips along x, y, or z axes       | `flips`      |
+| Zoom         | Random zoom in/out with interpolation            | `zoom`       |
+| Noise        | Additive Gaussian noise to the image             | `noise`      |
+| Blurring     | Random Gaussian blurring                         | `blur`       |
+| Brightness   | Random brightness scaling                        | `brightness` |
+| Contrast     | Random contrast adjustment                       | `contrast`   |
+
+### How to customize
+
+- To **disable all augmentation**, set `"enabled": false`.  
+- To **toggle individual transforms**, set the corresponding key to `true` or
+`false`.
+- Augmentation is applied only during training. Test-time augmentation is
+controlled in the `inference` section of the configuration file.
+
+### Example
+
+Disable noise and blur while keeping other augmentations active:
+
+```json
+"augmentation": {
+  "enabled": true,
+  "transforms": {
+    "flips": true,
+    "zoom": true,
+    "noise": false,
+    "blur": false,
+    "brightness": true,
+    "contrast": true
+  }
+}
+```
+
+## Foreground sampling probability
+
+The `training.dali_foreground_prob` key controls the probability of sampling a
+training patch that contains foreground (non-zero labels). This is useful in
+medical segmentation tasks where most voxels are background, ensuring the model
+sees a balanced mix of positive and negative regions during training.
+
+- A value of `0.0` means **no preference** — patches are sampled uniformly from
+  the entire volume.
+- A value of `1.0` means **always prefer foreground** — every sampled patch will
+  contain at least some non-zero label.
+- Intermediate values (e.g., `0.6`) bias sampling toward foreground while still
+  including background-only patches.
+
+**Default:** `0.6`
+
+Adjusting this value can improve convergence on highly imbalanced datasets,
+but setting it too high may reduce the model’s ability to distinguish
+foreground from background.
+
 ## Multi-GPU training
 
 MIST uses PyTorch's DistributedDataParallel (DDP) for multi-GPU data
