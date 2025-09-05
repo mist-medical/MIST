@@ -226,14 +226,15 @@ helps stabilize training (especially with AMP). To disable this, set
 
 Boundary-based losses are often combined with region-based losses (e.g., Dice)
 via a weighted sum:
+
 $$
 \alpha \mathcal{L}_{\text{region}} + (1 - \alpha)\mathcal{L}_{\text{boundary}}.
 $$
 
 MIST provides two schedules for $\alpha$: `constant` and `linear`.
 
-- `constant`: fixes $\alpha = 0.5`.
-- `linear`: uses $\alpha = 1.0` for the first five epochs, then decreases
+- `constant`: fixes $\alpha$ = `0.5`.
+- `linear`: uses $\alpha$ = `1.0` for the first five epochs, then decreases
   linearly to `0.0` by the final epoch.
 
 Set this with `--composite-loss-weighting` or
