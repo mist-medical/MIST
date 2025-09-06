@@ -368,7 +368,7 @@ From there, you can run any of the commands described above inside the Docker
 container. Additionally, you can use the Docker entrypoint command to run any
 of the MIST scripts.
 
-### Custom cross validation
+## Custom cross validation
 
 By default, MIST uses a **random five-fold cross validation** split. The folds
 are stored in the file `./results/train_paths.csv`, which maps each case to its
