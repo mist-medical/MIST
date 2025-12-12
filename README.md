@@ -21,6 +21,7 @@ Please cite the following papers if you use this code for your work:
 Please see our Read the Docs page [**here**](https://mist-medical.readthedocs.io/).
 
 ## What's New
+* September 2025 - [MIST takes 3rd place (repeat) in BraTS 2025 adult glioma challenge @ MICCAI 2025](https://www.synapse.org/Synapse:syn64153130/wiki/633062)
 * November 2024 - MedNeXt models (small, base, medium, and large) added to MIST.
 These models can be called with ```--model mednext-<small, base, medium, large>```.
 * October 2024 - [MIST takes 3rd place in BraTS 2024 adult glioma challenge @ MICCAI 2024!](https://www.synapse.org/Synapse:syn53708249/wiki/630150)
