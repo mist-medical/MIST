@@ -16,7 +16,6 @@ from torch import nn
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
 
-# Import MIST modules.
 from mist.utils import io, progress_bar
 from mist.models.model_loader import get_model
 from mist.loss_functions.loss_registry import get_loss

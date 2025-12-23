@@ -1,12 +1,14 @@
 """Base class for segmentation loss functions."""
+
 from abc import ABC, abstractmethod
 from typing import Tuple
+
 import torch
 from torch import nn
 from torch.nn import functional as F
 
-# MIST imports.
 from mist.loss_functions import loss_utils
+from mist.loss_functions.loss_constants import LossConstants as constants
 
 
 class SegmentationLoss(nn.Module, ABC):
@@ -20,9 +22,11 @@ class SegmentationLoss(nn.Module, ABC):
     Attributes:
         exclude_background: If True, the background class (class 0) is
             excluded from the loss computation.
-        spatial_dims: Tuple indicating the spatial dimensions for 3D data.
+        spatial_dims_3d: Tuple indicating the spatial dimensions for 3D data.
+        avoid_division_by_zero: A small constant to prevent division by zero
+            in loss computations.
     """
-    def __init__(self,exclude_background: bool=False):
+    def __init__(self,exclude_background: bool = False):
         """Initialize the SegmentationLoss.
 
         Args:
@@ -31,7 +35,8 @@ class SegmentationLoss(nn.Module, ABC):
         """
         super().__init__()
         self.exclude_background = exclude_background
-        self.spatial_dims = (2, 3, 4)  # Default for 3D.
+        self.spatial_dims_3d = constants.SPATIAL_DIMS_3D
+        self.avoid_division_by_zero = constants.AVOID_DIVISION_BY_ZERO_CONSTANT
 
     def preprocess(
         self,
@@ -75,7 +80,6 @@ class SegmentationLoss(nn.Module, ABC):
         self,
         y_true: torch.Tensor,
         y_pred: torch.Tensor,
-        *args,
         **kwargs,
     ) -> torch.Tensor:
         """Compute the segmentation loss.
@@ -94,4 +98,3 @@ class SegmentationLoss(nn.Module, ABC):
         Returns:
             The computed loss as a scalar tensor.
         """
-        pass # pragma: no cover

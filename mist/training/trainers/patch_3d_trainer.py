@@ -1,11 +1,13 @@
 """3D patch trainer for MIST built on top of BaseTrainer."""
+
 from typing import Tuple, Any, Dict
+
 import torch
 from monai.inferers import sliding_window_inference
 
-# MIST imports.
 from mist.data_loading import dali_loader
 from mist.training.trainers.base_trainer import BaseTrainer
+from mist.training.trainers.trainer_constants import TrainerConstants as constants
 
 
 class Patch3DTrainer(BaseTrainer):
@@ -28,7 +30,7 @@ class Patch3DTrainer(BaseTrainer):
             fold_data: Dictionary containing the following key-value pairs:
                 - "train_images": List of paths to training images.
                 - "train_labels": List of paths to training labels.
-                - "dtm_images": List of paths to DTM images (optional).
+                - "train_dtms": List of paths to DTM images (optional).
                 - "val_images": List of paths to validation images.
                 - "val_labels": List of paths to validation labels.
             rank: The rank of the current process in distributed training.
@@ -112,10 +114,11 @@ class Patch3DTrainer(BaseTrainer):
         dtm = batch.get("dtm", None)
 
         epoch = state["epoch"]
-        alpha = (
-            composite_loss_weighting(epoch) if composite_loss_weighting 
-            else None
-        )
+        if composite_loss_weighting:
+            alpha = composite_loss_weighting(epoch)
+        else:
+            # Default to 0.5 for safe handling of alpha parameter.
+            alpha = 0.5
 
         optimizer.zero_grad()
         if scaler is not None:
@@ -132,6 +135,10 @@ class Patch3DTrainer(BaseTrainer):
                 )
 
             scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(
+                model.parameters(), max_norm=constants.GRAD_CLIP_VALUE
+            )
             scaler.step(optimizer)
             scaler.update()
         else:
@@ -147,6 +154,9 @@ class Patch3DTrainer(BaseTrainer):
             )
 
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(
+                model.parameters(), max_norm=constants.GRAD_CLIP_VALUE
+            )
             optimizer.step()
         return loss
 

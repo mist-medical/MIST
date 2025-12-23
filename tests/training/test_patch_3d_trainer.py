@@ -71,6 +71,7 @@ class FakeScaler:
         self._scaled = 0
         self._stepped = 0
         self._updated = 0
+        self._unscaled = 0 # NEW: Track unscale calls
 
     def scale(self, loss: torch.Tensor) -> "FakeScaler":
         """Pretend to scale the loss; return self for chaining .backward()."""
@@ -81,6 +82,10 @@ class FakeScaler:
     def backward(self) -> None:
         """Call backward on the stored loss."""
         self._loss.backward()
+
+    def unscale_(self, optimizer: torch.optim.Optimizer) -> None:
+        """Mock the unscale_ method."""
+        self._unscaled += 1
 
     def step(self, optimizer: torch.optim.Optimizer) -> None:
         """Record an optimizer step."""
@@ -226,7 +231,6 @@ def patch_utils(monkeypatch, tmp_pipeline):
     monkeypatch.setattr(bt.training_utils, "get_npy_paths", fake_get_npy_paths)
 
 
-
 def test_build_dataloaders_passes_expected_args(
     tmp_pipeline, mist_args, monkeypatch
 ):
@@ -285,15 +289,7 @@ def test_build_dataloaders_passes_expected_args(
 def test_training_step_criterion_optimizer_and_scaler(
     tmp_pipeline, mist_args, monkeypatch, amp_enabled,
 ):
-    """Exercise Patch3DTrainer.training_step with/without AMP.
-
-    Ensures:
-      - criterion receives expected named args,
-      - optimizer.step() is called once,
-      - when AMP is enabled: torch.autocast is entered (no-op) and scaler
-        scale/backward/step/update are each called once,
-      - when AMP is disabled: scaler is None (matches production path).
-    """
+    """Exercise Patch3DTrainer.training_step with/without AMP."""
     t = Patch3DTrainer(mist_args)
 
     # Model and optimizer.
@@ -330,7 +326,6 @@ def test_training_step_criterion_optimizer_and_scaler(
 
         monkeypatch.setattr(torch, "autocast", lambda *a, **k: _NoOpAutocast())
     else:
-        # Match production behavior when AMP is disabled.
         scaler = None
 
     state = {
@@ -354,8 +349,11 @@ def test_training_step_criterion_optimizer_and_scaler(
     # Assertions common to both branches.
     assert isinstance(loss, torch.Tensor)
     assert "y_pred" in called and "y_true" in called
-    assert called["alpha"] is None
-    assert step_calls["count"] == 1  # Optimizer stepped once.
+
+    # FIX: Expect 0.5 (the new default), not None
+    assert called["alpha"] == 0.5 
+
+    assert step_calls["count"] == 1
 
     # Branch-specific assertions.
     if amp_enabled:
@@ -364,8 +362,91 @@ def test_training_step_criterion_optimizer_and_scaler(
         assert state["scaler"]._scaled == 1
         assert state["scaler"]._stepped == 1
         assert state["scaler"]._updated == 1
+        assert state["scaler"]._unscaled == 1 
     else:
         assert state["scaler"] is None
+
+
+@pytest.mark.parametrize("amp_enabled", [False, True])
+def test_training_step_sequence_enforcement(
+    tmp_pipeline, mist_args, monkeypatch, amp_enabled
+):
+    """Verify that unscale happens BEFORE clip, and clip BEFORE step."""
+    t = Patch3DTrainer(mist_args)
+    model = DummyModel()
+
+    # Create a shared event log.
+    events = []
+
+    # 1. Mock Optimizer Step.
+    opt = torch.optim.SGD(model.parameters(), lr=0.1)
+    monkeypatch.setattr(opt, "step", lambda: events.append("opt_step"))
+
+    # 2. Mock Gradient Clipping.
+    # We patch the torch.nn.utils function directly.
+    monkeypatch.setattr(
+        torch.nn.utils, 
+        "clip_grad_norm_", 
+        lambda params, max_norm: events.append("clip_grad")
+    )
+
+    # 3. Enhanced FakeScaler that logs events.
+    class EventScaler:
+        """Scaler that logs unscale and step events."""
+        def __init__(self):
+            self.enabled = True
+        def scale(self, loss):
+            """Scale the loss and return self."""
+            return self
+        def backward(self):
+            """Dummy backward."""
+            pass
+        def update(self):
+            """Dummy update."""
+            pass
+        def unscale_(self, optimizer):
+            """Dummy unscale that logs event."""
+            events.append("scaler_unscale")
+        def step(self, optimizer):
+            """Dummy step that logs event."""
+            events.append("scaler_step")
+            optimizer.step()
+
+    # Setup environment.
+    scaler = EventScaler() if amp_enabled else None
+
+    if amp_enabled:
+        class _NoOpAutocast:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+        monkeypatch.setattr(torch, "autocast", lambda *a, **k: _NoOpAutocast())
+
+    # Mock Criterion
+    def fake_criterion(**kwargs):
+        """Dummy criterion that returns a constant loss."""
+        return torch.tensor(0.5, requires_grad=True)
+
+    state = {
+        "model": model, "optimizer": opt, "scaler": scaler,
+        "loss_function": fake_criterion, "composite_loss_weighting": None,
+        "epoch": 0
+    }
+    batch = {"image": torch.randn(1, 4), "label": torch.randn(1, 4)}
+
+    # Run
+    t.training_step(state=state, data=batch)
+
+    # ASSERT THE EXACT ORDER.
+    if amp_enabled:
+        # Expected: Unscale -> Clip -> Scaler Step -> Optimizer Step
+        assert events == [
+            "scaler_unscale", "clip_grad", "scaler_step", "opt_step"
+        ]
+    else:
+        # Expected: Clip -> Optimizer Step.
+        assert events == ["clip_grad", "opt_step"]
 
 
 @patch("mist.training.trainers.patch_3d_trainer.sliding_window_inference")

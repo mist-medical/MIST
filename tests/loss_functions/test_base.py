@@ -1,4 +1,5 @@
 """Unit tests for the SegmentationLoss base class."""
+
 import pytest
 import torch
 
@@ -14,8 +15,8 @@ class DummyLoss(SegmentationLoss):
 
 def make_inputs(n_classes=3, exclude_background=False):
     """Generate synthetic data for loss input testing."""
-    y_true = torch.randint(0, n_classes, size=(1, 1, 4, 4, 4)) # Integer labels.
-    y_pred = torch.randn((1, n_classes, 4, 4, 4)) # Logits.
+    y_true = torch.randint(0, n_classes, size=(1, 1, 4, 4, 4)) 
+    y_pred = torch.randn((1, n_classes, 4, 4, 4))
     return y_true, y_pred
 
 
@@ -26,7 +27,7 @@ def test_preprocess_with_background():
     y_true_onehot, y_pred_softmax = loss.preprocess(y_true, y_pred)
 
     assert y_true_onehot.shape == y_pred_softmax.shape
-    assert y_true_onehot.shape[1] == y_pred.shape[1]  # num_classes
+    assert y_true_onehot.shape[1] == y_pred.shape[1]
     assert torch.allclose(
         y_pred_softmax.sum(dim=1), torch.ones_like(y_pred_softmax[:, 0]),
         atol=1e-4
