@@ -1,0 +1,72 @@
+name: Clean License Headers
+
+# Trigger manually so you don't accidentally run this on every push
+on: 
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  remove-headers:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          # Checkout full history to ensure committing back works smoothly
+          fetch-depth: 0
+
+      - name: Strip Headers with Python
+        run: |
+          python3 -c "
+          import os
+
+          # Configuration
+          target_dirs = ['mist', 'tests']
+          
+          # Walk through directories
+          for target_dir in target_dirs:
+              if not os.path.exists(target_dir):
+                  print(f'Directory {target_dir} not found. Skipping.')
+                  continue
+
+              for root, _, files in os.walk(target_dir):
+                  for file in files:
+                      if file.endswith('.py'):
+                          file_path = os.path.join(root, file)
+                          
+                          with open(file_path, 'r', encoding='utf-8') as f:
+                              lines = f.readlines()
+                          
+                          new_lines = []
+                          header_ended = False
+                          
+                          for line in lines:
+                              stripped = line.strip()
+                              
+                              # If we haven't finished processing the header yet...
+                              if not header_ended:
+                                  # If it is a comment line or an empty line, skip it
+                                  if stripped.startswith('#') or stripped == '':
+                                      continue
+                                  
+                                  # If we hit the docstring or code, stop skipping
+                                  header_ended = True
+                                  new_lines.append(line)
+                              else:
+                                  # Once header is gone, append all subsequent lines exactly as is
+                                  new_lines.append(line)
+                          
+                          # Write the file back only if changes were made
+                          if len(lines) != len(new_lines):
+                              print(f'Updating {file_path}')
+                              with open(file_path, 'w', encoding='utf-8') as f:
+                                  f.writelines(new_lines)
+          "
+
+      - name: Commit and Push Changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: remove inline license headers"
+          branch: ${{ github.head_ref }}
