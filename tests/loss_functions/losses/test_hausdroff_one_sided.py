@@ -1,6 +1,9 @@
 """Unit tests for the HDOneSidedLoss (HDOS) loss function."""
 
+from typing import Tuple
+
 import torch
+import pytest
 
 from mist.loss_functions.losses.hausdorff_one_sided import HDOneSidedLoss
 

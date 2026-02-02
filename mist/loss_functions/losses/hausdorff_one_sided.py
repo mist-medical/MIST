@@ -22,15 +22,16 @@ class HDOneSidedLoss(DiceCELoss):
             Note: Background is ALWAYS excluded from the Hausdorff term.
     """
 
-    def __init__(self, exclude_background: bool = False):
+    def __init__(self, exclude_background: bool = False, **kwargs: Any):
         """Initialize HDOS loss.
 
         Args:
             exclude_background: If True, class 0 is excluded from Dice/CE.
                 If False (Default), Dice/CE includes background.
                 (Hausdorff term always excludes background).
+            kwargs: Additional keyword arguments for future extensions.
         """
-        super().__init__(exclude_background=exclude_background)
+        super().__init__(exclude_background=exclude_background, **kwargs)
 
     def forward(
         self,

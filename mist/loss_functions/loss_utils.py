@@ -16,7 +16,7 @@ def get_one_hot(y_true: torch.Tensor, n_classes: int) -> torch.Tensor:
         One-hot encoding of the input segmentation mask.
     """
     y_true = y_true.long()
-    y_true = F.one_hot(y_true, num_classes=n_classes)  # pylint: disable=not-callable
+    y_true = F.one_hot(y_true, num_classes=n_classes)
     y_true = torch.transpose(y_true, dim0=5, dim1=1)
     y_true = torch.squeeze(y_true, dim=5)
     y_true = y_true.to(torch.int8)

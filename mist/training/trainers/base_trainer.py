@@ -1,10 +1,12 @@
 """Base trainer class for MIST."""
+
 from typing import Dict, Any
 from abc import ABC, abstractmethod
 from pathlib import Path
 import os
 import math
 import random
+
 import numpy as np
 import pandas as pd
 import rich
@@ -30,6 +32,7 @@ from mist.training.trainers.trainer_constants import TrainerConstants
 
 class BaseTrainer(ABC):
     """Base trainer that provides common functionality for training models."""
+
     def __init__(self, mist_args):
         """Initialize the trainer class."""
         self.mist_args = mist_args
@@ -83,21 +86,21 @@ class BaseTrainer(ABC):
     @abstractmethod
     def build_dataloaders(self, fold_data, rank, world_size):
         """Abstract method to build data loaders for training and validation."""
-        raise NotImplementedError( # pragma: no cover
+        raise NotImplementedError(  # pragma: no cover
             "build_dataloaders method must be implemented in the subclass."
         )
 
     @abstractmethod
     def training_step(self, **kwargs):
         """Abstract method for training step."""
-        raise NotImplementedError( # pragma: no cover
+        raise NotImplementedError(  # pragma: no cover
             "training_step method must be implemented in the subclass."
         )
 
     @abstractmethod
     def validation_step(self, **kwargs):
         """Abstract method for validation step."""
-        raise NotImplementedError( # pragma: no cover
+        raise NotImplementedError(  # pragma: no cover
             "validation_step method must be implemented in the subclass."
         )
 
@@ -275,7 +278,7 @@ class BaseTrainer(ABC):
         self.folds = {}
         for fold in range(training["nfolds"]):
             self.folds[fold] = {}
-            train_ids = list(self.paths.loc[self.paths["fold"]!= fold]["id"])
+            train_ids = list(self.paths.loc[self.paths["fold"] != fold]["id"])
             test_ids = list(self.paths.loc[self.paths["fold"] == fold]["id"])
 
             # Get list of training images and labels.
@@ -284,7 +287,7 @@ class BaseTrainer(ABC):
                 patient_ids=train_ids,
             )
             train_labels = training_utils.get_npy_paths(
-                data_dir= self.numpy_dir / "labels",
+                data_dir=self.numpy_dir / "labels",
                 patient_ids=train_ids,
             )
 
@@ -382,7 +385,11 @@ class BaseTrainer(ABC):
         # Get loss function. First get the loss function from the registry.
         # We then wrap it in a DeepSupervisionLoss, which will handle
         # deep supervision if the model supports it.
-        loss_function = get_loss(training["loss"]["name"])()
+        loss_cls = get_loss(training["loss"]["name"])
+        loss_params = {
+            "sddl_spacing_xyz": self.config["preprocessing"]["target_spacing"],
+        }
+        loss_function = loss_cls(**loss_params)
         loss_function = DeepSupervisionLoss(loss_function)
 
         # Some composite loss functions require a scheduler for the
@@ -422,7 +429,8 @@ class BaseTrainer(ABC):
         )
 
         # Get gradient scaler if AMP is enabled.
-        scaler = torch.amp.GradScaler("cuda") if training["amp"] else None # type: ignore
+        scaler = torch.amp.GradScaler(
+            "cuda") if training["amp"] else None  # type: ignore
 
         return {
             "model": model,
@@ -473,7 +481,8 @@ class BaseTrainer(ABC):
                 "Ensure that the validation set is large enough for the number "
                 "of GPUs being used or reduce the number of GPUs."
             )
-        val_steps = math.ceil(len(fold_data["val_images"]) / max(1, world_size))
+        val_steps = math.ceil(
+            len(fold_data["val_images"]) / max(1, world_size))
 
         # Build components for the fold.
         state = self.build_components(rank=rank, world_size=world_size)
@@ -513,7 +522,7 @@ class BaseTrainer(ABC):
                 with progress_bar.TrainProgressBar(
                     current_epoch=epoch + 1,
                     fold=fold,
-                    epochs= self.config["training"]["epochs"],
+                    epochs=self.config["training"]["epochs"],
                     train_steps=fold_data["steps_per_epoch"],
                 ) as pb:
                     for _ in range(fold_data["steps_per_epoch"]):
@@ -634,7 +643,9 @@ class BaseTrainer(ABC):
                         )
                         torch.save(to_save.state_dict(), model_name)
                     else:
-                        self.console.print("Validation loss did not improve.\n")
+                        self.console.print(
+                            "Validation loss did not improve.\n"
+                        )
                 else:
                     # For all other ranks, just perform the validation step.
                     for _ in range(val_steps):
@@ -642,7 +653,9 @@ class BaseTrainer(ABC):
                         batch = val_loader.next()[0]
 
                         # Compute validation loss.
-                        val_loss = self.validation_step(state=state, data=batch)
+                        val_loss = self.validation_step(
+                            state=state, data=batch
+                        )
 
                         # Aggregate validation losses across ranks.
                         if use_ddp:
@@ -695,14 +708,14 @@ class BaseTrainer(ABC):
         instances of the training function, each on a separate GPU.
         """
         # Enable some performance optimizations.
-        torch.backends.cuda.matmul.allow_tf32 = True
-        torch.backends.cudnn.allow_tf32 = True
+        torch.set_float32_matmul_precision('high')
+        torch.backends.cudnn.conv.fp32_precision = 'tf32'
         torch.backends.cudnn.benchmark = True
 
         # Train model.
         world_size = torch.cuda.device_count()
         if world_size > 1:
-            mp.spawn( # type: ignore
+            mp.spawn(  # type: ignore
                 self.run_cross_validation,
                 args=(world_size,),
                 nprocs=world_size,

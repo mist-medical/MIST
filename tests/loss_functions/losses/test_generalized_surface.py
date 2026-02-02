@@ -1,6 +1,9 @@
 """Unit tests for the Generalized Surface Loss (GSL)."""
 
+from typing import Tuple
+
 import torch
+import pytest
 
 from mist.loss_functions.losses.generalized_surface import GenSurfLoss
 

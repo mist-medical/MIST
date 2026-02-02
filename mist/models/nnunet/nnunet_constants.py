@@ -26,3 +26,6 @@ class NNUnetConstants:
 
     # Initial value for bias in convolutional layers.
     INITIAL_BIAS_VALUE = 0
+
+    # Reduction threshold for feature projection for MGNets.
+    REDUCTION_THRESHOLD = 512

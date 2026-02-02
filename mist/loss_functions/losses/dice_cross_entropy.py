@@ -21,7 +21,7 @@ class DiceCELoss(DiceLoss):
         cross_entropy: PyTorch's cross entropy loss module.
     """
 
-    def __init__(self, exclude_background: bool = False):
+    def __init__(self, exclude_background: bool = False, **kwargs: Any):
         """Initialize the DiceCELoss.
 
         Args:
@@ -29,9 +29,10 @@ class DiceCELoss(DiceLoss):
                 excluded from the Dice computation ONLY. The Cross Entropy
                 calculation will always include the background to ensure
                 the model learns to suppress false positives.
+            kwargs: Additional keyword arguments for future extensions.
         """
         # Initialize DiceLoss (parent handles exclude_background for Dice part).
-        super().__init__(exclude_background=exclude_background)
+        super().__init__(exclude_background=exclude_background, **kwargs)
 
         # Initialize CE.
         # We do NOT use ignore_index here. We always want CE to penalize

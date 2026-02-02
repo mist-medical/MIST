@@ -5,3 +5,5 @@ from mist.loss_functions.losses.cl_dice import CLDice
 from mist.loss_functions.losses.generalized_surface import GenSurfLoss
 from mist.loss_functions.losses.boundary import BoundaryLoss
 from mist.loss_functions.losses.hausdorff_one_sided import HDOneSidedLoss
+from mist.loss_functions.losses.surface_dice_dilation import VolumetricSDDL
+from mist.loss_functions.losses.surface_dice_dilation import VesselSDDL

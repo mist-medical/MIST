@@ -23,15 +23,16 @@ class BoundaryLoss(DiceCELoss):
             Note: Background is ALWAYS excluded from the Boundary term.
     """
 
-    def __init__(self, exclude_background: bool = False):
+    def __init__(self, exclude_background: bool = False, **kwargs):
         """Initialize BoundaryLoss.
 
         Args:
             exclude_background: If True, class 0 is excluded from the Dice/CE
                 calculation. If False (Default), Dice/CE includes background.
                 (Boundary term always excludes background).
+            kwargs: Additional keyword arguments for future extensions.
         """
-        super().__init__(exclude_background=exclude_background)
+        super().__init__(exclude_background=exclude_background, **kwargs)
 
     def forward(
         self,

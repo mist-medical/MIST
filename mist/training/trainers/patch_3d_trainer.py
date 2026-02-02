@@ -12,6 +12,7 @@ from mist.training.trainers.trainer_constants import TrainerConstants as constan
 
 class Patch3DTrainer(BaseTrainer):
     """Trainer for 3D patch-based training in MIST."""
+
     def build_dataloaders(
         self,
         fold_data: Dict[str, Any],

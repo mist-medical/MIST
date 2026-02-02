@@ -1,7 +1,8 @@
 """Base class for segmentation loss functions."""
 
 from abc import ABC, abstractmethod
-from typing import Tuple
+from typing import Tuple, Any
+
 
 import torch
 from torch import nn
@@ -26,12 +27,14 @@ class SegmentationLoss(nn.Module, ABC):
         avoid_division_by_zero: A small constant to prevent division by zero
             in loss computations.
     """
-    def __init__(self,exclude_background: bool = False):
+
+    def __init__(self, exclude_background: bool = False, **kwargs: Any):
         """Initialize the SegmentationLoss.
 
         Args:
             exclude_background: If True, the background class (class 0) is
                 excluded from the loss computation.
+            kwargs: Additional keyword arguments for future extensions.
         """
         super().__init__()
         self.exclude_background = exclude_background

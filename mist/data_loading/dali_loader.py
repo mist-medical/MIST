@@ -1,15 +1,16 @@
 """DALI loaders for loading data into models during training."""
+
 from collections.abc import Sequence
 from typing import List, Optional, Tuple
+
 import numpy as np
 
-# pylint: disable=import-error
-from nvidia.dali import fn # type: ignore
-from nvidia.dali import types # type: ignore
-from nvidia.dali.tensors import TensorCPU, TensorGPU # type: ignore
-from nvidia.dali.pipeline import Pipeline # type: ignore
-from nvidia.dali.plugin.pytorch import DALIGenericIterator # type: ignore
-# pylint: enable=import-error
+
+from nvidia.dali import fn
+from nvidia.dali import types
+from nvidia.dali.tensors import TensorCPU, TensorGPU
+from nvidia.dali.pipeline import Pipeline
+from nvidia.dali.plugin.pytorch import DALIGenericIterator
 
 from mist.data_loading.data_loading_constants import DataLoadingConstants as constants
 import mist.data_loading.data_loading_utils as utils
@@ -27,6 +28,7 @@ class GenericPipeline(Pipeline):
         input_label_files: DALI Numpy reader operator for reading labels.
         input_dtm: DALI Numpy reader operator for reading DTM data.
     """
+
     def __init__(
         self,
         batch_size: int,
@@ -35,10 +37,10 @@ class GenericPipeline(Pipeline):
         shard_id: int,
         seed: int,
         num_gpus: int,
-        shuffle_input: bool=True,
-        input_image_files: Optional[List[str]]=None,
-        input_label_files: Optional[List[str]]=None,
-        input_dtm_files: Optional[List[str]]=None,
+        shuffle_input: bool = True,
+        input_image_files: Optional[List[str]] = None,
+        input_label_files: Optional[List[str]] = None,
+        input_dtm_files: Optional[List[str]] = None,
     ):
         """Initialize the pipeline with the given parameters.
 
@@ -142,6 +144,7 @@ class TrainPipeline(GenericPipeline):
         dimension: Whether to return 2D or 3D data. If 2D, the pipeline returns
             DHWC data. If 3D, the pipeline returns CDHW data.
     """
+
     def __init__(
         self,
         image_paths: List[str],
@@ -150,15 +153,15 @@ class TrainPipeline(GenericPipeline):
         roi_size: Tuple[int, int, int],
         labels: Optional[List[int]],
         oversampling: Optional[float],
-        extract_patches: bool=True,
-        use_augmentation: bool=True,
-        use_flips: bool=True,
-        use_zoom: bool=True,
-        use_noise: bool=True,
-        use_blur: bool=True,
-        use_brightness: bool=True,
-        use_contrast: bool=True,
-        dimension: int=3,
+        extract_patches: bool = True,
+        use_augmentation: bool = True,
+        use_flips: bool = True,
+        use_zoom: bool = True,
+        use_noise: bool = True,
+        use_blur: bool = True,
+        use_brightness: bool = True,
+        use_contrast: bool = True,
+        dimension: int = 3,
         **kwargs,
     ):
         super().__init__(
@@ -241,7 +244,7 @@ class TrainPipeline(GenericPipeline):
             self,
             image: TensorCPU,
             label: TensorCPU,
-            dtm: Optional[TensorCPU]=None,
+            dtm: Optional[TensorCPU] = None,
     ) -> Sequence[TensorGPU]:
         """Extract a random patch from the image, label, and DTM.
 
@@ -274,9 +277,9 @@ class TrainPipeline(GenericPipeline):
             label,
             format="start_end",  # ROI format as (start, end) coordinates.
             background=0,        # Background pixel value to ignore.
-            classes=self.labels, # List of labels in the dataset.
-            class_weights=self.label_weights, # Class weights.
-            foreground_prob=self.oversampling, # Probability of foreground.
+            classes=self.labels,  # List of labels in the dataset.
+            class_weights=self.label_weights,  # Class weights.
+            foreground_prob=self.oversampling,  # Probability of foreground.
             device="cpu",        # Perform the operation on the CPU.
             cache_objects=True,  # Cache object locations for efficiency.
         )
@@ -480,7 +483,7 @@ class TrainPipeline(GenericPipeline):
             if self.use_contrast:
                 image = utils.contrast_fn(image)
 
-        # Change format to CDWH for pytorch compatibility.
+        # Change format to CDWH for PyTorch compatibility.
         image = fn.transpose(image, perm=[3, 0, 1, 2])
         label = fn.transpose(label, perm=[3, 0, 1, 2])
         if self.has_dtms:
@@ -497,6 +500,7 @@ class TestPipeline(GenericPipeline):
     images from the input readers and transposes them to CDHW format for PyTorch
     compatibility.
     """
+
     def __init__(
         self,
         image_paths: List[str],
@@ -505,7 +509,7 @@ class TestPipeline(GenericPipeline):
         super().__init__(
             input_image_files=image_paths,
             input_label_files=None,
-            shuffle_input=False, # Do not shuffle the input data.
+            shuffle_input=False,  # Do not shuffle the input data.
             **kwargs
         )
 
@@ -531,6 +535,7 @@ class EvalPipeline(GenericPipeline):
     streams the images and labels from the input readers and transposes them to
     CDHW format for PyTorch compatibility.
     """
+
     def __init__(
         self,
         image_paths: List[str],
@@ -573,14 +578,14 @@ def get_training_dataset(
     num_workers: int,
     rank: int,
     world_size: int,
-    extract_patches: bool=True,
-    use_augmentation: bool=True,
-    use_flips: bool=True,
-    use_zoom: bool=True,
-    use_noise: bool=True,
-    use_blur: bool=True,
-    use_brightness: bool=True,
-    use_contrast: bool=True,
+    extract_patches: bool = True,
+    use_augmentation: bool = True,
+    use_flips: bool = True,
+    use_zoom: bool = True,
+    use_noise: bool = True,
+    use_blur: bool = True,
+    use_brightness: bool = True,
+    use_contrast: bool = True,
 ) -> DALIGenericIterator:
     """Retrieve the appropriate training pipeline based on the input data.
 
@@ -716,8 +721,8 @@ def get_test_dataset(
     image_paths: List[str],
     seed: int,
     num_workers: int,
-    rank: int=0,
-    world_size: int=1,
+    rank: int = 0,
+    world_size: int = 1,
 ) -> DALIGenericIterator:
     """"Build a DALI test pipeline for loading images.
 

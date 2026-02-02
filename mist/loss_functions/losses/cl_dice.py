@@ -1,5 +1,7 @@
 """clDice loss function."""
 
+from typing import Any
+
 import torch
 
 from mist.loss_functions import loss_utils
@@ -25,6 +27,7 @@ class CLDice(DiceCELoss):
         iterations: int = 10,
         smooth: float = 1.0,
         exclude_background: bool = False,
+        **kwargs: Any,
     ):
         """Initialize the CLDice loss.
 
@@ -33,9 +36,10 @@ class CLDice(DiceCELoss):
             smooth: Small constant for numerical stability.
             exclude_background: If True, excludes background from Dice/CE.
                 (Note: Background is ALWAYS excluded from clDice component).
+            kwargs: Additional keyword arguments for future extensions.
         """
         # Initialize parent DiceCELoss.
-        super().__init__(exclude_background=exclude_background)
+        super().__init__(exclude_background=exclude_background, **kwargs)
 
         self.iterations = iterations
         self.smooth = smooth

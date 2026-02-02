@@ -1,5 +1,7 @@
 """Soft Dice loss function for segmentation tasks."""
 
+from typing import Any
+
 import torch
 
 from mist.loss_functions.base import SegmentationLoss
@@ -19,20 +21,21 @@ class DiceLoss(SegmentationLoss):
     Attributes:
         smooth: A small constant to prevent division by zero.
     """
-    def __init__(self, exclude_background: bool = False):
+    def __init__(self, exclude_background: bool = False, **kwargs: Any):
         """Initialize Dice loss.
 
         Args:
             exclude_background: If True, the background class (class 0) is
                 excluded from the loss computation.
+            kwargs: Additional keyword arguments for future extensions.
         """
-        super().__init__(exclude_background = exclude_background)
+        super().__init__(exclude_background = exclude_background, **kwargs)
 
     def forward(
         self,
         y_true: torch.Tensor,
         y_pred: torch.Tensor,
-        **kwargs,
+        **kwargs: Any,
     ) -> torch.Tensor:
         """Compute the Dice loss.
 

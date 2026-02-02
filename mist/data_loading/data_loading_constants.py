@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+
 @dataclass(frozen=True)
 class DataLoadingConstants:
     """Dataclass for constants used in data loading."""
