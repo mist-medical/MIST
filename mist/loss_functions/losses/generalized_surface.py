@@ -1,13 +1,3 @@
-# Copyright (c) MIST Imaging LLC.
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#     http://www.apache.org/licenses/LICENSE-2.0
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """Generalized surface loss function for segmentation tasks."""
 import torch
 
@@ -33,7 +23,7 @@ class GenSurfLoss(DiceCELoss):
     """
     def __init__(self, exclude_background: bool=False):
         """Initialize Generalized Surface Loss.
-        
+
         Args:
             exclude_background: Whether to exclude the background class
                 (channel 0) from the loss computation.
@@ -51,7 +41,7 @@ class GenSurfLoss(DiceCELoss):
         """Compute the Generalized Surface Loss (GSL).
 
         Args:
-            y_true: Ground truth tensor of shape (B, H, W, D).
+            y_true: Ground truth tensor of shape (B, 1, H, W, D).
             y_pred: Logits tensor of shape (B, C, H, W, D).
             dtm: Distance transform map of shape (B, C, H, W, D).
             alpha: Weight for region loss (0 ≤ alpha ≤ 1).

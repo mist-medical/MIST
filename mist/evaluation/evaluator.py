@@ -1,15 +1,6 @@
-# Copyright (c) MIST Imaging LLC.
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#     http://www.apache.org/licenses/LICENSE-2.0
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """Evaluation class for computing segmentation accuracy metrics."""
 from typing import Dict, List, Tuple, Union, Optional
+from pathlib import Path
 import os
 import ants
 import pandas as pd
@@ -17,7 +8,9 @@ import numpy as np
 import rich
 
 # MIST imports.
-from mist.runtime import utils
+from mist.utils import progress_bar
+from mist.analyze_data import analyzer_utils
+from mist.evaluation import evaluation_utils
 from mist.metrics.metrics_registry import get_metric
 
 
@@ -51,7 +44,7 @@ class Evaluator:
         self,
         filepaths_dataframe: pd.DataFrame,
         evaluation_classes: Dict[str, List[int]],
-        output_csv_path: str,
+        output_csv_path: Union[str, Path],
         selected_metrics: List[str],
         **metric_kwargs,
     ):
@@ -86,7 +79,7 @@ class Evaluator:
         self.metric_kwargs = metric_kwargs
 
         # Initialize the results DataFrame.
-        self.results_dataframe = utils.initialize_results_dataframe(
+        self.results_dataframe = evaluation_utils.initialize_results_dataframe(
             self.evaluation_classes, self.selected_metrics
         )
 
@@ -198,8 +191,8 @@ class Evaluator:
         return None
 
     def _load_patient_data(
-            self,
-            patient_id: str
+        self,
+        patient_id: str
     ) -> Dict[str, ants.core.ants_image.ANTsImage]:
         """Load the ground truth and prediction paths for a given patient ID.
 
@@ -250,7 +243,7 @@ class Evaluator:
         # Load the image headers and compare them before loading the images.
         mask_header = ants.image_header_info(row['mask'])
         prediction_header = ants.image_header_info(row['prediction'])
-        if not utils.compare_headers(mask_header, prediction_header):
+        if not analyzer_utils.compare_headers(mask_header, prediction_header):
             raise ValueError(
                 f"Image headers do not match for patient ID: {patient_id}. "
                 "Ensure that the ground truth mask and prediction have the "
@@ -410,9 +403,7 @@ class Evaluator:
         """
         error_messages = []
         patient_ids = self.filepaths_dataframe["id"].tolist()
-        progress_bar = utils.get_progress_bar("Evaluating predictions")
-
-        with progress_bar as pb:
+        with progress_bar.get_progress_bar("Evaluating predictions") as pb:
             for patient_id in pb.track(patient_ids):
                 try:
                     # Load ground truth and prediction images.
@@ -456,7 +447,7 @@ class Evaluator:
             self.console.print(rich.text.Text(full_error_text)) # type: ignore
 
         # Compute summary statistics and write results.
-        self.results_dataframe = utils.compute_results_stats(
+        self.results_dataframe = evaluation_utils.compute_results_stats(
             self.results_dataframe
         )
         self.results_dataframe.to_csv(self.output_csv_path, index=False)

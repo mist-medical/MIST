@@ -1,13 +1,3 @@
-# Copyright (c) MIST Imaging LLC.
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#     http://www.apache.org/licenses/LICENSE-2.0
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """Tests for the Evaluator class in MIST."""
 import sys
 import pytest
@@ -15,6 +5,7 @@ from unittest import mock
 import numpy as np
 import pandas as pd
 
+# MIST imports.
 from mist.evaluation.evaluator import Evaluator
 
 
@@ -22,6 +13,7 @@ from mist.evaluation.evaluator import Evaluator
 # the Evaluator class methods and initialization.
 @pytest.fixture
 def valid_filepaths_df(tmp_path):
+    """Fixture that provides a valid filepaths DataFrame."""
     return pd.DataFrame({
         "id": ["patient001"],
         "mask": [str(tmp_path / "mask.nii.gz")],
@@ -31,11 +23,13 @@ def valid_filepaths_df(tmp_path):
 
 @pytest.fixture
 def valid_classes():
+    """Fixture that provides valid evaluation classes."""
     return {"tumor": [1], "organ": [2, 3]}
 
 
 @pytest.fixture
 def valid_metrics():
+    """Fixture that provides valid evaluation metrics."""
     return ["dice"]
 
 
@@ -43,12 +37,14 @@ def valid_metrics():
 def mock_valid_inputs(
     valid_filepaths_df, valid_classes, valid_metrics, tmp_path
 ):
+    """Fixture that provides a tuple of valid inputs for Evaluator."""
     output_path = tmp_path / "results.csv"
     return valid_filepaths_df, valid_classes, str(output_path), valid_metrics
 
 
 # Tests for input validation methods.
 def test_validate_filepaths_dataframe_valid(valid_filepaths_df):
+    """Test that a valid filepaths DataFrame passes validation."""
     assert isinstance(
         Evaluator._validate_filepaths_dataframe(valid_filepaths_df),
         pd.DataFrame
@@ -56,6 +52,7 @@ def test_validate_filepaths_dataframe_valid(valid_filepaths_df):
 
 
 def test_validate_filepaths_dataframe_invalid():
+    """Test that an invalid filepaths DataFrame raises ValueError."""
     # Missing prediction.
     df = pd.DataFrame({"id": ["x"], "mask": ["a.nii.gz"]})
     with pytest.raises(ValueError, match="must contain columns"):
@@ -63,26 +60,32 @@ def test_validate_filepaths_dataframe_invalid():
 
 
 def test_validate_evaluation_classes_valid(valid_classes):
+    """Test that valid evaluation classes pass validation."""
     assert (
         Evaluator._validate_evaluation_classes(valid_classes) == valid_classes
     )
 
 
 def test_validate_evaluation_classes_empty_label_list():
+    """Test that empty label lists raise ValueError."""
     with pytest.raises(ValueError, match="must have a non-empty list"):
         Evaluator._validate_evaluation_classes({"bad_class": []})
 
 
 def test_validate_evaluation_classes_zero_label():
+    """Test that label lists with zero raise ValueError."""
     with pytest.raises(ValueError, match="must be greater than 0"):
         Evaluator._validate_evaluation_classes({"bad_class": [0, 1]})
 
 
-# Test initialization of Evaluator. This tests that the Evaluator class
-# initializes correctly with valid inputs and that it sets up the results
-# dataframe and console print functionality.
-@mock.patch("mist.evaluation.evaluator.utils.initialize_results_dataframe")
+@mock.patch("mist.evaluation.evaluation_utils.initialize_results_dataframe")
 def test_evaluator_initialization(mock_init_df, mock_valid_inputs):
+    """Test that the Evaluator initializes correctly with valid inputs.
+
+    Test initialization of Evaluator. This tests that the Evaluator class
+    initializes correctly with valid inputs and that it sets up the results
+    dataframe and console print functionality.
+    """
     df, classes, output_path, metrics = mock_valid_inputs
     mock_df = pd.DataFrame()
     mock_init_df.return_value = mock_df
@@ -105,7 +108,6 @@ def test_evaluator_initialization(mock_init_df, mock_valid_inputs):
     mock_init_df.assert_called_once_with(classes, metrics)
 
 
-# Test utility methods - compute diagonal distance and edge case handling.
 def test_compute_diagonal_distance():
     """Test the diagonal distance calculation."""
     shape = (100, 100, 100)
@@ -120,7 +122,7 @@ def test_compute_diagonal_distance():
 @pytest.mark.parametrize(
     "mask_sum, pred_sum, best, worst, expected",
     [
-        (0, 0, 1.0, 0.0, 1.0), # Both empty -> best.
+        (0, 0, 1.0, 0.0, 1.0),  # Both empty -> best.
         (0, 10, 1.0, 0.0, 0.0), # One empty -> worst.
         (10, 0, 1.0, 0.0, 0.0), # One empty -> worst.
         (5, 5, 1.0, 0.0, None), # Both non-empty -> None.
@@ -139,6 +141,7 @@ def test_handle_edge_cases(mask_sum, pred_sum, best, worst, expected):
 # file existence checks.
 @pytest.fixture
 def filepaths_df_with_rows(tmp_path):
+    """Fixture that provides a filepaths DataFrame with actual files."""
     mask_path = tmp_path / "mask.nii.gz"
     pred_path = tmp_path / "prediction.nii.gz"
     mask_path.write_text("fake")
@@ -151,16 +154,11 @@ def filepaths_df_with_rows(tmp_path):
 
 
 @mock.patch(
-        "mist.evaluation.evaluator.utils.compare_headers",
-        return_value=True
+    "mist.analyze_data.analyzer_utils.compare_headers",
+    return_value=True
 )
-@mock.patch(
-    "mist.evaluation.evaluator.ants.image_header_info",
-    return_value={"spacing": (1.0, 1.0, 1.0)}
-)
-@mock.patch(
-    "mist.evaluation.evaluator.ants.image_read", return_value="image_obj"
-)
+@mock.patch("ants.image_header_info", return_value={"spacing": (1.0, 1.0, 1.0)})
+@mock.patch("ants.image_read", return_value="image_obj")
 def test_load_patient_data_valid(
     mock_read, mock_header, mock_compare, filepaths_df_with_rows
 ):
@@ -194,7 +192,7 @@ def test_load_patient_data_multiple_entries(filepaths_df_with_rows):
         evaluator._load_patient_data("patient001")
 
 
-@mock.patch("mist.evaluation.evaluator.os.path.exists", return_value=False)
+@mock.patch("os.path.exists", return_value=False)
 def test_load_patient_data_file_not_found(mock_exists, filepaths_df_with_rows):
     """Test that FileNotFoundError is raised when mask file does not exist."""
     evaluator = Evaluator(
@@ -206,13 +204,13 @@ def test_load_patient_data_file_not_found(mock_exists, filepaths_df_with_rows):
         evaluator._load_patient_data("patient001")
 
 
-@mock.patch("mist.evaluation.evaluator.os.path.exists", return_value=True)
+@mock.patch("os.path.exists", return_value=True)
 @mock.patch(
-    "mist.evaluation.evaluator.ants.image_header_info",
+    "ants.image_header_info",
     side_effect=[{"spacing": (1,1,1)}, {"spacing": (2,2,2)}]
 )
 @mock.patch(
-    "mist.evaluation.evaluator.utils.compare_headers", return_value=False
+    "mist.analyze_data.analyzer_utils.compare_headers", return_value=False
 )
 def test_load_patient_data_header_mismatch(
     mock_compare, mock_header, mock_exists, filepaths_df_with_rows
@@ -506,9 +504,9 @@ def dummy_eval_inputs(tmp_path):
     return df, classes, str(output_csv_path), metrics
 
 
-@mock.patch("mist.evaluation.evaluator.utils.compute_results_stats")
-@mock.patch("mist.evaluation.evaluator.utils.initialize_results_dataframe")
-@mock.patch("mist.evaluation.evaluator.utils.get_progress_bar")
+@mock.patch("mist.evaluation.evaluation_utils.compute_results_stats")
+@mock.patch("mist.evaluation.evaluation_utils.initialize_results_dataframe")
+@mock.patch("mist.utils.progress_bar.get_progress_bar")
 @mock.patch("mist.evaluation.evaluator.Evaluator._evaluate_single_patient")
 @mock.patch("mist.evaluation.evaluator.Evaluator._load_patient_data")
 def test_run_method_success(
@@ -567,13 +565,13 @@ def test_run_method_success(
     assert evaluator.results_dataframe is dummy_results_df
 
 
-@mock.patch("mist.evaluation.evaluator.utils.get_progress_bar")
+@mock.patch("mist.utils.progress_bar.get_progress_bar")
 @mock.patch(
-    "mist.evaluation.evaluator.utils.compute_results_stats",
+    "mist.evaluation.evaluation_utils.compute_results_stats",
     side_effect=lambda x: x
 )
 @mock.patch(
-    "mist.evaluation.evaluator.utils.initialize_results_dataframe",
+    "mist.evaluation.evaluation_utils.initialize_results_dataframe",
     return_value=pd.DataFrame()
 )
 def test_run_collects_patient_errors(
@@ -621,13 +619,13 @@ def test_run_collects_patient_errors(
         assert "Fake error" in str(mock_console.call_args)
 
 
-@mock.patch("mist.evaluation.evaluator.utils.get_progress_bar")
+@mock.patch("mist.utils.progress_bar.get_progress_bar")
 @mock.patch(
-    "mist.evaluation.evaluator.utils.compute_results_stats",
+    "mist.evaluation.evaluation_utils.compute_results_stats",
     side_effect=lambda x: x
 )
 @mock.patch(
-    "mist.evaluation.evaluator.utils.initialize_results_dataframe",
+    "mist.evaluation.evaluation_utils.initialize_results_dataframe",
     return_value=pd.DataFrame()
 )
 def test_run_handles_exceptions(

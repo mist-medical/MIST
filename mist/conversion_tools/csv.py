@@ -1,23 +1,13 @@
-# Copyright (c) MIST Imaging LLC.
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#     http://www.apache.org/licenses/LICENSE-2.0
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """Converts data from csv files to MIST format."""
 import os
 from typing import Optional
-
 import pprint
 import rich
 import pandas as pd
 
 # MIST imports.
-from mist.runtime import utils
+from mist.utils import io, progress_bar
+from mist.conversion_tools import conversion_utils
 
 # Set up console for rich text.
 console = rich.console.Console()
@@ -41,8 +31,7 @@ def copy_csv_data(
     Returns:
         None. The data is copied to the destination directory.
     """
-    # Setup rich progress bar and error messages.
-    progress_bar = utils.get_progress_bar(progress_bar_message)
+    # Initialize error messages.
     error_messages = ""
 
     # Set image start index based on mode. The csv files have the following
@@ -50,7 +39,7 @@ def copy_csv_data(
     # in the "train" mode.
     image_start_idx = 2 if mode == "training" else 1
 
-    with progress_bar as pb:
+    with progress_bar.get_progress_bar(progress_bar_message) as pb:
         for patient in pb.track(df.itertuples(index=False), total=len(df)):
             # Convert row tuple to dictionary.
             patient_dict = patient._asdict() # type: ignore
@@ -66,7 +55,9 @@ def copy_csv_data(
                 if not os.path.exists(mask_source):
                     error_messages += f"Mask {mask_source} does not exist!\n"
                     continue
-                utils.copy_image_from_source_to_dest(mask_source, mask_dest)
+                conversion_utils.copy_image_from_source_to_dest(
+                    mask_source, mask_dest
+                )
 
             # Copy images to new patient folder
             image_keys = list(patient_dict.keys())[image_start_idx:]
@@ -78,7 +69,9 @@ def copy_csv_data(
                 if not os.path.exists(image_source):
                     error_messages += f"Image {image_source} does not exist!\n"
                     continue
-                utils.copy_image_from_source_to_dest(image_source, image_dest)
+                conversion_utils.copy_image_from_source_to_dest(
+                    image_source, image_dest
+                )
 
     if error_messages:
         console.print(rich.text.Text(error_messages)) # type: ignore
@@ -170,4 +163,4 @@ def convert_csv(
     )
     console.print(text)
 
-    utils.write_json_file(dataset_json_filename, dataset_json)
+    io.write_json_file(dataset_json_filename, dataset_json)

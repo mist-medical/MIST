@@ -1,12 +1,11 @@
 """Constants for the Analyzer class."""
-
 import dataclasses
+import os
 import numpy as np
 
 @dataclasses.dataclass(frozen=True)
 class AnalyzeConstants:
     """Dataclass for constants used in the analyze_data module."""
-
     # RAI orientation direction for ANTs.
     RAI_ANTS_DIRECTION = np.eye(3)
 
@@ -43,3 +42,8 @@ class AnalyzeConstants:
 
     # How many digits are printed for floating point numbers.
     PRINT_FLOATING_POINT_PRECISION = 4
+
+    # Create the base_config.json path.
+    BASE_CONFIG_JSON_PATH = os.path.join(
+        os.path.dirname(__file__), "base_config.json"
+    )

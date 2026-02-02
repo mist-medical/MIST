@@ -31,7 +31,7 @@ def create_valid_params(
         "dropout": None,
         "use_deep_supervision": use_deep_supervision,
         "num_deep_supervision_heads": num_deep_supervision_heads,
-        "use_residual_block": False,
+        "use_residual_blocks": False,
         "trans_bias": False,
     }
     return params

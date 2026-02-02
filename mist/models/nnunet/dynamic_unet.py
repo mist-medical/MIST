@@ -1,13 +1,3 @@
-# Copyright (c) MIST Imaging LLC.
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#     http://www.apache.org/licenses/LICENSE-2.0
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """Modified version of MONAI's Dynamic UNet implementation for MIST.
 
 This module contains a modified version of MONAI's implementation of the
@@ -56,7 +46,7 @@ class DynamicUNet(nn.Module):
         dropout: Optional[Union[Tuple, str, float]]=None,
         use_deep_supervision: bool=False,
         num_deep_supervision_heads: int=2,
-        use_residual_block: bool=False,
+        use_residual_blocks: bool=False,
         trans_bias: bool=False,
     ):
 
@@ -71,7 +61,7 @@ class DynamicUNet(nn.Module):
         self.act_name = act_name
         self.dropout = dropout
         self.conv_block = (
-            dynamic_unet_blocks.UnetResBlock if use_residual_block
+            dynamic_unet_blocks.UnetResBlock if use_residual_blocks
             else dynamic_unet_blocks.UnetBasicBlock
         )
         self.trans_bias = trans_bias
@@ -309,14 +299,14 @@ class DynamicUNet(nn.Module):
         )
 
     def get_module_list(
-            self,
-            in_channels: Sequence[int],
-            out_channels: Sequence[int],
-            kernel_size: Sequence[Union[Sequence[int], int]],
-            strides: Sequence[Union[Sequence[int], int]],
-            conv_block: nn.Module,
-            upsample_kernel_size: Optional[Sequence[Union[Sequence[int], int]]]=None,
-            trans_bias: bool=False,
+        self,
+        in_channels: Sequence[int],
+        out_channels: Sequence[int],
+        kernel_size: Sequence[Union[Sequence[int], int]],
+        strides: Sequence[Union[Sequence[int], int]],
+        conv_block: nn.Module,
+        upsample_kernel_size: Optional[Sequence[Union[Sequence[int], int]]]=None,
+        trans_bias: bool=False,
     ) -> nn.ModuleList:
         """Get a list of convolutional blocks for the UNet.
 

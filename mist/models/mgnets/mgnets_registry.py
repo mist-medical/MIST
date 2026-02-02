@@ -1,13 +1,3 @@
-# Copyright (c) MIST Imaging LLC.
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#     http://www.apache.org/licenses/LICENSE-2.0
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """Create variants of MGNet models."""
 # MIST imports.
 from mist.models.mgnets.mist_mgnets import MGNet
@@ -20,17 +10,18 @@ def create_mgnet(variant: str, **kwargs) -> MGNet:
     Args:
         variant: The MGNet variant to create. Options are 'fmgnet' and 'wnet'.
         **kwargs: Additional keyword arguments including:
-            - n_channels: Number of input channels.
-            - n_classes: Number of output channels.
-            - use_res_block: Whether to use residual connections.
-            - deep_supervision: Whether to use deep supervision.
+            - in_channels: Number of input channels.
+            - out_channels: Number of output channels.
+            - use_residual_blocks: Whether to use residual connections.
+            - use_deep_supervision: Whether to use deep supervision.
 
     Returns:
         An instance of the MGNet model.
     """
     # Validate required keys.
     required_keys = [
-        "n_channels", "n_classes", "use_res_block", "deep_supervision"
+        "in_channels", "out_channels", "use_residual_blocks",
+        "use_deep_supervision"
     ]
     for key in required_keys:
         if key not in kwargs:
@@ -39,12 +30,12 @@ def create_mgnet(variant: str, **kwargs) -> MGNet:
             )
 
     common_args = {
-        "n_channels": kwargs["n_channels"],
-        "n_classes": kwargs["n_classes"],
+        "in_channels": kwargs["in_channels"],
+        "out_channels": kwargs["out_channels"],
         "depth": 3,
-        "use_res_block": kwargs["use_res_block"],
-        "deep_supervision": kwargs["deep_supervision"],
-        "deep_supervision_heads": 2,
+        "use_residual_blocks": kwargs["use_residual_blocks"],
+        "use_deep_supervision": kwargs["use_deep_supervision"],
+        "num_deep_supervision_heads": 2,
     }
 
     variant = variant.lower()

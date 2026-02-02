@@ -1,13 +1,3 @@
-# Copyright (c) MIST Imaging LLC.
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#     http://www.apache.org/licenses/LICENSE-2.0
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """Base class for MIST MGNet models."""
 from typing import List
 import numpy as np
@@ -26,11 +16,11 @@ class MGNet(nn.Module):
     Attributes:
         mg_net: The type of MGNet architecture to use, either "wnet" or
             "fmgnet".
-        n_channels: Number of input channels.
-        n_classes: Number of output classes.
-        use_res_block: Whether to use residual blocks in the network.
-        deep_supervision: Whether to use deep supervision in the network.
-        deep_supervision_heads: Number of heads for deep supervision.
+        in_channels: Number of input channels.
+        out_channels: Number of output classes.
+        use_residual_blocks: Whether to use residual blocks in the network.
+        use_deep_supervision: Whether to use deep supervision in the network.
+        num_deep_supervision_heads: Number of heads for deep supervision.
         out_channels: Number of output channels for the internal layers.
         previous_skips: Dictionary to store previous skip connections.
         previous_peaks: Dictionary to store previous peak connections.
@@ -42,35 +32,36 @@ class MGNet(nn.Module):
     def __init__(
         self,
         mg_net: str,
-        n_channels: int,
-        n_classes: int,
-        depth: int,
-        use_res_block: bool=False,
-        deep_supervision: bool=False,
-        deep_supervision_heads: int=2,
+        in_channels: int,
+        out_channels: int,
+        depth: int=3,
+        use_residual_blocks: bool=False,
+        use_deep_supervision: bool=False,
+        num_deep_supervision_heads: int=2,
     ):
         """Initialize the MGNet model.
 
         Args:
             mg_net: The type of MGNet architecture to use, either "wnet" or
                 "fmgnet".
-            n_channels: Number of input channels.
-            n_classes: Number of output classes.
+            in_channels: Number of input channels.
+            out_channels: Number of output channels for the final output.
+            internal_output_channels: Number of output channels for each layer.
             depth: Global depth of the network.
-            use_res_block: Whether to use residual blocks in the network.
-            deep_supervision: Whether to use deep supervision in the network.
-            deep_supervision_heads: Number of heads for deep supervision.
+            use_residual_blocks: Whether to use residual blocks in the network.
+            use_deep_supervision: Whether to use deep supervision in the network.
+            num_deep_supervision_heads: Number of heads for deep supervision.
         """
         super().__init__()
         # Set up the model parameters.
         self.mg_net = mg_net
-        self.n_channels = n_channels
-        self.n_classes = n_classes
-        self.out_channels = 32
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.internal_output_channels = 32
         self.previous_skips = {}
         self.previous_peaks = {}
-        self.deep_supervision = deep_supervision
-        self.deep_supervision_heads = deep_supervision_heads
+        self.use_deep_supervision = use_deep_supervision
+        self.num_deep_supervision_heads = num_deep_supervision_heads
 
         # Set up the depth of the network. This must be less than or equal to 5.
         if depth < 1 or depth > 5:
@@ -87,7 +78,7 @@ class MGNet(nn.Module):
         }
 
         # Define the block type based on whether to use residual blocks.
-        block = blocks.ResNetBlock if use_res_block else blocks.UNetBlock
+        block = blocks.ResNetBlock if use_residual_blocks else blocks.UNetBlock
 
         # Get in channels for decoders,
         if self.mg_net == "wnet":
@@ -102,15 +93,18 @@ class MGNet(nn.Module):
             raise ValueError("Invalid MG architecture")
 
         # Make sure number of deep supervision heads is less than network depth.
-        if self.deep_supervision and self.deep_supervision_heads > self.depth:
+        if (
+            self.use_deep_supervision
+            and self.num_deep_supervision_heads > self.depth
+        ):
             raise ValueError(
                 "Deep supervision heads must be less than or equal to depth."
             )
 
         # First convolution to get the input to the correct number of channels.
         self.first_conv = layers.ConvLayer(
-            in_channels=self.n_channels,
-            out_channels=self.out_channels,
+            in_channels=self.in_channels,
+            out_channels=self.internal_output_channels,
             **self.conv_kwargs,
         )
 
@@ -119,8 +113,8 @@ class MGNet(nn.Module):
         for i in range(self.depth):
             self.encoder.append(
                 blocks.EncoderBlock(
-                    in_channels=self.out_channels,
-                    out_channels=self.out_channels,
+                    in_channels=self.internal_output_channels,
+                    out_channels=self.internal_output_channels,
                     block=block,
                     down_only=False,
                     **self.conv_kwargs
@@ -129,8 +123,8 @@ class MGNet(nn.Module):
 
         # First bottleneck.
         self.bottleneck = blocks.Bottleneck(
-            in_channels=self.out_channels,
-            out_channels=self.out_channels,
+            in_channels=self.internal_output_channels,
+            out_channels=self.internal_output_channels,
             block=block,
             **self.conv_kwargs,
         )
@@ -159,27 +153,27 @@ class MGNet(nn.Module):
             self.decoder.append(
                 blocks.DecoderBlock(
                     in_channels=channels,
-                    out_channels=self.out_channels,
+                    out_channels=self.internal_output_channels,
                     block=block,
                     **self.conv_kwargs
                 )
             )
 
         # Initialize the deep supervision heads if required.
-        if self.deep_supervision:
+        if self.use_deep_supervision:
             self.heads = nn.ModuleList()
-            for _ in range(self.deep_supervision_heads):
+            for _ in range(self.num_deep_supervision_heads):
                 head = nn.Conv3d(
-                    in_channels=self.out_channels,
-                    out_channels=self.n_classes,
+                    in_channels=self.internal_output_channels,
+                    out_channels=self.out_channels,
                     kernel_size=1
                 )
                 self.heads.append(head)
 
         # Define pointwise convolution for final output.
         self.out = nn.Conv3d(
-            in_channels=self.out_channels,
-            out_channels=self.n_classes,
+            in_channels=self.internal_output_channels,
+            out_channels=self.out_channels,
             kernel_size=1
         )
 
@@ -223,6 +217,9 @@ class MGNet(nn.Module):
 
     def forward(self, x: torch.Tensor) -> dict:
         """Forward pass of the MGNet model."""
+        # Save input shape for deep supervision.
+        input_shape = x.shape[2:]
+
         # First convolution.
         x = self.first_conv(x)
 
@@ -259,7 +256,7 @@ class MGNet(nn.Module):
 
         # Main decoder branch.
         current_depth = self.depth - 1
-        if self.deep_supervision and self.training:
+        if self.use_deep_supervision and self.training:
             output_deep_supervision = list()
             cnt = 0
 
@@ -274,9 +271,9 @@ class MGNet(nn.Module):
             x = decoder(previous_features, x)
 
             # If deep supervision is enabled, add the output to the list.
-            if self.deep_supervision and self.training:
-                if self.deep_supervision_heads >= current_depth >= 1:
-                    head = interpolate(x, size=x.shape[2:])
+            if self.use_deep_supervision and self.training:
+                if self.num_deep_supervision_heads >= current_depth >= 1:
+                    head = interpolate(x, size=input_shape)
                     output_deep_supervision.append(self.heads[cnt](head))
                     cnt += 1
 
@@ -292,9 +289,11 @@ class MGNet(nn.Module):
             output = {}
             output["prediction"] = self.out(x)
 
-            if self.deep_supervision:
+            if self.use_deep_supervision:
                 output_deep_supervision.reverse()
                 output["deep_supervision"] = tuple(output_deep_supervision)
+            else:
+                output["deep_supervision"] = None
         else:
             output = self.out(x)
 
