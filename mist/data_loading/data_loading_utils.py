@@ -1,15 +1,14 @@
 """Utility functions for data loading."""
+
 from collections.abc import Sequence
 from typing import List, Optional, Any
 import os
 
-# pylint: disable=import-error
-from nvidia.dali import fn # type: ignore
-from nvidia.dali import math # type: ignore
-from nvidia.dali import ops # type: ignore
-from nvidia.dali import types # type: ignore
-from nvidia.dali.tensors import TensorGPU # type: ignore
-# pylint: enable=import-error
+from nvidia.dali import fn
+from nvidia.dali import math
+from nvidia.dali import ops
+from nvidia.dali import types
+from nvidia.dali.tensors import TensorGPU
 
 from mist.data_loading.data_loading_constants import DataLoadingConstants as constants
 
@@ -37,12 +36,12 @@ def get_numpy_reader(
     return ops.readers.Numpy(
         seed=seed,
         files=files,
-        device="cpu", # Reading happens on the CPU.
-        read_ahead=True, # Preload the data to speed up the reading process.
-        shard_id=shard_id, # Which shard of the data this instance will read.
-        pad_last_batch=True, # Pad the last batch so all batches have same size.
-        num_shards=num_shards, # Number of shards to split the dataset.
-        dont_use_mmap=True, # Disable memory mapping for reading files.
+        device="cpu",  # Reading happens on the CPU.
+        read_ahead=True,  # Preload the data to speed up the reading process.
+        shard_id=shard_id,  # Which shard of the data this instance will read.
+        pad_last_batch=True,  # Pad last batch to for consistent batch sizes.
+        num_shards=num_shards,  # Number of shards to split the dataset.
+        dont_use_mmap=True,  # Disable memory mapping for reading files.
         shuffle_after_epoch=shuffle  # Shuffle the data after every epoch.
     )
 
@@ -99,8 +98,8 @@ def noise_fn(img: TensorGPU) -> TensorGPU:
             range=(
                 constants.NOISE_FN_RANGE_MIN,
                 constants.NOISE_FN_RANGE_MAX
-                )
             )
+        )
         )
     )
 
@@ -207,57 +206,10 @@ def contrast_fn(img: TensorGPU) -> TensorGPU:
     return img
 
 
-def flips_fn(
-    img: TensorGPU,
-    lbl: TensorGPU,
-    dtm: Optional[TensorGPU]=None,
-) -> Sequence[TensorGPU]:
-    """Apply random flips to the input image, labels, and DTMs.
-
-    Apply random flips to the input data. The flips can be applied
-    horizontally, vertically, or depthwise with a 0.5 probability.
-
-    Args:
-        img: The input image data to apply flips to.
-        lbl: The input label data to apply the same flips as the image.
-        dtm: The input DTM data to apply the same flips as the image.
-
-    Returns:
-        The flipped image, label, and DTM data.
-    """
-    # Define the flip options for horizontal, vertical, and depthwise flips.
-    kwargs = {
-        "horizontal": (
-            fn.random.coin_flip(
-                probability=constants.HORIZONTAL_FLIP_PROBABILITY
-            )
-        ),
-        "vertical": (
-            fn.random.coin_flip(
-                probability=constants.VERTICAL_FLIP_PROBABILITY
-            )
-        ),
-        "depthwise": (
-            fn.random.coin_flip(
-                probability=constants.DEPTH_FLIP_PROBABILITY
-            )
-        ),
-    }
-
-    # Apply the flips to the image, label, and DTM data and return the
-    # results.
-    flipped_img = fn.flip(img, **kwargs)
-    flipped_lbl = fn.flip(lbl, **kwargs)
-    if dtm:
-        flipped_dtm = fn.flip(dtm, **kwargs)
-        return flipped_img, flipped_lbl, flipped_dtm
-    return flipped_img, flipped_lbl
-
-
 def validate_train_and_eval_inputs(
         imgs: List[str],
         lbls: List[str],
-        dtms: Optional[List[str]]=None,
+        dtms: Optional[List[str]] = None,
 ) -> None:
     """Validate that the input data is correct.
 

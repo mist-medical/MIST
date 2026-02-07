@@ -1,6 +1,9 @@
 """Tests for the DALI data loading utilities module in MIST."""
-import pytest
+
 from unittest import mock
+
+import pytest
+
 import mist.data_loading.data_loading_utils as utils
 
 
@@ -75,7 +78,7 @@ def test_random_augmentation(mock_cast, mock_coin_flip):
     """Test random_augmentation with mocked dependencies."""
     condition = mock.MagicMock(name="condition")
     neg_condition = mock.MagicMock(name="neg_condition")
-    
+
     # Simulate the condition ^ True call.
     condition.__xor__.return_value = neg_condition
 
@@ -91,8 +94,8 @@ def test_random_augmentation(mock_cast, mock_coin_flip):
 
 
 @mock.patch(
-        "mist.data_loading.data_loading_utils.random_augmentation",
-        return_value="augmented"
+    "mist.data_loading.data_loading_utils.random_augmentation",
+    return_value="augmented"
 )
 @mock.patch(
     "mist.data_loading.data_loading_utils.fn.random.normal",
@@ -105,8 +108,8 @@ def test_noise_fn(mock_normal, mock_aug):
 
 
 @mock.patch(
-        "mist.data_loading.data_loading_utils.random_augmentation",
-        return_value="augmented"
+    "mist.data_loading.data_loading_utils.random_augmentation",
+    return_value="augmented"
 )
 @mock.patch(
     "mist.data_loading.data_loading_utils.fn.gaussian_blur",
@@ -130,8 +133,8 @@ def test_brightness_fn(mock_aug):
 
 
 @mock.patch(
-        "mist.data_loading.data_loading_utils.math.clamp",
-        return_value="clamped"
+    "mist.data_loading.data_loading_utils.math.clamp",
+    return_value="clamped"
 )
 @mock.patch(
     "mist.data_loading.data_loading_utils.fn.reductions.min",
@@ -150,24 +153,6 @@ def test_contrast_fn(mock_aug, mock_max, mock_min, mock_clamp):
 
     result = utils.contrast_fn("img")
     assert result == "clamped"
-
-
-@pytest.mark.parametrize("dtm,expected", [
-    (None, ("flipped_img", "flipped_lbl")),
-    ("dtm", ("flipped_img", "flipped_lbl", "flipped_dtm")),
-])
-@mock.patch(
-    "mist.data_loading.data_loading_utils.fn.flip",
-    side_effect=lambda x, **kwargs: f"flipped_{x}"
-)
-@mock.patch(
-    "mist.data_loading.data_loading_utils.fn.random.coin_flip",
-    side_effect=["h", "v", "d"]
-)
-def test_flips_fn_variants(mock_coin_flip, mock_flip, dtm, expected):
-    """Test flips_fn with different DTM inputs."""
-    result = utils.flips_fn("img", "lbl", dtm)
-    assert result == expected
 
 
 def test_validate_train_and_eval_inputs_raises_for_empty_dtms():

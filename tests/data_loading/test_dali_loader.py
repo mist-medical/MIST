@@ -1,8 +1,9 @@
 """Tests for the DALI data loading module in MIST."""
+
 import pytest
 from unittest import mock
-from mist.data_loading import dali_loader
 
+from mist.data_loading import dali_loader
 
 
 @pytest.fixture
@@ -34,8 +35,8 @@ def base_pipeline_args():
 
 @pytest.mark.parametrize("dtm_present", [False, True])
 @mock.patch(
-        "mist.data_loading.data_loading_utils.is_valid_generic_pipeline_input",
-        return_value=True
+    "mist.data_loading.data_loading_utils.is_valid_generic_pipeline_input",
+    return_value=True
 )
 @mock.patch("mist.data_loading.data_loading_utils.get_numpy_reader")
 def test_train_pipeline_instantiates(
@@ -73,8 +74,8 @@ def test_train_pipeline_invalid_inputs(
 
 
 @mock.patch(
-        "mist.data_loading.data_loading_utils.is_valid_generic_pipeline_input",
-        return_value=True
+    "mist.data_loading.data_loading_utils.is_valid_generic_pipeline_input",
+    return_value=True
 )
 @mock.patch("mist.data_loading.data_loading_utils.get_numpy_reader")
 def test_train_pipeline_disables_augmentations(
@@ -94,10 +95,9 @@ def test_train_pipeline_disables_augmentations(
     assert not pipeline.use_contrast
 
 
-
 @mock.patch(
-        "mist.data_loading.data_loading_utils.is_valid_generic_pipeline_input",
-        return_value=True
+    "mist.data_loading.data_loading_utils.is_valid_generic_pipeline_input",
+    return_value=True
 )
 @mock.patch("mist.data_loading.data_loading_utils.get_numpy_reader")
 def test_train_pipeline_invalid_dimension_raises(
@@ -370,8 +370,8 @@ def test_define_graph_with_and_without_dtm(
 
 
 @mock.patch(
-        "mist.data_loading.data_loading_utils.is_valid_generic_pipeline_input",
-        return_value=True
+    "mist.data_loading.data_loading_utils.is_valid_generic_pipeline_input",
+    return_value=True
 )
 @mock.patch("mist.data_loading.data_loading_utils.get_numpy_reader")
 @mock.patch(
@@ -413,8 +413,8 @@ def test_test_pipeline_define_graph(
 
 
 @mock.patch(
-        "mist.data_loading.data_loading_utils.is_valid_generic_pipeline_input",
-        return_value=True
+    "mist.data_loading.data_loading_utils.is_valid_generic_pipeline_input",
+    return_value=True
 )
 @mock.patch("mist.data_loading.data_loading_utils.get_numpy_reader")
 @mock.patch(

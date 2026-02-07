@@ -1,7 +1,9 @@
 """Import loss functions to trigger their registration."""
-from .losses.dice import DiceLoss
-from .losses.dice_cross_entropy import DiceCELoss
-from .losses.cl_dice import CLDice
-from .losses.generalized_surface import GenSurfLoss
-from .losses.boundary import BoundaryLoss
-from .losses.hausdorff_one_sided import HDOneSidedLoss
+from mist.loss_functions.losses.dice import DiceLoss
+from mist.loss_functions.losses.dice_cross_entropy import DiceCELoss
+from mist.loss_functions.losses.cl_dice import CLDice
+from mist.loss_functions.losses.generalized_surface import GenSurfLoss
+from mist.loss_functions.losses.boundary import BoundaryLoss
+from mist.loss_functions.losses.hausdorff_one_sided import HDOneSidedLoss
+from mist.loss_functions.losses.surface_dice_dilation import VolumetricSDDL
+from mist.loss_functions.losses.surface_dice_dilation import VesselSDDL

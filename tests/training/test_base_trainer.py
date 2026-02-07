@@ -22,6 +22,7 @@ BaseTrainer = bt.BaseTrainer
 
 class DummyIter:
     """DALI-style loader with .next()[0] and .reset()."""
+
     def __init__(self, batch, length: int):
         self._batch = batch
         self._length = max(0, length)
@@ -41,6 +42,7 @@ class DummyIter:
 
 class DummyModel(nn.Module):
     """Dummy model with a single linear layer for testing."""
+
     def __init__(self):
         super().__init__()
         self.l = nn.Linear(2, 2)
@@ -52,6 +54,7 @@ class DummyModel(nn.Module):
 
 class DummyLoss(nn.Module):
     """Dummy loss that returns a constant value."""
+
     def __init__(self, value: float = 1.0, **kwargs):
         super().__init__()  # <-- important
         self.value = value
@@ -65,6 +68,7 @@ class DummyLoss(nn.Module):
 
 class DummyDDP(nn.Module):
     """Dummy DDP wrapper that does nothing but pass through the"""
+
     def __init__(self, module, device_ids=None, find_unused_parameters=False):
         super().__init__()
         self.module = module
@@ -76,6 +80,7 @@ class DummyDDP(nn.Module):
 
 class DummySummaryWriter:
     """Dummy SummaryWriter that collects scalars in memory."""
+
     def __init__(self, log_dir):
         self.log_dir = log_dir
         self.scalars = []
@@ -96,6 +101,7 @@ class DummySummaryWriter:
 
 class DummyProgressCtx:
     """Dummy context manager for progress bars that does nothing."""
+
     def __init__(self, *a, **k):
         pass
 
@@ -111,6 +117,7 @@ class DummyProgressCtx:
 
 class DummyTrainer(BaseTrainer):
     """Concrete subclass providing minimal train/val steps and loaders."""
+
     def __init__(self, mist_args, train_loss_value=1.0, val_loss_value=2.0):
         self._train_loss_value = train_loss_value
         self._val_loss_value = val_loss_value
@@ -153,7 +160,8 @@ def patch_paths(monkeypatch):
 @pytest.fixture(autouse=True)
 def patch_cuda_and_moves(monkeypatch):
     """Patch CUDA availability and device moves so tests run CPU-only."""
-    monkeypatch.setattr(torch.cuda, "is_available", lambda: True, raising=False)
+    monkeypatch.setattr(torch.cuda, "is_available",
+                        lambda: True, raising=False)
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 1, raising=False)
     monkeypatch.setattr(
         torch.cuda, "set_device", lambda idx: None, raising=False
@@ -193,6 +201,7 @@ def tmp_pipeline(tmp_path: Path) -> Tuple[Path, Path]:
             "architecture": "dummy",
             "params": {"patch_size": [16, 16, 16]}
         },
+        "preprocessing": {"target_spacing": [1.0, 1.0, 1.0]},
         "training": {
             "nfolds": 2,
             "folds": [0],
@@ -303,6 +312,7 @@ def patch_registries(monkeypatch):
 
     class DummyScheduler:
         """Dummy scheduler that does nothing."""
+
         def step(self):
             """Dummy step method that does nothing."""
             pass
@@ -390,7 +400,6 @@ def patch_dist(monkeypatch):
 
     monkeypatch.setattr(bt, "dist", FakeDist)
     return calls
-
 
 
 def test_getstate_drops_console(tmp_pipeline, mist_args, monkeypatch):
@@ -660,7 +669,8 @@ def test_update_num_gpus_raises_when_zero_devices(
     tmp_pipeline, mist_args, monkeypatch
 ):
     """Test that update_num_gpus raises when device_count is zero."""
-    monkeypatch.setattr(torch.cuda, "is_available", lambda: True, raising=False)
+    monkeypatch.setattr(torch.cuda, "is_available",
+                        lambda: True, raising=False)
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 0, raising=False)
 
     with pytest.raises(ValueError) as excinfo:
@@ -675,7 +685,8 @@ def test_update_num_gpus_sets_config_and_persists(
     tmp_pipeline, mist_args, monkeypatch
 ):
     """Test that update_num_gpus sets config and persists to disk."""
-    monkeypatch.setattr(torch.cuda, "is_available", lambda: True, raising=False)
+    monkeypatch.setattr(torch.cuda, "is_available",
+                        lambda: True, raising=False)
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 2, raising=False)
 
     results, _ = tmp_pipeline
@@ -717,7 +728,8 @@ def test_train_loop_else_branch_rank_nonzero(
     tmp_pipeline, mist_args, monkeypatch, patch_dist
 ):
     """Test train_fold else branch for rank > 0."""
-    monkeypatch.setattr(torch.cuda, "is_available", lambda: True, raising=False)
+    monkeypatch.setattr(torch.cuda, "is_available",
+                        lambda: True, raising=False)
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 2, raising=False)
     monkeypatch.setattr(
         torch.cuda, "set_device", lambda idx: None, raising=False
@@ -744,7 +756,8 @@ def test_validation_else_branch_rank_nonzero(
     tmp_pipeline, mist_args, monkeypatch, patch_dist
 ):
     """Test validation step else branch for rank > 0."""
-    monkeypatch.setattr(torch.cuda, "is_available", lambda: True, raising=False)
+    monkeypatch.setattr(torch.cuda, "is_available",
+                        lambda: True, raising=False)
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 2, raising=False)
     monkeypatch.setattr(
         torch.cuda, "set_device", lambda idx: None, raising=False
@@ -774,7 +787,8 @@ def test_validation_no_improvement_message(
     tmp_pipeline, mist_args, monkeypatch
 ):
     """Test that validation step logs no improvement message."""
-    monkeypatch.setattr(torch.cuda, "is_available", lambda: True, raising=False)
+    monkeypatch.setattr(torch.cuda, "is_available",
+                        lambda: True, raising=False)
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 1, raising=False)
     monkeypatch.setattr(
         torch.cuda, "set_device", lambda idx: None, raising=False
@@ -879,7 +893,6 @@ def test_build_components_composite_loss_scheduler(
     calls = {"args": []}
     sentinel = object()
 
-
     def spy_get_alpha_scheduler(schedule, **kwargs):
         # record both the schedule and any named kwargs (e.g., num_epochs)
         calls["args"].append({"schedule": schedule, **kwargs})
@@ -908,6 +921,7 @@ def test_set_seed_swallows_dist_errors(tmp_pipeline, mist_args, monkeypatch):
 
     class BadDist:
         """Fake distributed module that raises in is_initialized()."""
+
         def is_initialized(self):
             """Raise an error to simulate a bad distributed state."""
             raise RuntimeError("kaboom")

@@ -10,15 +10,14 @@ from mist.models.model_loader import (
     get_model,
     load_model_from_config
 )
-from mist.models.mgnets.mist_mgnets import MGNet
-
+from mist.models.nnunet.mist_nnunet import NNUNet
 
 @pytest.fixture
 def valid_mist_config():
     """Fixture for a valid MIST model configuration."""
     return {
         "model": {
-            "architecture": "fmgnet",
+            "architecture": "nnunet",
             "params": {
                 "in_channels": 1,
                 "out_channels": 2,
@@ -36,7 +35,7 @@ def valid_mist_config():
 def legacy_mist_config():
     """Fixture for a legacy MIST model configuration."""
     return {
-        "model_name": "fmgnet",
+        "model_name": "nnunet",
         "n_channels": 1,
         "n_classes": 2,
         "deep_supervision": False,
@@ -54,8 +53,7 @@ def test_get_model_success(valid_mist_config):
         valid_mist_config["model"]["architecture"],
         **valid_mist_config["model"]["params"],
     )
-    assert isinstance(model, MGNet)
-    assert model.mg_net == "fmgnet"
+    assert isinstance(model, NNUNet)
 
 
 def test_validate_missing_model_key(valid_mist_config):
@@ -92,7 +90,7 @@ def test_load_model_from_config_strips_ddp_prefix(
     mock_torch_load, valid_mist_config
 ):
     """DDP checkpoints (with 'module.' prefix) are stripped before loading."""
-    dummy_model = MagicMock(spec=MGNet)
+    dummy_model = MagicMock(spec=NNUNet)
 
     # Return a dummy model instance from registry constructor.
     with patch("mist.models.model_loader.get_model", return_value=dummy_model):
@@ -119,7 +117,7 @@ def test_load_model_from_config_keeps_non_ddp_keys(
     mock_torch_load, valid_mist_config
 ):
     """Non-DDP checkpoints are loaded without key modification."""
-    dummy_model = MagicMock(spec=MGNet)
+    dummy_model = MagicMock(spec=NNUNet)
 
     with patch("mist.models.model_loader.get_model", return_value=dummy_model):
         # Raw (non-DDP) state dict.
@@ -144,7 +142,7 @@ def test_load_model_from_config_keeps_non_ddp_keys(
 def test_convert_legacy_model_config_success(legacy_mist_config):
     """Test conversion of legacy model config to new format."""
     new_config = convert_legacy_model_config(legacy_mist_config)
-    assert new_config["model"]["architecture"] == "fmgnet"
+    assert new_config["model"]["architecture"] == "nnunet"
     assert new_config["model"]["params"]["in_channels"] == 1
     assert new_config["model"]["params"]["out_channels"] == 2
     assert new_config["model"]["params"]["patch_size"] == [64, 64, 64]
