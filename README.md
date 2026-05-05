@@ -18,7 +18,7 @@ a configuration file for when you need more control.
 pip install "mist-medical[train]"
 ```
 
-**Inference only** (CPU-compatible, works on Mac):
+**Inference only** (CPU-compatible):
 ```bash
 pip install mist-medical
 ```
@@ -27,7 +27,7 @@ pip install mist-medical
 ```bash
 git clone https://github.com/mist-medical/MIST.git
 cd MIST
-pip install -e ".[train]"   # full
+pip install -e ".[train]"    # full
 pip install -e .             # inference only
 ```
 
