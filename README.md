@@ -119,6 +119,7 @@ weighted by a scheduled alpha. Schedules: `constant`, `linear`, `cosine`.
 | `mist_predict` | Run inference on new data |
 | `mist_evaluate` | Evaluate predictions against ground truth |
 | `mist_postprocess` | Apply postprocessing strategies |
+| `mist_rank` | Rank multiple evaluation result CSVs BraTS-style |
 | `mist_average_weights` | Average model weights across folds |
 | `mist_convert_msd` | Convert Medical Segmentation Decathlon datasets |
 | `mist_convert_csv` | Convert CSV-formatted datasets |
@@ -130,6 +131,10 @@ Full documentation, including configuration reference and advanced topics, is at
 
 ## What's New
 
+* May 2026 — **2.0.0 release candidate** — BraTS-style multi-strategy ranking
+  (`mist_rank`), a structured postprocessing transform registry with LLM-readable
+  metadata (`describe_transforms`), and full pathlib + PEP 585/604 modernisation
+  across the codebase.
 * April 2026 — **CPU inference support** — `mist_predict` now runs on any
   machine, including Macs and laptops without an NVIDIA GPU. Install with
   `pip install mist-medical` (no GPU required).
