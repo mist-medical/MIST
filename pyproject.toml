@@ -1,6 +1,6 @@
 [project]
 name = "mist-medical"
-version = "1.0.1-beta"
+version = "2.0.0-rc"
 requires-python = ">= 3.10"
 description = "MIST is a simple and scalable end-to-end framework for medical imaging segmentation."
 readme = "README.md"
@@ -8,8 +8,8 @@ license = {file = "LICENSE"}
 authors = [
     {name = "Adrian Celaya", email = "aecelaya@rice.edu"},
     {name = "David Fuentes", email = "dtfuentes@mdanderson.org"},
+    {name= "Tucker Netherton", email = "tnetherton@mdanderson.org"},
     {name = "Beatrice Riviere", email = "riviere@rice.edu"},
-    {name = "MIST Imaging LLC"},
     {name = "Rice University"},
     {name = "The University of Texas MD Anderson Cancer Center"}
 ]
