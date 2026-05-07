@@ -311,9 +311,9 @@ def test_add_train_args_defaults_and_basic_parse(patched_registries):
     assert ns.composite_loss_weighting is None
     assert ns.epochs is None
     assert ns.batch_size_per_gpu is None
-    assert ns.learning_rate is None
+    assert ns.learning_rate == 0.001
     assert ns.lr_scheduler is None
-    assert ns.warmup_epochs is None
+    assert ns.warmup_epochs == 20
     assert ns.optimizer is None
     assert ns.l2_penalty is None
     assert ns.folds is None

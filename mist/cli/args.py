@@ -129,9 +129,26 @@ def add_preprocess_args(parser: ArgParser) -> None:
         help="Number of parallel workers for preprocessing.",
     )
     parser.boolean_flag(
-        "--no-preprocess", default=False, help="Turn off most preprocessing.",
+        "--no-preprocess",
+        default=False,
+        help=(
+            "Skip all preprocessing steps (reorientation, cropping, "
+            "resampling, normalization) and only convert raw NIfTI files "
+            "into NumPy format. Use when images are already fully "
+            "preprocessed externally. DTMs are still computed if "
+            "--compute-dtms is also passed."
+        ),
     )
-    parser.boolean_flag("--compute-dtms", default=False, help="Compute DTMs.")
+    parser.boolean_flag(
+        "--compute-dtms",
+        default=False,
+        help=(
+            "Compute per-class Distance Transform Maps (DTMs) from ground "
+            "truth masks. DTMs encode each voxel's signed distance to the "
+            "nearest label boundary and are required by certain loss "
+            "functions (bl, hdos, gsl)."
+        ),
+    )
     parser.boolean_flag(
         "--overwrite", default=False, help="Overwrite previous configuration/results.",
     )
@@ -180,7 +197,10 @@ def add_train_args(parser: ArgParser) -> None:
         type=positive_int,
         help="Batch size per GPU/CPU worker.",
     )
-    g.add_argument("--learning-rate", type=positive_float, help="Learning rate.")
+    g.add_argument(
+        "--learning-rate", type=positive_float, default=0.001,
+        help="Learning rate.",
+    )
     g.add_argument(
         "--lr-scheduler",
         type=str,
@@ -190,6 +210,7 @@ def add_train_args(parser: ArgParser) -> None:
     g.add_argument(
         "--warmup-epochs",
         type=non_negative_int,
+        default=20,
         help="Number of linear warmup epochs before the main LR schedule.",
     )
     g.add_argument(

@@ -335,6 +335,30 @@ On resume:
     and then renamed into place, so a crash during the save itself will never
     leave a corrupted checkpoint on disk.
 
+## Averaging Model Weights
+
+`mist_average_weights` averages the weights from multiple fold checkpoints
+produced by `mist_train` into a single checkpoint by element-wise averaging.
+Averaged weights generalize better than any single fold model and are the
+recommended input for `--pretrained-weights` when using transfer learning.
+
+The `mist_average_weights` command takes the following arguments:
+
+- `--weights` (**required**): Paths to two or more fold checkpoint files
+  (`.pt` or `.pth`). Provide all folds from a cross-validation run,
+  e.g. `fold_0.pt fold_1.pt ...`.
+- `--output` (**required**): Output path for the averaged weights file
+  (e.g. `pretrained_init.pt`).
+
+### Example
+
+```console
+mist_average_weights --weights /path/to/results/models/fold_0.pt \
+                                /path/to/results/models/fold_1.pt \
+                                /path/to/results/models/fold_2.pt \
+                     --output /path/to/pretrained_init.pt
+```
+
 ## Inference
 
 The main MIST pipeline is responsible for training and evaluating models. The
@@ -570,7 +594,8 @@ metrics for each patient.
 - `--num-workers-evaluate` *(optional)*: Number of parallel workers. *(default: 1)*
 - `--validate` *(optional)*: Validate each mask pair before evaluation. Checks
 that images are 3D, have an integer or boolean dtype, and contain only labels
-defined in the config. Recommended for external data.
+defined in the config. Adds I/O overhead; recommended for external data you do
+not fully trust.
 
 The paths CSV for the evaluation tool should have the following format:
 

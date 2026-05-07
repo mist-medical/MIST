@@ -27,7 +27,7 @@ Below is an example of a valid `config.json` file.
 
 ```json
 {
-  "mist_version": "1.0.0b0",
+  "mist_version": "2.0.0rc0",
 
   "dataset_info": {
     "task": "ivygap",
