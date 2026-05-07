@@ -2,39 +2,42 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Type, TypeVar, Callable
+from typing import Any, TypeVar
+from collections.abc import Callable
+
 import torch
 
-# Type-safe registry for transform classes
+# Registry for transform classes. Stores classes; instances are created on
+# demand by get_transform() to avoid shared mutable state.
 T = TypeVar("T", bound="AbstractTransform")
-TTA_TRANSFORM_REGISTRY: Dict[str, AbstractTransform] = {}
+TTA_TRANSFORM_REGISTRY: dict[str, type[AbstractTransform]] = {}
 
 
-def register_transform(name: str) -> Callable[[Type[T]], Type[T]]:
+def register_transform(name: str) -> Callable[[type[T]], type[T]]:
     """Decorator to register a TTA transform class by name."""
-    def decorator(cls: Type[T]) -> Type[T]:
+    def decorator(cls: type[T]) -> type[T]:
         if not issubclass(cls, AbstractTransform):
             raise TypeError(f"{cls.__name__} must subclass AbstractTransform.")
         if name in TTA_TRANSFORM_REGISTRY:
             raise KeyError(f"Transform '{name}' is already registered.")
-        TTA_TRANSFORM_REGISTRY[name] = cls() # Register the instantiated class.
+        TTA_TRANSFORM_REGISTRY[name] = cls  # Register class, not an instance
         return cls
     return decorator
 
 
-def list_transforms() -> List[str]:
+def list_transforms() -> list[str]:
     """List all registered TTA transforms."""
     return list(TTA_TRANSFORM_REGISTRY.keys())
 
 
 def get_transform(name: str) -> AbstractTransform:
-    """Retrieve an instantiated TTA transform by name."""
+    """Retrieve a fresh instance of a registered TTA transform by name."""
     if name not in TTA_TRANSFORM_REGISTRY:
         raise KeyError(
             f"TTA transform '{name}' is not registered. "
             f"Available: [{', '.join(list_transforms())}]."
         )
-    return TTA_TRANSFORM_REGISTRY[name]
+    return TTA_TRANSFORM_REGISTRY[name]()
 
 
 class AbstractTransform(ABC):
@@ -54,12 +57,12 @@ class AbstractTransform(ABC):
     @abstractmethod
     def forward(self, image: torch.Tensor) -> torch.Tensor:
         """Apply the transformation to the input image."""
-        pass # pylint:disable=unnecessary-pass # pragma: no cover
+        pass  # pylint:disable=unnecessary-pass # pragma: no cover
 
     @abstractmethod
     def inverse(self, prediction: torch.Tensor) -> torch.Tensor:
         """Invert the transformation on the prediction."""
-        pass # pylint:disable=unnecessary-pass # pragma: no cover
+        pass  # pylint:disable=unnecessary-pass # pragma: no cover
 
     def __call__(self, image: torch.Tensor) -> torch.Tensor:
         """Alias for forward."""
@@ -82,6 +85,7 @@ class IdentityTransform(AbstractTransform):
     This transform does not apply any changes to the input image. It is
     useful for testing the performance of the model without any TTA.
     """
+
     def forward(self, image: torch.Tensor) -> torch.Tensor:
         return image
 
@@ -97,6 +101,7 @@ class FlipXTransform(AbstractTransform):
     It is useful for augmenting the training data and improving model
     robustness.
     """
+
     def forward(self, image: torch.Tensor) -> torch.Tensor:
         return torch.flip(image, dims=(2,))
 
@@ -112,6 +117,7 @@ class FlipYTransform(AbstractTransform):
     It is useful for augmenting the training data and improving model
     robustness.
     """
+
     def forward(self, image: torch.Tensor) -> torch.Tensor:
         return torch.flip(image, dims=(3,))
 
@@ -127,6 +133,7 @@ class FlipZTransform(AbstractTransform):
     It is useful for augmenting the training data and improving model
     robustness.
     """
+
     def forward(self, image: torch.Tensor) -> torch.Tensor:
         return torch.flip(image, dims=(4,))
 
@@ -142,6 +149,7 @@ class FlipXYTransform(AbstractTransform):
     (horizontal and vertical flip). It is useful for augmenting the
     training data and improving model robustness.
     """
+
     def forward(self, image: torch.Tensor) -> torch.Tensor:
         return torch.flip(image, dims=(2, 3))
 
@@ -157,6 +165,7 @@ class FlipXZTransform(AbstractTransform):
     (horizontal and depth flip). It is useful for augmenting the training
     data and improving model robustness.
     """
+
     def forward(self, image: torch.Tensor) -> torch.Tensor:
         return torch.flip(image, dims=(2, 4))
 
@@ -172,6 +181,7 @@ class FlipYZTransform(AbstractTransform):
     (vertical and depth flip). It is useful for augmenting the training
     data and improving model robustness.
     """
+
     def forward(self, image: torch.Tensor) -> torch.Tensor:
         return torch.flip(image, dims=(3, 4))
 
@@ -187,6 +197,7 @@ class FlipXYZTransform(AbstractTransform):
     vertical, and depth flip). It is useful for augmenting the training
     data and improving model robustness.
     """
+
     def forward(self, image: torch.Tensor) -> torch.Tensor:
         return torch.flip(image, dims=(2, 3, 4))
 

@@ -7,6 +7,9 @@ from mist.models.model_registry import register_model
 def create_mgnet(variant: str, **kwargs) -> MGNet:
     """Factory method to create MGNet model variants.
 
+    MGNet always uses the pocket paradigm (constant filter count). Representational
+    capacity comes from the multigrid topology, not channel widening.
+
     Args:
         variant: The MGNet variant to create. Options are 'fmgnet' and 'wnet'.
         **kwargs: Additional keyword arguments including:
@@ -14,9 +17,6 @@ def create_mgnet(variant: str, **kwargs) -> MGNet:
             - out_channels: Number of output channels.
             - patch_size: Input patch size (required for adaptive topology).
             - target_spacing: Target voxel spacing (required for adaptive topology).
-            - use_residual_blocks: Whether to use residual connections (default: False).
-            - use_deep_supervision: Whether to use deep supervision (default: True).
-            - use_pocket_model: Whether to use the pocket model variant (default: True).
 
     Returns:
         An instance of the MGNet model.
@@ -24,7 +24,6 @@ def create_mgnet(variant: str, **kwargs) -> MGNet:
     # Validate required keys.
     required_keys = [
         "in_channels", "out_channels", "patch_size", "target_spacing",
-        "use_residual_blocks", "use_deep_supervision", "use_pocket_model"
     ]
     for key in required_keys:
         if key not in kwargs:
@@ -37,11 +36,8 @@ def create_mgnet(variant: str, **kwargs) -> MGNet:
         "out_channels": kwargs["out_channels"],
         "patch_size": kwargs["patch_size"],
         "target_spacing": kwargs["target_spacing"],
-        "use_residual_blocks": kwargs.get("use_residual_blocks", False),
-        "use_deep_supervision": kwargs.get("use_deep_supervision", True),
-        # We let the class determine the optimal number of heads (Depth - 2)
-        "num_deep_supervision_heads": kwargs.get("num_deep_supervision_heads", None),
-        "use_pocket_model": kwargs.get("use_pocket_model", False),
+        "use_residual_blocks": True,
+        "use_deep_supervision": True,
     }
 
     variant = variant.lower()

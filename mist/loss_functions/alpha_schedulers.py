@@ -4,32 +4,14 @@ This module provides scheduler classes to dynamically adjust the weighting
 (alpha) of loss components during training.
 """
 
+import inspect
 import math
 from abc import ABC, abstractmethod
-from typing import Dict, List, Type, Any
+from typing import Any
 
 
 class AlphaScheduler(ABC):
-    """Abstract base class for alpha schedulers.
-
-    This class defines the interface for all alpha schedulers and handles
-    common initialization regarding training duration.
-
-    Attributes:
-        num_epochs: The total number of training epochs.
-        decay_steps: The effective number of steps (epochs) available for decay
-            calculation (max(1, num_epochs - 1)).
-    """
-    def __init__(self, num_epochs: int, **kwargs: Any):  # pylint: disable=unused-argument
-        """Initializes the AlphaScheduler.
-
-        Args:
-            num_epochs: The total number of training epochs.
-            **kwargs: Additional keyword arguments (ignored by base).
-        """
-        self.num_epochs = num_epochs
-        # Determine effective steps for decay calculations (0-indexed max epoch).
-        self.decay_steps = max(1, num_epochs - 1)
+    """Abstract base class for alpha schedulers."""
 
     @abstractmethod
     def __call__(self, epoch: int) -> float:
@@ -50,20 +32,12 @@ class ConstantScheduler(AlphaScheduler):
         value: The constant alpha value to be returned.
     """
 
-    def __init__(
-        self,
-        value: float = 0.5,
-        num_epochs: int = 1,
-        **kwargs: Any,
-    ):
+    def __init__(self, value: float = 0.5):
         """Initializes the ConstantScheduler.
 
         Args:
             value: The constant alpha value. Defaults to 0.5.
-            num_epochs: Total number of epochs (unused, but kept for compatibility).
-            **kwargs: Additional keyword arguments (ignored).
         """
-        super().__init__(num_epochs=num_epochs, **kwargs)
         self.value = float(value)
 
     def __call__(self, epoch: int) -> float:
@@ -88,7 +62,7 @@ class LinearScheduler(AlphaScheduler):
     Attributes:
         start_val: The initial alpha value.
         end_val: The final alpha value.
-        init_pause: The number of epochs to wait before decaying.
+        init_pause: The last epoch index (0-based) that still returns start_val.
         decay_duration: The number of epochs over which the decay occurs.
     """
 
@@ -98,25 +72,24 @@ class LinearScheduler(AlphaScheduler):
         init_pause: int = 5,
         start_val: float = 1.0,
         end_val: float = 0.0,
-        **kwargs: Any,
     ):
         """Initializes the LinearScheduler.
 
         Args:
             num_epochs: The total number of training epochs.
-            init_pause: The number of epochs to hold the start value.
-                Defaults to 5.
+            init_pause: The last 0-based epoch index that still uses start_val.
+                Epochs 0 through init_pause inclusive return start_val, so
+                decay begins at epoch init_pause + 1. Defaults to 5, meaning
+                the first 6 epochs (0–5) hold start_val.
             start_val: The starting alpha value. Defaults to 1.0.
             end_val: The target alpha value after decay. Defaults to 0.0.
-            **kwargs: Additional keyword arguments (ignored).
         """
-        super().__init__(num_epochs=num_epochs, **kwargs)
+        self.num_epochs = num_epochs
         self.start_val = start_val
         self.end_val = end_val
         self.init_pause = init_pause
-
-        # Calculate effective decay duration using the base class's decay_steps.
-        self.decay_duration = max(1, self.decay_steps - self.init_pause)
+        decay_steps = max(1, num_epochs - 1)
+        self.decay_duration = max(1, decay_steps - self.init_pause)
 
     def __call__(self, epoch: int) -> float:
         """Calculates the alpha value for the linear schedule.
@@ -130,11 +103,8 @@ class LinearScheduler(AlphaScheduler):
         if epoch <= self.init_pause:
             return self.start_val
 
-        # Calculate progress from 0.0 to 1.0.
         steps_past_pause = epoch - self.init_pause
         progress = min(1.0, steps_past_pause / self.decay_duration)
-
-        # Linear interpolation.
         return self.start_val + progress * (self.end_val - self.start_val)
 
 
@@ -148,7 +118,7 @@ class CosineScheduler(AlphaScheduler):
     Attributes:
         start_val: The initial alpha value.
         end_val: The final alpha value.
-        init_pause: The number of epochs to wait before decaying.
+        init_pause: The last epoch index (0-based) that still returns start_val.
         decay_duration: The number of epochs over which the decay occurs.
     """
 
@@ -158,25 +128,24 @@ class CosineScheduler(AlphaScheduler):
         init_pause: int = 5,
         start_val: float = 1.0,
         end_val: float = 0.0,
-        **kwargs: Any,
     ):
         """Initializes the CosineScheduler.
 
         Args:
             num_epochs: The total number of training epochs.
-            init_pause: The number of epochs to hold the start value.
-                Defaults to 5.
+            init_pause: The last 0-based epoch index that still uses start_val.
+                Epochs 0 through init_pause inclusive return start_val, so
+                decay begins at epoch init_pause + 1. Defaults to 5, meaning
+                the first 6 epochs (0–5) hold start_val.
             start_val: The starting alpha value. Defaults to 1.0.
             end_val: The target alpha value after decay. Defaults to 0.0.
-            **kwargs: Additional keyword arguments (ignored).
         """
-        super().__init__(num_epochs=num_epochs, **kwargs)
+        self.num_epochs = num_epochs
         self.start_val = start_val
         self.end_val = end_val
         self.init_pause = init_pause
-
-        # Ensure valid decay duration.
-        self.decay_duration = max(1, self.decay_steps - self.init_pause)
+        decay_steps = max(1, num_epochs - 1)
+        self.decay_duration = max(1, decay_steps - self.init_pause)
 
     def __call__(self, epoch: int) -> float:
         """Calculates the alpha value for the cosine schedule.
@@ -192,30 +161,64 @@ class CosineScheduler(AlphaScheduler):
 
         steps_past_pause = epoch - self.init_pause
         progress = min(1.0, steps_past_pause / self.decay_duration)
-
-        # Cosine interpolation:
-        # 0.5 * (1 + cos(pi * progress)) maps from 1.0 to 0.0 smoothly.
         cosine_factor = 0.5 * (1.0 + math.cos(math.pi * progress))
-
-        # Map the 1 -> 0 factor to the start_val->end_val range.
         return self.end_val + (self.start_val - self.end_val) * cosine_factor
 
 
-ALPHA_SCHEDULER_REGISTRY: Dict[str, Type[AlphaScheduler]] = {
+ALPHA_SCHEDULER_REGISTRY: dict[str, type[AlphaScheduler]] = {
     "constant": ConstantScheduler,
     "linear": LinearScheduler,
     "cosine": CosineScheduler,
 }
 
 
-def get_alpha_scheduler(name: str, **kwargs: Any) -> AlphaScheduler:
+def get_default_scheduler_config(name: str) -> dict[str, Any]:
+    """Build a ``{name, params}`` config dict with constructor defaults.
+
+    Extracts default parameter values directly from the scheduler's
+    ``__init__`` signature, excluding ``num_epochs`` (which is runtime
+    context supplied by the trainer, not a user config value).
+
+    Args:
+        name: Registered scheduler name (e.g. ``"linear"``).
+
+    Returns:
+        A dict of the form ``{"name": name, "params": {...}}``.
+
+    Raises:
+        ValueError: If ``name`` is not registered.
+
+    Example::
+
+        >>> get_default_scheduler_config("linear")
+        {"name": "linear", "params": {
+            "init_pause": 5, "start_val": 1.0, "end_val": 0.0}}
+    """
+    if name not in ALPHA_SCHEDULER_REGISTRY:
+        raise ValueError(
+            f"Unknown scheduler: '{name}'. "
+            f"Available: {list(ALPHA_SCHEDULER_REGISTRY.keys())}"
+        )
+    cls = ALPHA_SCHEDULER_REGISTRY[name]
+    params = {
+        k: v.default
+        for k, v in inspect.signature(cls.__init__).parameters.items()
+        if k not in ("self", "num_epochs")
+        and v.default is not inspect.Parameter.empty
+    }
+    return {"name": name, "params": params}
+
+
+def get_alpha_scheduler(name: str, num_epochs: int, **params) -> AlphaScheduler:
     """Factory function to retrieve an alpha scheduler by name.
 
     Args:
-        name: The name of the scheduler (e.g., 'linear', 'cosine').
-        **kwargs: Arguments to pass to the scheduler constructor. This allows
-            passing the entire configuration dictionary; unexpected keys
-            will be ignored by the schedulers' __init__ methods via **kwargs.
+        name: The name of the scheduler (e.g., 'linear', 'cosine', 'constant').
+        num_epochs: Total training epochs. Passed to schedulers that declare
+            a ``num_epochs`` parameter; ignored for those that don't (e.g.,
+            ConstantScheduler).
+        **params: Scheduler-specific keyword arguments (e.g., ``init_pause``,
+            ``start_val``, ``end_val``, ``value``).
 
     Returns:
         An instance of the requested AlphaScheduler.
@@ -228,10 +231,13 @@ def get_alpha_scheduler(name: str, **kwargs: Any) -> AlphaScheduler:
             f"Unknown scheduler: '{name}'. "
             f"Available: {list(ALPHA_SCHEDULER_REGISTRY.keys())}"
         )
-    return ALPHA_SCHEDULER_REGISTRY[name](**kwargs)
+    cls = ALPHA_SCHEDULER_REGISTRY[name]
+    if "num_epochs" in inspect.signature(cls.__init__).parameters:
+        return cls(num_epochs=num_epochs, **params)
+    return cls(**params)
 
 
-def list_alpha_schedulers() -> List[str]:
+def list_alpha_schedulers() -> list[str]:
     """Lists all registered alpha scheduler names.
 
     Returns:

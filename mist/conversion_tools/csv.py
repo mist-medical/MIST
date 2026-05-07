@@ -1,86 +1,151 @@
 """Converts data from csv files to MIST format."""
-import os
-from typing import Optional
-import pprint
-import rich
+import concurrent.futures
+from pathlib import Path
+from typing import Any
 import pandas as pd
 
 # MIST imports.
 from mist.utils import io, progress_bar
+from mist.utils.console import console, print_info, print_warning
 from mist.conversion_tools import conversion_utils
 
-# Set up console for rich text.
-console = rich.console.Console()
+
+def _validate_csv_columns(df: pd.DataFrame, mode: str) -> None:
+    """Validate that a CSV DataFrame has the expected column structure.
+
+    Training CSVs must start with 'id', 'mask', then at least one image
+    column. Test CSVs must start with 'id', then at least one image column.
+
+    Args:
+        df: DataFrame read from the CSV file.
+        mode: "training" or "test".
+
+    Raises:
+        ValueError: If the column structure does not match the expected format.
+    """
+    columns = list(df.columns)
+
+    if mode == "training":
+        if len(columns) < 3:
+            raise ValueError(
+                "Training CSV must have at least 3 columns: id, mask, "
+                f"image1. Got: {columns}."
+            )
+        if columns[0] != "id":
+            raise ValueError(
+                f"Training CSV first column must be 'id', got '{columns[0]}'."
+            )
+        if columns[1] != "mask":
+            raise ValueError(
+                f"Training CSV second column must be 'mask', got '{columns[1]}'. "
+                "Expected format: id, mask, image1 [, image2, ...]."
+            )
+    else:
+        if len(columns) < 2:
+            raise ValueError(
+                "Test CSV must have at least 2 columns: id, image1. "
+                f"Got: {columns}."
+            )
+        if columns[0] != "id":
+            raise ValueError(
+                f"Test CSV first column must be 'id', got '{columns[0]}'."
+            )
+
+
+def _copy_single_patient_csv(
+    patient_dict: dict[str, Any],
+    dest: Path,
+    mode: str,
+) -> str | None:
+    """Copy a single patient's files to the destination directory.
+
+    Args:
+        patient_dict: Row from the CSV as a dictionary (id, mask, images...).
+        dest: Root destination directory for this split.
+        mode: "training" or "test".
+
+    Returns:
+        An error message string if any file is missing, otherwise None.
+    """
+    errors = []
+    image_start_idx = 2 if mode == "training" else 1
+
+    patient_dest = dest / str(patient_dict["id"])
+    patient_dest.mkdir(parents=True, exist_ok=True)
+
+    if mode == "training":
+        mask_source = Path(patient_dict["mask"]).resolve()
+        if not mask_source.exists():
+            return f"Mask {mask_source} does not exist!"
+        conversion_utils.copy_image_from_source_to_dest(
+            mask_source, patient_dest / "mask.nii.gz"
+        )
+
+    image_keys = list(patient_dict.keys())[image_start_idx:]
+    image_list = list(patient_dict.values())[image_start_idx:]
+
+    for image_key, image_path in zip(image_keys, image_list):
+        image_source = Path(image_path).resolve()
+        if not image_source.exists():
+            errors.append(f"Image {image_source} does not exist!")
+            continue
+        conversion_utils.copy_image_from_source_to_dest(
+            image_source, patient_dest / f"{image_key}.nii.gz"
+        )
+
+    return "\n".join(errors) if errors else None
 
 
 def copy_csv_data(
     df: pd.DataFrame,
-    dest: str,
+    dest: str | Path,
     mode: str,
     progress_bar_message: str,
+    max_workers: int = 1,
 ) -> None:
     """Copy data from csv file to a MIST-compatible directory structure.
 
     Args:
         df: Dataframe containing the csv file data.
         dest: Destination directory to save the data.
-        mode: "train" or "test" mode. If "train", the mask will be copied to
-            the destination directory. If "test", the mask will not be copied.
+        mode: "training" or "test". If "training", the mask will be copied.
         progress_bar_message: Message displayed on left side of progress bar.
+        max_workers: Maximum number of parallel threads. Defaults to 1.
 
     Returns:
         None. The data is copied to the destination directory.
     """
-    # Initialize error messages.
-    error_messages = ""
+    dest = Path(dest)
+    error_messages = []
+    patients = [row._asdict() for row in df.itertuples(index=False)]  # type: ignore
 
-    # Set image start index based on mode. The csv files have the following
-    # format: id, mask, image1, image2, ..., imageN. The mask is only present
-    # in the "train" mode.
-    image_start_idx = 2 if mode == "training" else 1
-
-    with progress_bar.get_progress_bar(progress_bar_message) as pb:
-        for patient in pb.track(df.itertuples(index=False), total=len(df)):
-            # Convert row tuple to dictionary.
-            patient_dict = patient._asdict() # type: ignore
-
-            # Create new patient folder.
-            patient_dest = os.path.join(dest, str(patient_dict["id"]))
-            os.makedirs(patient_dest, exist_ok=True)
-
-            # Copy mask only in "train" mode
-            if mode == "training":
-                mask_source = os.path.abspath(patient_dict["mask"])
-                mask_dest = os.path.join(patient_dest, "mask.nii.gz")
-                if not os.path.exists(mask_source):
-                    error_messages += f"Mask {mask_source} does not exist!\n"
-                    continue
-                conversion_utils.copy_image_from_source_to_dest(
-                    mask_source, mask_dest
-                )
-
-            # Copy images to new patient folder
-            image_keys = list(patient_dict.keys())[image_start_idx:]
-            image_list = list(patient_dict.values())[image_start_idx:]
-
-            for image_key, image_path in zip(image_keys, image_list):
-                image_source = os.path.abspath(image_path)
-                image_dest = os.path.join(patient_dest, f"{image_key}.nii.gz")
-                if not os.path.exists(image_source):
-                    error_messages += f"Image {image_source} does not exist!\n"
-                    continue
-                conversion_utils.copy_image_from_source_to_dest(
-                    image_source, image_dest
-                )
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_patient = {
+            executor.submit(_copy_single_patient_csv, p, dest, mode): p
+            for p in patients
+        }
+        with progress_bar.get_progress_bar(progress_bar_message) as pb:
+            for future in pb.track(
+                concurrent.futures.as_completed(future_to_patient),
+                total=len(patients),
+            ):
+                err = future.result()
+                if err:
+                    error_messages.append(err)
 
     if error_messages:
-        console.print(rich.text.Text(error_messages)) # type: ignore
+        print_warning("\n".join(error_messages))
+        print_warning(
+            f"{len(error_messages)} of {len(patients)} patient(s) had errors "
+            "and were skipped."
+        )
 
 
 def convert_csv(
-    train_csv: str,
-    dest: str,
-    test_csv: Optional[str]=None,
+    train_csv: str | Path,
+    dest: str | Path,
+    test_csv: str | Path | None = None,
+    max_workers: int = 1,
 ) -> None:
     """Converts train and test data from csv files to MIST format.
 
@@ -88,79 +153,86 @@ def convert_csv(
         train_csv: Path to the training csv file.
         dest: Destination directory to save the data.
         test_csv: Optional path to the testing csv file.
+        max_workers: Maximum number of parallel threads for file copying.
 
     Returns:
         None. The data is copied to the destination directory.
+
+    Raises:
+        FileNotFoundError: If train_csv or test_csv does not exist.
+        ValueError: If train_csv or test_csv have incorrect column structure.
     """
-    # Convert relative paths to absolute paths.
-    dest = os.path.abspath(dest)
+    dest = Path(dest).resolve()
+    train_csv = Path(train_csv).resolve()
 
-    # Check if inputs exist. If not, raise FileNotFoundError. Otherwise,
-    # convert to absolute paths.
-    if not os.path.exists(train_csv):
+    if not train_csv.exists():
         raise FileNotFoundError(f"{train_csv} does not exist!")
-    train_csv = os.path.abspath(train_csv)
 
-    if test_csv:
-        if not os.path.exists(test_csv):
+    if test_csv is not None:
+        test_csv = Path(test_csv).resolve()
+        if not test_csv.exists():
             raise FileNotFoundError(f"{test_csv} does not exist!")
-        test_csv = os.path.abspath(test_csv)
 
-    # Create destination directories for train and test data (if test exists).
-    train_dest = os.path.join(dest, "raw", "train")
-    os.makedirs(train_dest, exist_ok=True)
-    if test_csv:
-        test_dest = os.path.join(dest, "raw", "test")
-        os.makedirs(test_dest, exist_ok=True)
+    # Read and validate CSVs before creating any directories.
+    train_df = pd.read_csv(train_csv)
+    _validate_csv_columns(train_df, "training")
+
+    test_df = None
+    if test_csv is not None:
+        test_df = pd.read_csv(test_csv)
+        _validate_csv_columns(test_df, "test")
+
+    # Create destination directories.
+    train_dest = dest / "raw" / "train"
+    train_dest.mkdir(parents=True, exist_ok=True)
+    if test_df is not None:
+        test_dest = dest / "raw" / "test"
+        test_dest.mkdir(parents=True, exist_ok=True)
 
     # Convert training data to MIST-compatible format.
-    train_df = pd.read_csv(train_csv)
     copy_csv_data(
         train_df,
         train_dest,
         "training",
         "Converting training data to MIST format",
+        max_workers=max_workers,
     )
 
     # Convert testing data to MIST-compatible format.
-    if test_csv:
-        test_df = pd.read_csv(test_csv)
+    if test_df is not None:
         copy_csv_data(
-            test_df, test_dest, "test", "Converting test data to MIST format"
+            test_df,
+            test_dest,
+            "test",
+            "Converting test data to MIST format",
+            max_workers=max_workers,
         )
 
-    # Create MIST dataset json file with task, modality, and paths.
+    # Build MIST dataset JSON. Paths are relative to the output directory so
+    # that the dataset remains portable across machines.
     dataset_json = {
         "task": None,
         "modality": None,
-        "train-data": os.path.abspath(train_dest),
-        "test-data": os.path.abspath(test_dest) if test_csv else None,
+        "train-data": "raw/train",
+        "test-data": "raw/test" if test_df is not None else None,
         "mask": ["mask.nii.gz"],
         "images": {
-            modality: [
-                f"{modality}.nii.gz"
-            ] for modality in list(train_df.columns)[2:]
+            modality: [f"{modality}.nii.gz"]
+            for modality in list(train_df.columns)[2:]
         },
         "labels": None,
         "final_classes": None,
     }
 
-    # Remove "test-data" if test_csv doesn't exist (clean-up None values).
-    if not test_csv:
+    if test_df is None:
         dataset_json.pop("test-data")
 
     # Write MIST dataset description to json file.
-    dataset_json_filename = os.path.join(dest, "dataset.json")
-    text = rich.text.Text( # type: ignore
-        f"MIST dataset parameters written to {dataset_json_filename}\n",
+    dataset_json_path = dest / "dataset.json"
+    print_info(f"MIST dataset parameters written to {dataset_json_path}")
+    console.print(dataset_json)
+    print_info(
+        "Please add task, modality, labels, and final classes to parameters."
     )
-    console.print(text)
 
-    pprint.pprint(dataset_json, sort_dicts=False)
-    console.print(rich.text.Text("\n")) # type: ignore
-    text = rich.text.Text( # type: ignore
-        "Please add task, modality, labels, and final classes to parameters.\n"
-    )
-    console.print(text)
-
-    io.write_json_file(dataset_json_filename, dataset_json)
+    io.write_json_file(dataset_json_path, dataset_json)

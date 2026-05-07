@@ -1,6 +1,5 @@
 """Registry for optimizers used in training."""
-from typing import Callable, Dict, List
-from collections import OrderedDict
+from collections.abc import Callable, Iterable
 import torch
 from torch.optim import Optimizer
 
@@ -9,7 +8,7 @@ from mist.training.optimizers.optimizer_constants import OptimizerConstants
 
 
 def _adam_optimizer(
-    params: OrderedDict,
+    params: Iterable,
     learning_rate: float,
     weight_decay: float,
     eps: float,
@@ -21,10 +20,10 @@ def _adam_optimizer(
 
 
 def _adamw_optimizer(
-    params: OrderedDict,
+    params: Iterable,
     learning_rate: float,
     weight_decay: float,
-    eps:float,
+    eps: float,
 ) -> Optimizer:
     """Internal AdamW optimizer."""
     return torch.optim.AdamW(
@@ -33,10 +32,10 @@ def _adamw_optimizer(
 
 
 def _sgd_optimizer(
-    params: OrderedDict,
+    params: Iterable,
     learning_rate: float,
     weight_decay: float,
-    eps: float, # pylint:disable=unused-argument
+    eps: float,  # pylint:disable=unused-argument
 ) -> Optimizer:
     """SGD optimizer."""
     return torch.optim.SGD(
@@ -48,14 +47,14 @@ def _sgd_optimizer(
     )
 
 
-OPTIMIZER_REGISTRY: Dict[str, Callable[..., Optimizer]] = {
+OPTIMIZER_REGISTRY: dict[str, Callable[..., Optimizer]] = {
     "adam": _adam_optimizer,
     "adamw": _adamw_optimizer,
     "sgd": _sgd_optimizer,
 }
 
 
-def get_optimizer(name: str, params: OrderedDict, **kwargs) -> Optimizer:
+def get_optimizer(name: str, params: Iterable, **kwargs) -> Optimizer:
     """Factory function for optimizers.
 
     Args:
@@ -78,6 +77,6 @@ def get_optimizer(name: str, params: OrderedDict, **kwargs) -> Optimizer:
     return OPTIMIZER_REGISTRY[name](params, **kwargs)
 
 
-def list_optimizers() -> List[str]:
+def list_optimizers() -> list[str]:
     """Return the list of available optimizer names."""
     return sorted(OPTIMIZER_REGISTRY.keys())

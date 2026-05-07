@@ -6,6 +6,8 @@ import numpy as np
 from mist.postprocessing import postprocessing_utils as utils
 
 # Tests for the group_labels_in_mask function.
+
+
 def test_group_labels_with_valid_subset():
     """Test grouping with a valid subset of labels."""
     mask = np.array([
@@ -134,6 +136,20 @@ def test_top_k_connected_components_with_morph_cleanup():
     )
     assert result.dtype == bool
     assert result.sum() <= mask.sum()
+
+
+def test_top_k_connected_components_morph_cleanup_too_few_returns_original():
+    """Fallback with morph_cleanup=True must return the pre-erosion mask."""
+    mask = np.zeros((10, 10), dtype=np.uint8)
+    mask[2:6, 2:6] = 1  # One solid 4x4 component.
+
+    # Requesting top_k=2 but only 1 component exists → fallback path.
+    result = utils.get_top_k_connected_components_binary(
+        mask, top_k=2, morph_cleanup=True, morph_iterations=1
+    )
+
+    # Result must equal the original (pre-erosion) mask, not the eroded one.
+    np.testing.assert_array_equal(result, mask.astype(bool))
 
 
 # Tests for replace_small_objects_binary function.

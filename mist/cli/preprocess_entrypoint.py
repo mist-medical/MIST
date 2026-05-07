@@ -1,16 +1,16 @@
 """Entrypoint for the preprocessing pipeline."""
 from argparse import ArgumentDefaultsHelpFormatter
 from pathlib import Path
-from typing import Optional, List
 import argparse
 
 # MIST imports.
 from mist.cli import args as argmod
 from mist.preprocessing import preprocess
+from mist.utils.console import print_warning
 
 
 def _parse_preprocess_args(
-    argv: Optional[List[str]]=None
+    argv: list[str] | None = None
 ) -> argparse.Namespace:
     """Parse CLI for the preprocessing pipeline."""
     parser = argmod.ArgParser(
@@ -30,11 +30,9 @@ def _parse_preprocess_args(
         )
 
     # Default NumPy output to ./numpy (under the current working directory)
-    # if not provided. Default results to ./results.
+    # if not provided.
     if not ns.numpy:
         ns.numpy = str(Path("./numpy").expanduser().resolve())
-    if not ns.results:
-        ns.results = str(Path("./results").expanduser().resolve())
     return ns
 
 
@@ -70,11 +68,15 @@ def _prepare_preprocess_dirs(ns: argparse.Namespace) -> None:
                 f"Destination {numpy_dir} already contains files. "
                 "Use --overwrite or choose a different --numpy directory."
             )
+        if non_empty and getattr(ns, "overwrite", False):
+            print_warning(
+                f"Overwriting existing preprocessed data in {numpy_dir}"
+            )
 
     numpy_dir.mkdir(parents=True, exist_ok=True)
 
 
-def preprocess_entry(argv: Optional[List[str]] = None) -> None:
+def preprocess_entry(argv: list[str] | None = None) -> None:
     """Entrypoint for the preprocess command."""
     ns = _parse_preprocess_args(argv)
     _ensure_analyze_artifacts(ns)

@@ -200,6 +200,8 @@ def test_add_analyzer_args_defaults_and_parsing():
     assert ns.data is None
     assert ns.results is None
     assert ns.nfolds is None
+    assert ns.verify is False
+    assert ns.data_dump is False
     assert ns.overwrite is False
 
     # Explicit values.
@@ -208,12 +210,16 @@ def test_add_analyzer_args_defaults_and_parsing():
             "--data", "path/to/dataset.json",
             "--results", "out",
             "--nfolds", "3",
+            "--verify",
+            "--data-dump",
             "--overwrite",
         ]
     )
     assert ns.data == "path/to/dataset.json"
     assert ns.results == "out"
     assert ns.nfolds == 3
+    assert ns.verify is True
+    assert ns.data_dump is True
     assert ns.overwrite is True
 
 
@@ -299,21 +305,20 @@ def test_add_train_args_defaults_and_basic_parse(patched_registries):
     ns = parser.parse_args([])
     assert ns.results is None
     assert ns.numpy is None
-    assert ns.gpus == [-1]
     assert ns.model is None
-    assert ns.pocket is False
     assert ns.patch_size is None
     assert ns.loss is None
-    assert ns.use_dtms is False
     assert ns.composite_loss_weighting is None
     assert ns.epochs is None
     assert ns.batch_size_per_gpu is None
     assert ns.learning_rate is None
     assert ns.lr_scheduler is None
+    assert ns.warmup_epochs is None
     assert ns.optimizer is None
     assert ns.l2_penalty is None
     assert ns.folds is None
     assert ns.overwrite is False
+    assert ns.resume is False
 
 
 def test_add_train_args_full_parse_success(patched_registries):
@@ -324,41 +329,39 @@ def test_add_train_args_full_parse_success(patched_registries):
     argv = [
         "--results", "out",
         "--numpy", "npdir",
-        "--gpus", "0", "1",
         "--model", "mednext",
-        "--pocket",
         "--patch-size", "32", "64", "48",
         "--loss", "dice",
-        "--use-dtms",
         "--composite-loss-weighting", "linear",
         "--epochs", "10",
         "--batch-size-per-gpu", "2",
         "--learning-rate", "0.001",
         "--lr-scheduler", "cos",
+        "--warmup-epochs", "5",
         "--optimizer", "adam",
         "--l2-penalty", "0.0005",
         "--folds", "0", "2", "4",
         "--overwrite",
+        "--resume",
     ]
     ns = parser.parse_args(argv)
 
     assert ns.results == "out"
     assert ns.numpy == "npdir"
-    assert ns.gpus == [0, 1]
     assert ns.model == "mednext"
-    assert ns.pocket is True
     assert ns.patch_size == [32, 64, 48]
     assert ns.loss == "dice"
-    assert ns.use_dtms is True
     assert ns.composite_loss_weighting == "linear"
     assert ns.epochs == 10
     assert ns.batch_size_per_gpu == 2
     assert ns.learning_rate == pytest.approx(0.001)
     assert ns.lr_scheduler == "cos"
+    assert ns.warmup_epochs == 5
     assert ns.optimizer == "adam"
     assert ns.l2_penalty == pytest.approx(0.0005)
     assert ns.folds == [0, 2, 4]
     assert ns.overwrite is True
+    assert ns.resume is True
 
 
 def test_add_train_args_enforces_choices(patched_registries):
@@ -429,7 +432,6 @@ def test_add_train_args_boolean_flags_explicit_false(patched_registries):
     parser = _mk_parser()
     args_mod.add_train_args(parser)
 
-    # pocket and use-dtms are boolean_flags; ensure explicit false works.
-    ns = parser.parse_args(["--pocket", "false", "--use-dtms", "false"])
-    assert ns.pocket is False
-    assert ns.use_dtms is False
+    # --overwrite is a boolean_flag; ensure explicit false works.
+    ns = parser.parse_args(["--overwrite", "false"])
+    assert ns.overwrite is False

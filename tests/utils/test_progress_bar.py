@@ -1,14 +1,16 @@
 """Unit tests for MIST training/validation progress bars."""
-from typing import Any, Dict, List
+from typing import Any
 from unittest.mock import patch
 import numpy as np
-import pytest
 from rich.progress import (
     BarColumn,
-    TextColumn,
-    Progress,
     MofNCompleteColumn,
-    TimeElapsedColumn
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
 )
 
 # MIST imports.
@@ -23,14 +25,15 @@ class SpyProgress:
     Captures constructor columns, add_task calls, update calls, and start/stop
     state without performing any terminal output.
     """
+
     def __init__(self, *columns: Any):
         self.columns = columns
         self.started = False
         self.stopped = False
         self._next_task_id = 1
-        self.tasks: List[int] = []
-        self.add_task_calls: List[Dict[str, Any]] = []
-        self.update_calls: List[Dict[str, Any]] = []
+        self.tasks: list[int] = []
+        self.add_task_calls: list[dict[str, Any]] = []
+        self.update_calls: list[dict[str, Any]] = []
 
     # API surface used by the module under test.
     def add_task(self, description: str, total: int, **fields: Any) -> int:
@@ -184,13 +187,13 @@ def test_validation_progressbar_multiple_updates():
     pb = ValidationProgressBar(val_steps=3)
     losses = [0.33, 0.31, 0.3051]
 
-    for l in losses:
-        pb.update(loss=l)
+    for val in losses:
+        pb.update(loss=val)
 
     assert len(pb.progress.update_calls) == len(losses)
-    for l, update in zip(losses, pb.progress.update_calls):
+    for val, update in zip(losses, pb.progress.update_calls):
         assert update["advance"] == 1
-        assert update["loss"] == f"val_loss: {l:.4f}"
+        assert update["loss"] == f"val_loss: {val:.4f}"
 
 
 @patch("mist.utils.progress_bar.Progress", new=SpyProgress)
@@ -217,15 +220,17 @@ def test_get_progress_bar_structure_and_usage():
     # Basic type.
     assert isinstance(pb, Progress)
 
-    # Verify the configured columns: [TextColumn, BarColumn, MofN,
-    # TextColumn("•"), TimeElapsed]
+    # Verify the configured columns:
+    # [Spinner, TextColumn, Bar, MofN, TaskProgress, TimeElapsed, TimeRemaining]
     cols = pb.columns
-    assert len(cols) == 5
-    assert isinstance(cols[0], TextColumn)
-    assert isinstance(cols[1], BarColumn)
-    assert isinstance(cols[2], MofNCompleteColumn)
-    assert isinstance(cols[3], TextColumn)
-    assert isinstance(cols[4], TimeElapsedColumn)
+    assert len(cols) == 7
+    assert isinstance(cols[0], SpinnerColumn)
+    assert isinstance(cols[1], TextColumn)
+    assert isinstance(cols[2], BarColumn)
+    assert isinstance(cols[3], MofNCompleteColumn)
+    assert isinstance(cols[4], TaskProgressColumn)
+    assert isinstance(cols[5], TimeElapsedColumn)
+    assert isinstance(cols[6], TimeRemainingColumn)
 
     # Ensure it behaves as a context manager and can run a task.
     # This should not raise and should allow advancing to completion.

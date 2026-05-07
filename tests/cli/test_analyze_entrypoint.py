@@ -1,6 +1,5 @@
 """Tests for the analyze command entrypoint."""
 import argparse
-from typing import List
 import pytest
 
 # MIST imports.
@@ -23,7 +22,7 @@ class _DummyAnalyzer:
         self.run_called = True
 
 
-def _patch_argparse(min_args: List[str], monkeypatch) -> None:
+def _patch_argparse(min_args: list[str], monkeypatch) -> None:
     """Make entry.argmod parser minimal and deterministic for tests."""
 
     def _mk_parser(**kwargs):
@@ -170,6 +169,59 @@ def test_analyze_entry_allows_overwrite_flag(tmp_path, monkeypatch):
     assert a.run_called is True
     # Ensure the parsed flag arrived in the Namespace.
     assert getattr(a.cli, "overwrite", False) is True
+
+
+def test_num_workers_analyze_flows_through_to_namespace(tmp_path, monkeypatch):
+    """--num-workers-analyze is parsed and forwarded to the Analyzer namespace."""
+    # Use the real add_analyzer_args so we exercise the actual argument wiring.
+    created = {}
+
+    def _factory(cli_ns):
+        a = _DummyAnalyzer(cli_ns)
+        created["analyzer"] = a
+        return a
+
+    monkeypatch.setattr(entry, "Analyzer", _factory, raising=True)
+
+    # Write a placeholder dataset JSON so --data resolves to something.
+    data_path = tmp_path / "dataset.json"
+    data_path.write_text("{}")
+    results_dir = tmp_path / "out"
+
+    argv = [
+        "--data", str(data_path),
+        "--results", str(results_dir),
+        "--num-workers-analyze", "8",
+        "--overwrite",
+    ]
+    entry.analyze_entry(argv)
+
+    assert created["analyzer"].cli.num_workers_analyze == 8
+
+
+def test_num_workers_analyze_defaults_to_one(tmp_path, monkeypatch):
+    """--num-workers-analyze defaults to 1 when not supplied."""
+    created = {}
+
+    def _factory(cli_ns):
+        a = _DummyAnalyzer(cli_ns)
+        created["analyzer"] = a
+        return a
+
+    monkeypatch.setattr(entry, "Analyzer", _factory, raising=True)
+
+    data_path = tmp_path / "dataset.json"
+    data_path.write_text("{}")
+    results_dir = tmp_path / "out"
+
+    argv = [
+        "--data", str(data_path),
+        "--results", str(results_dir),
+        "--overwrite",
+    ]
+    entry.analyze_entry(argv)
+
+    assert created["analyzer"].cli.num_workers_analyze == 1
 
 
 def test_analyze_entry_uses_default_results_when_not_provided(

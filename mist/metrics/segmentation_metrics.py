@@ -1,9 +1,6 @@
 """Modified module exposing surface distance based measures."""
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
-from typing import Any, Tuple, Union, Dict
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -20,7 +17,7 @@ def _assert_is_numpy_array(
     """Raises an exception if `array` is not a numpy array."""
     if not isinstance(array, np.ndarray):
         raise ValueError(
-          f"The argument {name!r} should be a numpy array, not a {type(array)}"
+            f"The argument {name!r} should be a numpy array, not a {type(array)}"
         )
 
 
@@ -32,8 +29,8 @@ def _check_nd_numpy_array(
     """Raises an exception if `array` is not a `num_dims`-D numpy array."""
     if len(array.shape) != num_dims:
         raise ValueError(
-          f"The argument {name!r} should be a {num_dims}D array, not of shape "
-          f"{array.shape}"
+            f"The argument {name!r} should be a {num_dims}D array, not of shape "
+            f"{array.shape}"
         )
 
 
@@ -52,14 +49,14 @@ def _assert_is_bool_numpy_array(name: str, array: Any) -> None:
     _assert_is_numpy_array(name, array)
     if array.dtype != bool:
         raise ValueError(
-          f"The argument {name!r} should be a numpy array of type bool, not "
-          f"{array.dtype}"
+            f"The argument {name!r} should be a numpy array of type bool, not "
+            f"{array.dtype}"
         )
 
 
 def _compute_bounding_box(
         mask: npt.NDArray[np.bool_],
-) -> Tuple[npt.NDArray[np.int64], npt.NDArray[np.int64]]:
+) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.int64]]:
     """Computes the bounding box of the masks.
 
     This function generalizes to arbitrary number of dimensions great or equal
@@ -120,14 +117,14 @@ def _crop_to_bounding_box(
     num_dims = len(mask.shape)
     if num_dims == 2:
         cropmask[0:-1, 0:-1] = mask[
-           bbox_min[0]:bbox_max[0] + 1,
-           bbox_min[1]:bbox_max[1] + 1
+            bbox_min[0]:bbox_max[0] + 1,
+            bbox_min[1]:bbox_max[1] + 1
         ]
     elif num_dims == 3:
         cropmask[0:-1, 0:-1, 0:-1] = mask[
-           bbox_min[0]:bbox_max[0] + 1,
-           bbox_min[1]:bbox_max[1] + 1,
-           bbox_min[2]:bbox_max[2] + 1
+            bbox_min[0]:bbox_max[0] + 1,
+            bbox_min[1]:bbox_max[1] + 1,
+            bbox_min[2]:bbox_max[2] + 1
         ]
     else:
         raise ValueError(
@@ -139,7 +136,7 @@ def _crop_to_bounding_box(
 def _sort_distances_surfels(
         distances: npt.NDArray[np.float64],
         surfel_areas: npt.NDArray[np.float64],
-) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Sorts the two list with respect to the tuple of (distance, surfel_area).
 
     Args:
@@ -156,8 +153,8 @@ def _sort_distances_surfels(
 def compute_surface_distances(
     mask_gt: npt.NDArray[np.bool_],
     mask_pred: npt.NDArray[np.bool_],
-    spacing_mm: Union[Tuple[float, float], Tuple[float, float, float]],
-) -> Dict[str, npt.NDArray[np.float64]]:
+    spacing_mm: tuple[float, float] | tuple[float, float, float],
+) -> dict[str, npt.NDArray[np.float64]]:
     """Computes closest distances from all surface points to the other surface.
 
     This function can be applied to 2D or 3D tensors. For 2D, both masks must be
@@ -207,11 +204,11 @@ def compute_surface_distances(
 
     if not len(mask_gt.shape) == len(mask_pred.shape) == len(spacing_mm):
         raise ValueError(
-           "The arguments must be of compatible shape. Got mask_gt "
-           f"with {len(mask_gt.shape)} dimensions ({mask_gt.shape}) and "
-           f"mask_pred with {len(mask_pred.shape)} dimensions "
-           f"({mask_pred.shape}), while the spacing_mm was {len(spacing_mm)} "
-           f"elements."
+            "The arguments must be of compatible shape. Got mask_gt "
+            f"with {len(mask_gt.shape)} dimensions ({mask_gt.shape}) and "
+            f"mask_pred with {len(mask_pred.shape)} dimensions "
+            f"({mask_pred.shape}), while the spacing_mm was {len(spacing_mm)} "
+            f"elements."
         )
 
     num_dims = len(spacing_mm)
@@ -223,7 +220,7 @@ def compute_surface_distances(
         # (given a 2x2 neighborhood) according to the spacing_mm.
         neighbour_code_to_surface_area = (
             lookup_tables.create_table_neighbour_code_to_contour_length(
-               spacing_mm # type: ignore
+                spacing_mm  # type: ignore
             )
         )
         kernel = lookup_tables.ENCODE_NEIGHBOURHOOD_2D_KERNEL
@@ -236,7 +233,7 @@ def compute_surface_distances(
         # (given a 2x2x2 neighbourhood) according to the spacing_mm.
         neighbour_code_to_surface_area = (
             lookup_tables.create_table_neighbour_code_to_surface_area(
-               spacing_mm # type: ignore
+                spacing_mm  # type: ignore
             )
         )
         kernel = lookup_tables.ENCODE_NEIGHBOURHOOD_3D_KERNEL
@@ -266,12 +263,12 @@ def compute_surface_distances(
 
     # create masks with the surface voxels
     borders_gt = (
-       (neighbour_code_map_gt != 0) &
-       (neighbour_code_map_gt != full_true_neighbours)
+        (neighbour_code_map_gt != 0) &
+        (neighbour_code_map_gt != full_true_neighbours)
     )
     borders_pred = (
-       (neighbour_code_map_pred != 0) &
-       (neighbour_code_map_pred != full_true_neighbours)
+        (neighbour_code_map_pred != 0) &
+        (neighbour_code_map_pred != full_true_neighbours)
     )
 
     # Compute the distance transform (closest distance of each voxel to the
@@ -293,12 +290,12 @@ def compute_surface_distances(
     # Compute the area of each surface element.
     surface_area_map_gt = neighbour_code_to_surface_area[neighbour_code_map_gt]
     surface_area_map_pred = neighbour_code_to_surface_area[
-       neighbour_code_map_pred
+        neighbour_code_map_pred
     ]
 
     # Create a list of all surface elements with distance and area.
-    distances_gt_to_pred = distmap_pred[borders_gt] # type: ignore
-    distances_pred_to_gt = distmap_gt[borders_pred] # type: ignore
+    distances_gt_to_pred = distmap_pred[borders_gt]  # type: ignore
+    distances_pred_to_gt = distmap_gt[borders_pred]  # type: ignore
     surfel_areas_gt = surface_area_map_gt[borders_gt]
     surfel_areas_pred = surface_area_map_pred[borders_pred]
 
@@ -322,7 +319,7 @@ def compute_surface_distances(
 
 
 def compute_average_surface_distance(
-        surface_distances: Dict[str, npt.NDArray[np.float64]],
+        surface_distances: dict[str, npt.NDArray[np.float64]],
 ) -> float:
     """Returns the average surface distance.
 
@@ -350,8 +347,8 @@ def compute_average_surface_distance(
 
 
 def compute_robust_hausdorff(
-        surface_distances: Dict[str, npt.NDArray[np.float64]],
-        percent: float=95.0,
+        surface_distances: dict[str, npt.NDArray[np.float64]],
+        percent: float = 95.0,
 ) -> float:
     """Computes the robust Hausdorff distance.
 
@@ -400,15 +397,15 @@ def compute_robust_hausdorff(
         perc_distance_pred_to_gt = np.inf
 
     # Return max of the two one-sided Hausdorff distances.
-    return np.max( # type: ignore
-        [perc_distance_gt_to_pred, perc_distance_pred_to_gt] # type: ignore
+    return np.max(  # type: ignore
+        [perc_distance_gt_to_pred, perc_distance_pred_to_gt]  # type: ignore
     ).astype("float")
 
 
 def compute_surface_overlap_at_tolerance(
-        surface_distances: Dict[str, npt.NDArray[np.float64]],
+        surface_distances: dict[str, npt.NDArray[np.float64]],
         tolerance_mm: float,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """Computes the overlap of the surfaces at a specified tolerance.
 
     Computes the overlap of the ground truth surface with the predicted surface
@@ -417,7 +414,7 @@ def compute_surface_overlap_at_tolerance(
     computed by correctly taking the area of each surface element into account.
 
     Args:
-        surface_distances: dict with "distances_gt_to_pred", 
+        surface_distances: dict with "distances_gt_to_pred",
         "distances_pred_to_gt" "surfel_areas_gt", "surfel_areas_pred" created by
         compute_surface_distances().
         tolerance_mm: a float value. The tolerance in mm.
@@ -443,7 +440,7 @@ def compute_surface_overlap_at_tolerance(
 
 
 def compute_surface_dice_at_tolerance(
-        surface_distances: Dict[str, npt.NDArray[np.float64]],
+        surface_distances: dict[str, npt.NDArray[np.float64]],
         tolerance_mm: float,
 ) -> float:
     """Computes the _surface_ DICE coefficient at a specified tolerance.
@@ -457,7 +454,7 @@ def compute_surface_dice_at_tolerance(
     overlap).
 
     Args:
-        surface_distances: dict with "distances_gt_to_pred", 
+        surface_distances: dict with "distances_gt_to_pred",
         "distances_pred_to_gt", "surfel_areas_gt", "surfel_areas_pred" created
         by compute_surface_distances().
         tolerance_mm: a float value. The tolerance in mm.

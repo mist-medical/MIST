@@ -1,15 +1,22 @@
 """Progress bars for MIST training and validation loops."""
+import numpy as np
 from rich.progress import (
     BarColumn,
-    TextColumn,
-    Progress,
     MofNCompleteColumn,
-    TimeElapsedColumn
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
 )
-import numpy as np
+
+from mist.utils.console import console
+
 
 class TrainProgressBar(Progress):
     """Progress bar for training loop with loss and learning rate tracking."""
+
     def __init__(self, current_epoch, fold, epochs, train_steps):
         super().__init__()
 
@@ -32,8 +39,8 @@ class TrainProgressBar(Progress):
         self.task = self.progress.add_task(
             description="Training (loss)",
             total=train_steps,
-            loss=f"loss: ",
-            lr=f"lr: ",
+            loss="loss: ",
+            lr="lr: ",
         )
 
     def update(self, loss, lr):
@@ -55,6 +62,7 @@ class TrainProgressBar(Progress):
 
 class ValidationProgressBar(Progress):
     """Progress bar for validation loop with loss tracking."""
+
     def __init__(self, val_steps):
         super().__init__()
 
@@ -71,7 +79,7 @@ class ValidationProgressBar(Progress):
         self.task = self.progress.add_task(
             description="Validation",
             total=val_steps,
-            loss=f"val_loss: "
+            loss="val_loss: "
         )
 
     def update(self, loss):
@@ -87,20 +95,23 @@ class ValidationProgressBar(Progress):
 
 
 def get_progress_bar(task_name: str) -> Progress:
-    """Set up rich progress bar.
+    """Return a configured Rich progress bar.
 
     Args:
-        task_name: Name of the task. This will be displayed on the left side of
-            the progress bar.
+        task_name: Label displayed on the left side of the progress bar.
 
     Returns:
-        A rich progress bar object.
+        A Rich :class:`~rich.progress.Progress` instance that writes to the
+        shared MIST console.
     """
-    # Set up rich progress bar
     return Progress(
-        TextColumn(task_name),
+        SpinnerColumn(),
+        TextColumn(f"[bold blue]{task_name}"),
         BarColumn(),
         MofNCompleteColumn(),
-        TextColumn("•"),
-        TimeElapsedColumn()
+        TaskProgressColumn(),
+        TimeElapsedColumn(),
+        TimeRemainingColumn(),
+        console=console,
+        transient=False,
     )

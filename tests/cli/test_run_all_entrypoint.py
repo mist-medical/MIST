@@ -22,6 +22,7 @@ def _patch_minimal_cli(monkeypatch) -> None:
         parser.add_argument("--data", type=str)
         parser.add_argument("--results", type=str)
         parser.add_argument("--nfolds", type=int)
+        parser.add_argument("--num-workers-analyze", type=int, default=1)
         parser.add_argument("--overwrite", action="store_true")
 
     def _add_preprocess_args(parser: argparse.ArgumentParser) -> None:
@@ -34,12 +35,9 @@ def _patch_minimal_cli(monkeypatch) -> None:
     def _add_train_args(parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--results", type=str)
         parser.add_argument("--numpy", type=str)
-        parser.add_argument("--gpus", nargs="+", type=int)
         parser.add_argument("--model", type=str)
-        parser.add_argument("--pocket", action="store_true")
         parser.add_argument("--patch-size", nargs=3, type=int)
         parser.add_argument("--loss", type=str)
-        parser.add_argument("--use-dtms", action="store_true")
         parser.add_argument("--composite-loss-weighting", type=str)
         parser.add_argument("--epochs", type=int)
         parser.add_argument("--batch-size-per-gpu", type=int)
@@ -72,20 +70,17 @@ def test_ns_to_argv_includes_scalars_bools_lists_and_converts_dashes():
         data="ds.json",
         nfolds=5,
         overwrite=True,             # Boolean True included.
-        gpus=[0, 1],                # List flattened.
         patch_size=(32, 32, 32),    # Tuple flattened.
-        pocket=False,               # Boolean False omitted.
         model="mednext",
     )
     keys = [
-        "data", "nfolds", "overwrite", "gpus", "patch_size", "pocket", "model"
+        "data", "nfolds", "overwrite", "patch_size", "model"
     ]
     out = entry._ns_to_argv(ns, keys)
     assert out == [
         "--data", "ds.json",
         "--nfolds", "5",
         "--overwrite",
-        "--gpus", "0", "1",
         "--patch-size", "32", "32", "32",
         "--model", "mednext",
     ]
@@ -136,9 +131,6 @@ def test_parse_run_all_args_explicit_values(monkeypatch, tmp_path):
             "--numpy", str(npy),
             "--nfolds", "3",
             "--overwrite",
-            "--gpus", "0", "1",
-            "--pocket",
-            "--use-dtms",
             "--epochs", "10",
             "--batch-size-per-gpu", "2",
         ]
@@ -148,9 +140,6 @@ def test_parse_run_all_args_explicit_values(monkeypatch, tmp_path):
     assert ns.numpy == str(npy)
     assert ns.nfolds == 3
     assert ns.overwrite is True
-    assert ns.gpus == [0, 1]
-    assert ns.pocket is True
-    assert ns.use_dtms is True
     assert ns.epochs == 10
     assert ns.batch_size_per_gpu == 2
 
@@ -190,11 +179,9 @@ def test_run_all_entry_forwards_subsets_correctly(monkeypatch, tmp_path):
         "--no-preprocess",
         "--compute-dtms",
         # Train.
-        "--gpus", "0", "1",
         "--model", "mednext",
         "--patch-size", "48", "64", "32",
         "--loss", "dice",
-        "--use-dtms",       # True -> include.
         "--epochs", "20",
         "--batch-size-per-gpu", "2",
         "--learning-rate", "0.001",
@@ -207,15 +194,15 @@ def test_run_all_entry_forwards_subsets_correctly(monkeypatch, tmp_path):
 
     # Build expected subsets from the parsed Namespace.
     ns = entry._parse_run_all_args(argv=argv)
-    analyzer_keys = ["data", "results", "nfolds", "overwrite"]
+    analyzer_keys = ["data", "results", "nfolds", "num_workers_analyze", "verify", "data_dump", "overwrite"]
     preprocess_keys = [
-        "results", "numpy", "no_preprocess", "compute_dtms", "overwrite"
+        "results", "numpy", "num_workers_preprocess",
+        "no_preprocess", "compute_dtms", "overwrite"
     ]
     train_keys = [
         "results", "numpy",
-        "gpus",
-        "model", "pocket", "patch_size",
-        "loss", "use_dtms", "composite_loss_weighting",
+        "model", "patch_size",
+        "loss", "composite_loss_weighting",
         "epochs", "batch_size_per_gpu", "learning_rate",
         "lr_scheduler", "optimizer", "l2_penalty",
         "folds", "overwrite",
@@ -257,32 +244,21 @@ def test_run_all_entry_handles_false_flags_and_empty_lists(monkeypatch):
         raising=True,
     )
 
-    argv = [
-        "--data", "d.json",
-        "--results", "r",
-        "--numpy", "n",
-        # Explicitly false flags and empty list.
-        # (with our minimal CLI, absence of flag == False; sim. by not passing).
-        "--folds",  # Empty list not representable on CLI, verify via ns below.
-    ]
-
     # Parse and construct expected.
     ns = entry._parse_run_all_args(
         argv=["--data", "d.json", "--results", "r", "--numpy", "n"]
     )
-    ns.pocket = False
-    ns.use_dtms = False
     ns.folds = []  # Empty -> should not appear.
 
-    analyze_keys = ["data", "results", "nfolds", "overwrite"]
+    analyze_keys = ["data", "results", "nfolds", "num_workers_analyze", "overwrite"]
     preprocess_keys = [
-        "results", "numpy", "no_preprocess", "compute_dtms", "overwrite"
+        "results", "numpy", "num_workers_preprocess",
+        "no_preprocess", "compute_dtms", "overwrite"
     ]
     train_keys = [
         "results", "numpy",
-        "gpus",
-        "model", "pocket", "patch_size",
-        "loss", "use_dtms", "composite_loss_weighting",
+        "model", "patch_size",
+        "loss", "composite_loss_weighting",
         "epochs", "batch_size_per_gpu", "learning_rate",
         "lr_scheduler", "optimizer", "l2_penalty",
         "folds", "overwrite",
@@ -300,3 +276,21 @@ def test_run_all_entry_handles_false_flags_and_empty_lists(monkeypatch):
     assert calls["analyze"] == expected_an
     assert calls["preprocess"] == expected_pre
     assert calls["train"] == expected_tr
+
+
+def test_run_all_entry_forwards_num_workers_analyze(monkeypatch):
+    """--num-workers-analyze is forwarded to analyze_entry."""
+    _patch_minimal_cli(monkeypatch)
+
+    calls = {"analyze": None}
+    monkeypatch.setattr(
+        entry, "analyze_entry", lambda a: calls.__setitem__("analyze", list(a)),
+        raising=True,
+    )
+    monkeypatch.setattr(entry, "preprocess_entry", lambda _: None, raising=True)
+    monkeypatch.setattr(entry, "train_entry", lambda _: None, raising=True)
+
+    entry.run_all_entry(argv=["--data", "d.json", "--num-workers-analyze", "4"])
+
+    assert "--num-workers-analyze" in calls["analyze"]
+    assert calls["analyze"][calls["analyze"].index("--num-workers-analyze") + 1] == "4"

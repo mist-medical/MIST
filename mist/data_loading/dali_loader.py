@@ -1,7 +1,6 @@
 """DALI loaders for loading data into models during training."""
 
 from collections.abc import Sequence
-from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -38,9 +37,9 @@ class GenericPipeline(Pipeline):
         seed: int,
         num_gpus: int,
         shuffle_input: bool = True,
-        input_image_files: Optional[List[str]] = None,
-        input_label_files: Optional[List[str]] = None,
-        input_dtm_files: Optional[List[str]] = None,
+        input_image_files: list[str] | None = None,
+        input_label_files: list[str] | None = None,
+        input_dtm_files: list[str] | None = None,
     ):
         """Initialize the pipeline with the given parameters.
 
@@ -141,18 +140,16 @@ class TrainPipeline(GenericPipeline):
             during augmentation.
         use_contrast: Whether to adjust contrast in the input data during
             augmentation.
-        dimension: Whether to return 2D or 3D data. If 2D, the pipeline returns
-            DHWC data. If 3D, the pipeline returns CDHW data.
     """
 
     def __init__(
         self,
-        image_paths: List[str],
-        label_paths: List[str],
-        dtm_paths: Optional[List[str]],
-        roi_size: Tuple[int, int, int],
-        labels: Optional[List[int]],
-        oversampling: Optional[float],
+        image_paths: list[str],
+        label_paths: list[str],
+        dtm_paths: list[str] | None,
+        roi_size: tuple[int, int, int],
+        labels: list[int] | None,
+        oversampling: float | None,
         extract_patches: bool = True,
         use_augmentation: bool = True,
         use_flips: bool = True,
@@ -161,7 +158,6 @@ class TrainPipeline(GenericPipeline):
         use_blur: bool = True,
         use_brightness: bool = True,
         use_contrast: bool = True,
-        dimension: int = 3,
         **kwargs,
     ):
         super().__init__(
@@ -219,12 +215,6 @@ class TrainPipeline(GenericPipeline):
             self.use_brightness = use_brightness
             self.use_contrast = use_contrast
 
-        # Define the dimension of the output data. If 2D, the pipeline returns
-        # DHWC data. If 3D, the pipeline returns CDHW data.
-        if dimension not in [2, 3]:
-            raise ValueError("Dimension must be either 2 or 3.")
-        self.dimension = dimension
-
     def load_data(self):
         """Load the image, label, and DTM data from the input readers."""
         image = self.input_images(name="image_reader")
@@ -244,7 +234,7 @@ class TrainPipeline(GenericPipeline):
             self,
             image: TensorCPU,
             label: TensorCPU,
-            dtm: Optional[TensorCPU] = None,
+            dtm: TensorCPU | None = None,
     ) -> Sequence[TensorGPU]:
         """Extract a random patch from the image, label, and DTM.
 
@@ -334,7 +324,7 @@ class TrainPipeline(GenericPipeline):
         self,
         image: TensorGPU,
         label: TensorGPU,
-        dtm: Optional[TensorGPU]=None,
+        dtm: TensorGPU | None = None,
     ) -> Sequence[TensorGPU]:
         """Apply random flips to the input image, labels, and DTMs.
 
@@ -381,7 +371,7 @@ class TrainPipeline(GenericPipeline):
         self,
         image: TensorGPU,
         label: TensorGPU,
-    ) -> Tuple[TensorGPU, TensorGPU]:
+    ) -> tuple[TensorGPU, TensorGPU]:
         """Apply a random zoom to the input image and labels.
 
         Apply a random zoom to the input image and label by scaling them down
@@ -414,7 +404,7 @@ class TrainPipeline(GenericPipeline):
 
         # Compute the new dimensions (depth, height, width) based on the scaling
         # factor.
-        d, h, w = [scale * x for x in self.roi_size]
+        d, h, w = (scale * x for x in self.roi_size)
 
         # Crop both the image and label using the new scaled dimensions.
         image = fn.crop(image, crop_h=h, crop_w=w, crop_d=d)
@@ -448,7 +438,7 @@ class TrainPipeline(GenericPipeline):
         Next, the pipeline applies a series of random augmentations to the image
         including zooming, flips, adding noise, blurring, adjusting brightness,
         and changing contrast. The final image, label, and DTM data are then
-        transposed to CDHW format for PyTorch compatibility. 
+        transposed to CDHW format for PyTorch compatibility.
         """
         # Load images, labels, and possibly DTMs. Apply biased cropping to the
         # image, label, and DTM data. Transfer the cropped patches to the GPU.
@@ -503,7 +493,7 @@ class TestPipeline(GenericPipeline):
 
     def __init__(
         self,
-        image_paths: List[str],
+        image_paths: list[str],
         **kwargs,
     ):
         super().__init__(
@@ -538,8 +528,8 @@ class EvalPipeline(GenericPipeline):
 
     def __init__(
         self,
-        image_paths: List[str],
-        label_paths: List[str],
+        image_paths: list[str],
+        label_paths: list[str],
         **kwargs,
     ):
         super().__init__(
@@ -567,13 +557,13 @@ class EvalPipeline(GenericPipeline):
 
 
 def get_training_dataset(
-    image_paths: List[str],
-    label_paths: List[str],
-    dtm_paths: Optional[List[str]],
+    image_paths: list[str],
+    label_paths: list[str],
+    dtm_paths: list[str] | None,
     batch_size: int,
-    roi_size: Tuple[int, int, int],
-    labels: Optional[List[int]],
-    oversampling: Optional[float],
+    roi_size: tuple[int, int, int],
+    labels: list[int] | None,
+    oversampling: float | None,
     seed: int,
     num_workers: int,
     rank: int,
@@ -629,7 +619,7 @@ def get_training_dataset(
         dali_iter: A DALI iterator for training data loading.
 
     Raises:
-        AssertionError: If the input data is invalid or missing. 
+        AssertionError: If the input data is invalid or missing.
     """
     # Check that inputs are valid.
     utils.validate_train_and_eval_inputs(image_paths, label_paths, dtm_paths)
@@ -660,7 +650,6 @@ def get_training_dataset(
         use_blur=use_blur if use_augmentation else False,
         use_brightness=use_brightness if use_augmentation else False,
         use_contrast=use_contrast if use_augmentation else False,
-        dimension=3,
         **pipe_kwargs
     )
 
@@ -672,8 +661,8 @@ def get_training_dataset(
 
 
 def get_validation_dataset(
-    image_paths: List[str],
-    label_paths: List[str],
+    image_paths: list[str],
+    label_paths: list[str],
     seed: int,
     num_workers: int,
     rank: int,
@@ -718,7 +707,7 @@ def get_validation_dataset(
 
 
 def get_test_dataset(
-    image_paths: List[str],
+    image_paths: list[str],
     seed: int,
     num_workers: int,
     rank: int = 0,

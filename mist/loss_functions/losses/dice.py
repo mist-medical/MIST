@@ -17,10 +17,8 @@ class DiceLoss(SegmentationLoss):
 
     We then take the mean of the Dice loss across all classes. By default, the
     Dice loss function includes the background class.
-
-    Attributes:
-        smooth: A small constant to prevent division by zero.
     """
+
     def __init__(self, exclude_background: bool = False, **kwargs: Any):
         """Initialize Dice loss.
 
@@ -29,7 +27,7 @@ class DiceLoss(SegmentationLoss):
                 excluded from the loss computation.
             kwargs: Additional keyword arguments for future extensions.
         """
-        super().__init__(exclude_background = exclude_background, **kwargs)
+        super().__init__(exclude_background=exclude_background, **kwargs)
 
     def forward(
         self,

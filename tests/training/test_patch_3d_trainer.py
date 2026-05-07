@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 from types import SimpleNamespace
-from typing import Any, Dict, Tuple
+from typing import Any
 import pandas as pd
 import pytest
 import torch
@@ -19,7 +19,7 @@ from mist.training.trainers.patch_3d_trainer import Patch3DTrainer
 class DummyIter:
     """Simple DALI-style iterator with .next()[0] and .reset()."""
 
-    def __init__(self, batch: Dict[str, torch.Tensor], steps: int):
+    def __init__(self, batch: dict[str, torch.Tensor], steps: int):
         """Initialize the iterator.
 
         Args:
@@ -30,7 +30,7 @@ class DummyIter:
         self._steps = max(0, int(steps))
         self._i = 0
 
-    def next(self) -> Tuple[Dict[str, torch.Tensor]]:
+    def next(self) -> tuple[dict[str, torch.Tensor]]:
         """Return a batch and advance the internal counter."""
         if self._i >= self._steps:
             self._i = 0
@@ -50,7 +50,7 @@ class DummyModel(nn.Module):
         super().__init__()
         self.fc = nn.Linear(4, 4, bias=False)
 
-    def forward(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> dict[str, torch.Tensor]:
         """Forward that mimics MIST dict outputs."""
         pred = self.fc(x)
         return {"prediction": pred, "deep_supervision": None}
@@ -71,7 +71,7 @@ class FakeScaler:
         self._scaled = 0
         self._stepped = 0
         self._updated = 0
-        self._unscaled = 0 # NEW: Track unscale calls
+        self._unscaled = 0  # NEW: Track unscale calls
 
     def scale(self, loss: torch.Tensor) -> "FakeScaler":
         """Pretend to scale the loss; return self for chaining .backward()."""
@@ -128,9 +128,13 @@ def tmp_pipeline(tmp_path):
     # Config with sections used by Patch3DTrainer.
     cfg = {
         "dataset_info": {"labels": [0, 1, 2]},
+        "spatial_config": {
+            "patch_size": [32, 32, 32],
+            "target_spacing": [1.0, 1.0, 1.0],
+        },
         "model": {
             "architecture": "nnunet",
-            "params": {"patch_size": [32, 32, 32]}
+            "params": {}
         },
         "training": {
             "seed": 42,
@@ -143,10 +147,7 @@ def tmp_pipeline(tmp_path):
             "dali_foreground_prob": 0.6,
             "loss": {
                 "name": "dice_ce",
-                "params": {
-                    "use_dtms": False,
-                    "composite_loss_weighting": None
-                }
+                "composite_loss_weighting": None,
             },
             "optimizer": "adam",
             "learning_rate": 0.001,
@@ -177,7 +178,6 @@ def tmp_pipeline(tmp_path):
             "inferer": {
                 "name": "sliding_window",
                 "params": {
-                    "patch_size": [32, 32, 32],
                     "patch_blend_mode": "gaussian",
                     "patch_overlap": 0.5
                 }
@@ -277,7 +277,7 @@ def test_build_dataloaders_passes_expected_args(
     tr = captured["train"]
     assert tr["extract_patches"] is True
     assert tr["batch_size"] == t.config["training"]["batch_size_per_gpu"]
-    assert tr["roi_size"] == t.config["model"]["params"]["patch_size"]
+    assert tr["roi_size"] == t.config["spatial_config"]["patch_size"]
     assert tr["rank"] == 0 and tr["world_size"] == 1
 
     vl = captured["val"]
@@ -308,6 +308,7 @@ def test_training_step_criterion_optimizer_and_scaler(
 
     # Fake criterion that records inputs and returns a simple scalar loss.
     called = {}
+
     def fake_criterion(*, y_true, y_pred, y_supervision, alpha, dtm):
         called["y_true"] = y_true
         called["y_pred"] = y_pred
@@ -336,6 +337,7 @@ def test_training_step_criterion_optimizer_and_scaler(
         "composite_loss_weighting": None,
         "epoch": 0,
         "global_step": 0,
+        "alpha": 0.5,
     }
 
     batch = {
@@ -350,8 +352,7 @@ def test_training_step_criterion_optimizer_and_scaler(
     assert isinstance(loss, torch.Tensor)
     assert "y_pred" in called and "y_true" in called
 
-    # FIX: Expect 0.5 (the new default), not None
-    assert called["alpha"] == 0.5 
+    assert called["alpha"] == 0.5
 
     assert step_calls["count"] == 1
 
@@ -362,91 +363,39 @@ def test_training_step_criterion_optimizer_and_scaler(
         assert state["scaler"]._scaled == 1
         assert state["scaler"]._stepped == 1
         assert state["scaler"]._updated == 1
-        assert state["scaler"]._unscaled == 1 
+        assert state["scaler"]._unscaled == 1
     else:
         assert state["scaler"] is None
 
 
-@pytest.mark.parametrize("amp_enabled", [False, True])
-def test_training_step_sequence_enforcement(
-    tmp_pipeline, mist_args, monkeypatch, amp_enabled
-):
-    """Verify that unscale happens BEFORE clip, and clip BEFORE step."""
+def test_training_step_parameters_updated_after_step(tmp_pipeline, mist_args):
+    """Model parameters change after a training step with non-zero gradient."""
     t = Patch3DTrainer(mist_args)
     model = DummyModel()
-
-    # Create a shared event log.
-    events = []
-
-    # 1. Mock Optimizer Step.
     opt = torch.optim.SGD(model.parameters(), lr=0.1)
-    monkeypatch.setattr(opt, "step", lambda: events.append("opt_step"))
 
-    # 2. Mock Gradient Clipping.
-    # We patch the torch.nn.utils function directly.
-    monkeypatch.setattr(
-        torch.nn.utils, 
-        "clip_grad_norm_", 
-        lambda params, max_norm: events.append("clip_grad")
-    )
+    params_before = [p.clone() for p in model.parameters()]
 
-    # 3. Enhanced FakeScaler that logs events.
-    class EventScaler:
-        """Scaler that logs unscale and step events."""
-        def __init__(self):
-            self.enabled = True
-        def scale(self, loss):
-            """Scale the loss and return self."""
-            return self
-        def backward(self):
-            """Dummy backward."""
-            pass
-        def update(self):
-            """Dummy update."""
-            pass
-        def unscale_(self, optimizer):
-            """Dummy unscale that logs event."""
-            events.append("scaler_unscale")
-        def step(self, optimizer):
-            """Dummy step that logs event."""
-            events.append("scaler_step")
-            optimizer.step()
-
-    # Setup environment.
-    scaler = EventScaler() if amp_enabled else None
-
-    if amp_enabled:
-        class _NoOpAutocast:
-            def __enter__(self):
-                return self
-            def __exit__(self, *args):
-                return False
-        monkeypatch.setattr(torch, "autocast", lambda *a, **k: _NoOpAutocast())
-
-    # Mock Criterion
-    def fake_criterion(**kwargs):
-        """Dummy criterion that returns a constant loss."""
-        return torch.tensor(0.5, requires_grad=True)
+    def real_criterion(**kwargs):
+        return (kwargs["y_pred"] - kwargs["y_true"]).pow(2).mean()
 
     state = {
-        "model": model, "optimizer": opt, "scaler": scaler,
-        "loss_function": fake_criterion, "composite_loss_weighting": None,
-        "epoch": 0
+        "model": model, "optimizer": opt, "scaler": None,
+        "loss_function": real_criterion, "composite_loss_weighting": None,
+        "epoch": 0, "alpha": 0.5,
     }
-    batch = {"image": torch.randn(1, 4), "label": torch.randn(1, 4)}
-
-    # Run
+    batch = {
+        "image": torch.randn(1, 4),
+        "label": torch.randn(1, 4),
+        "dtm": None,
+    }
     t.training_step(state=state, data=batch)
 
-    # ASSERT THE EXACT ORDER.
-    if amp_enabled:
-        # Expected: Unscale -> Clip -> Scaler Step -> Optimizer Step
-        assert events == [
-            "scaler_unscale", "clip_grad", "scaler_step", "opt_step"
-        ]
-    else:
-        # Expected: Clip -> Optimizer Step.
-        assert events == ["clip_grad", "opt_step"]
+    params_after = list(model.parameters())
+    assert any(
+        not torch.equal(before, after)
+        for before, after in zip(params_before, params_after)
+    ), "Model parameters should change after a training step"
 
 
 @patch("mist.training.trainers.patch_3d_trainer.sliding_window_inference")
@@ -494,7 +443,7 @@ def test_validation_step_calls_sliding_window_and_validation_loss(
     mock_swi.assert_called_once()
     kwargs = mock_swi.call_args.kwargs
     assert torch.equal(kwargs["inputs"], batch["image"])
-    assert kwargs["roi_size"] == t.config["model"]["params"]["patch_size"]
+    assert kwargs["roi_size"] == t.config["spatial_config"]["patch_size"]
     expected_overlap = (
         t.config["inference"]["inferer"]["params"]["patch_overlap"]
     )

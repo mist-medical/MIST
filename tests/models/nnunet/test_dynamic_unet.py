@@ -1,5 +1,4 @@
 """Tests for the DynamicUNet model in the MIST package."""
-from typing import Dict
 import pytest
 import torch
 
@@ -7,10 +6,10 @@ from mist.models.nnunet.dynamic_unet import DynamicUNet
 
 
 def create_valid_params(
-        use_deep_supervision: bool=False,
-        num_deep_supervision_heads: int=1
-) -> Dict:
-    """Helper to generate a valid set of parameters for a 2D UNet.
+        use_deep_supervision: bool = False,
+        num_deep_supervision_heads: int = 1
+) -> dict:
+    """Helper to generate a valid set of parameters for a 3D UNet.
 
     In this helper, we define a network with three levels (input, decoder,
     and bottleneck) to ensure the kernel_size and strides have a length of 3.
@@ -19,7 +18,6 @@ def create_valid_params(
     ReLU activation.
     """
     params = {
-        "spatial_dims": 2,
         "in_channels": 1,
         "out_channels": 2,
         "kernel_size": [3, 3, 3],
@@ -49,9 +47,9 @@ def test_forward_train_and_eval():
     )
     model = DynamicUNet(**params)
 
-    # Create a dummy input tensor for 2D images:
-    # (batch, channels, height, width).
-    x = torch.randn(1, params["in_channels"], 64, 64)
+    # Create a dummy input tensor for 3D volumes:
+    # (batch, channels, depth, height, width).
+    x = torch.randn(1, params["in_channels"], 32, 64, 64)
 
     # Test training mode: output should be a dictionary with both keys.
     model.train()
@@ -134,32 +132,24 @@ def test_invalid_filters_length():
 
 
 def test_kernel_sequence_length_mismatch():
-    """Test for ValueError for mismatch in kernel_size and spatial_dims.
-
-    Test that a ValueError is raised when an element in kernel_size is a
-    sequence whose length does not match spatial_dims.
-    """
+    """ValueError when a kernel_size element has wrong number of dimensions."""
     params = create_valid_params()
-    params["kernel_size"] = [(3, 3, 3), 3, 3]
+    params["kernel_size"] = [(3, 3), 3, 3]  # (3,3) has 2 dims, not 3
     with pytest.raises(ValueError) as excinfo:
         DynamicUNet(**params)
     assert (
-        "Length of kernel_size in block 0 should be the same as spatial_dims."
+        "Length of kernel_size in block 0 should be 3"
         in str(excinfo.value)
     )
 
 
 def test_stride_sequence_length_mismatch():
-    """Test for ValueError for mismatch in strides and spatial_dims.
-
-    Test that a ValueError is raised when an element in strides is a sequence
-    whose length does not match spatial_dims.
-    """
+    """ValueError when a strides element has wrong number of dimensions."""
     params = create_valid_params()
-    params["strides"] = [(1, 1, 1), 2, 2]
+    params["strides"] = [(1, 1), 2, 2]  # (1,1) has 2 dims, not 3
     with pytest.raises(ValueError) as excinfo:
         DynamicUNet(**params)
     assert (
-        "Length of stride in block 0 should be the same as spatial_dims."
+        "Length of stride in block 0 should be 3"
         in str(excinfo.value)
     )

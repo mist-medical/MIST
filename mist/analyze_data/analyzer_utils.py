@@ -1,16 +1,22 @@
 """Utilities for the analyzer module."""
-from typing import Dict, Any, Tuple, List
-import os
-import glob
+import logging
+from pathlib import Path
+from typing import Any, Literal
+
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import KFold
+import torch
 
 # MIST imports.
+from mist.analyze_data.analyzer_constants import AnalyzeConstants as constants
+from mist.models.nnunet.nnunet_utils import get_unet_params
 from mist.utils import io as io_utils
 
 
-def compare_headers(header1: Dict[str, Any], header2: Dict[str, Any]) -> bool:
+def compare_headers(
+    header1: dict[str, Any], header2: dict[str, Any]
+) -> bool:
     """Compare two image headers to see if they match.
 
     We compare the dimensions, origin, spacing, and direction of the two images.
@@ -25,6 +31,9 @@ def compare_headers(header1: Dict[str, Any], header2: Dict[str, Any]) -> bool:
     if header1["dimensions"] != header2["dimensions"]:
         is_valid = False
     elif header1["origin"] != header2["origin"]:
+        # Exact comparison is intentional: SimpleITK raises an error if image
+        # origins don't match exactly, so floating-point tolerance here would
+        # give a false sense of safety.
         is_valid = False
     elif not np.allclose(
         np.array(header1["spacing"]), np.array(header2["spacing"])
@@ -37,7 +46,7 @@ def compare_headers(header1: Dict[str, Any], header2: Dict[str, Any]) -> bool:
     return is_valid
 
 
-def is_image_3d(header: Dict[str, Any]) -> bool:
+def is_image_3d(header: dict[str, Any]) -> bool:
     """Check if image is 3D.
 
     Args:
@@ -50,29 +59,29 @@ def is_image_3d(header: Dict[str, Any]) -> bool:
 
 
 def get_resampled_image_dimensions(
-    dimensions: Tuple[int, int, int],
-    spacing: Tuple[float, float, float],
-    target_spacing: Tuple[float, float, float],
-) -> Tuple[int, int, int]:
+    dimensions: tuple[int, int, int],
+    spacing: tuple[float, float, float],
+    target_spacing: tuple[float, float, float],
+) -> tuple[int, int, int]:
     """Get new image dimensions after resampling.
 
     Args:
-        original_dimensions: Original image dimensions.
-        original_spacing: Original image spacing.
+        dimensions: Original image dimensions.
+        spacing: Original image spacing.
         target_spacing: Target image spacing.
 
     Returns:
-        new_dimensions: New image dimensions after resampling.
+        New image dimensions after resampling.
     """
     new_dimensions = [
-        int(np.round(dimensions[i] * spacing[i] / target_spacing[i])) 
+        int(np.round(dimensions[i] * spacing[i] / target_spacing[i]))
         for i in range(len(dimensions))
     ]
     return (new_dimensions[0], new_dimensions[1], new_dimensions[2])
 
 
 def get_float32_example_memory_size(
-    dimensions: Tuple[int, int, int],
+    dimensions: tuple[int, int, int],
     number_of_channels: int,
     number_of_labels: int,
 ) -> int:
@@ -90,7 +99,10 @@ def get_float32_example_memory_size(
     return int(4 * (np.prod(_dims) * (number_of_channels + number_of_labels)))
 
 
-def get_files_df(path_to_dataset_json: str, train_or_test: str) -> pd.DataFrame:
+def get_files_df(
+    path_to_dataset_json: str,
+    train_or_test: Literal["train", "test"],
+) -> pd.DataFrame:
     """Get dataframe with file paths for each patient in the dataset.
 
     Args:
@@ -98,7 +110,7 @@ def get_files_df(path_to_dataset_json: str, train_or_test: str) -> pd.DataFrame:
             information.
         train_or_test: "train" or "test". If "train", the dataframe will have
             columns for the mask and images. If "test", the dataframe
-            will have columns for the images.
+            will have columns for the images only.
 
     Returns:
         DataFrame with file paths for each patient in the dataset.
@@ -112,51 +124,71 @@ def get_files_df(path_to_dataset_json: str, train_or_test: str) -> pd.DataFrame:
         columns.append("mask")
     columns.extend(dataset_info["images"].keys())
 
-    # Base directory for the dataset.
-    base_dir = os.path.abspath(dataset_info[f"{train_or_test}-data"])
+    # Base directory for the dataset. Relative paths are resolved relative to
+    # the dataset JSON file so the JSON and its data can be co-located and
+    # moved together without adjusting the working directory.
+    base_dir = (
+        Path(path_to_dataset_json).resolve().parent
+        / dataset_info[f"{train_or_test}-data"]
+    ).resolve()
 
-    # Initialize an empty DataFrame with the determined columns.
-    df = pd.DataFrame(columns=columns)
+    # Get sorted list of patient IDs, skipping hidden files.
+    # Sorting ensures deterministic ordering across platforms and runs.
+    patient_ids = sorted(
+        p.name for p in base_dir.iterdir() if not p.name.startswith(".")
+    )
 
-    # Get list of patient IDs.
-    patient_ids = [f for f in os.listdir(base_dir) if not f.startswith('.')]
-
-    # Iterate over each patient and get the file paths for each patient.
+    # Build one row dict per patient, then create the DataFrame in one call.
+    rows = []
     for patient_id in patient_ids:
-        # Initialize row data with 'id' and empty values for other columns.
-        row_data = {"id": patient_id}
+        row_data: dict[str, Any] = {"id": patient_id}
 
-        # Path to patient data.
-        patient_dir = os.path.join(base_dir, patient_id)
-        patient_files = glob.glob(os.path.join(patient_dir, '*'))
+        patient_dir = base_dir / patient_id
+        patient_files = [str(p) for p in patient_dir.glob("*")]
 
-        # Map file paths to their respective columns.
         for image_type, identifying_strings in dataset_info["images"].items():
             matching_file = next(
-                (file for file in patient_files
-                 if any(s in file for s in identifying_strings)), None
+                (
+                    f for f in patient_files
+                    if any(s in f for s in identifying_strings)
+                ),
+                None,
             )
             if matching_file:
                 row_data[image_type] = matching_file
+            else:
+                logging.warning(
+                    "Patient '%s': no file found for image type '%s' "
+                    "(identifying strings: %s).",
+                    patient_id,
+                    image_type,
+                    identifying_strings,
+                )
 
-        # Add the mask file if in training mode.
         if train_or_test == "train":
             mask_file = next(
-                (file for file in patient_files
-                 if any(s in file for s in dataset_info["mask"])), None
+                (
+                    f for f in patient_files
+                    if any(s in f for s in dataset_info["mask"])
+                ),
+                None,
             )
             if mask_file:
                 row_data["mask"] = mask_file
+            else:
+                logging.warning(
+                    "Patient '%s': no mask file found "
+                    "(identifying strings: %s).",
+                    patient_id,
+                    dataset_info["mask"],
+                )
 
-        # Append the row to the DataFrame.
-        df = pd.concat(
-            [df, pd.DataFrame([row_data], columns=columns)],
-            ignore_index=True
-        )
-    return df
+        rows.append(row_data)
+
+    return pd.DataFrame(rows, columns=columns)
 
 
-def add_folds_to_df(df: pd.DataFrame, n_splits: int=5) -> pd.DataFrame:
+def add_folds_to_df(df: pd.DataFrame, n_splits: int = 5) -> pd.DataFrame:
     """Add folds to the dataframe for k-fold cross-validation.
 
     Args:
@@ -164,55 +196,296 @@ def add_folds_to_df(df: pd.DataFrame, n_splits: int=5) -> pd.DataFrame:
         n_splits: Number of splits for k-fold cross-validation.
 
     Returns:
-        df: Dataframe with folds added. The folds are added as a new column. The
-            dataframe is sorted by the fold column. The fold next to each 
-            patient ID is the fold that the patient belongs to the test set for
-            that given fold.
+        Dataframe with folds added as a new column, sorted by fold. The fold
+        value next to each patient ID indicates the fold in which that patient
+        belongs to the test set.
     """
-    # Initialize KFold object
     kfold = KFold(n_splits=n_splits, shuffle=True, random_state=42)
 
-    # Initialize an empty 'folds' column.
     df.insert(loc=1, column="fold", value=[None] * len(df))
 
-    # Assign fold numbers
     for fold_number, (_, test_indices) in enumerate(kfold.split(df)):
         df.loc[test_indices, "fold"] = fold_number
 
-    # Sort the dataframe by the 'fold' column
-    df = df.sort_values("fold").reset_index(drop=True)
-    return df
+    return df.sort_values("fold").reset_index(drop=True)
 
 
-def get_best_patch_size(med_img_size: List[int]) -> List[int]:
-    """Get the best patch size based on median image size and maximum size.
+def _get_voxel_budget(batch_size_per_gpu: int = 2) -> int:
+    """Return a per-patch voxel budget for patch size selection.
 
-    The best patch size is computed as the nearest power of two less than the
-    median image size. In the future, we will consider other strategies, but
-    for now this is a good starting point.
+    Queries the minimum total memory across all available CUDA devices and
+    scales linearly from a 16 GB / batch-size-2 reference (128^3 voxels per
+    patch). The budget scales inversely with batch_size_per_gpu so that total
+    memory per step (batch_size × patch_voxels × network overhead) stays
+    roughly constant. Falls back to the default constant when no GPU is
+    present.
 
     Args:
-        med_img_size: Median image size in the x y and z directions.
+        batch_size_per_gpu: Number of samples per GPU per step. Defaults to 2,
+            matching the MIST default training configuration.
 
     Returns:
-        patch_size: Selected patch size based on the input sizes.
-
-    Raises:
-        AssertionError: If the input sizes are invalid.
+        Per-patch voxel budget as a positive integer.
     """
-    # Check that each dimension of the median image size is greater than 1.
-    # Otherwise, we will get a negative or zero patch size.
-    assert min(med_img_size) > 1, "Image size is too small"
-    return [
-        int(2 ** np.floor(np.log2(med_sz))) for med_sz in med_img_size
-    ]
+    if torch.cuda.is_available() and torch.cuda.device_count() > 0:
+        min_mem = min(
+            torch.cuda.get_device_properties(i).total_memory
+            for i in range(torch.cuda.device_count())
+        )
+        return int(
+            min_mem
+            / constants.PATCH_BUDGET_REFERENCE_GPU_MEMORY_BYTES
+            * constants.PATCH_BUDGET_REFERENCE_VOXELS
+            * constants.PATCH_BUDGET_REFERENCE_BATCH_SIZE
+            / batch_size_per_gpu
+        )
+    return constants.PATCH_BUDGET_DEFAULT_VOXELS
 
 
-def build_base_config() -> Dict[str, Any]:
+def _largest_multiple_of_32_leq(value: float, minimum: int = 32) -> int:
+    """Return the largest multiple of 32 that is ≤ value, floored to minimum.
+
+    The nnUNet encoder downsamples each isotropic axis by stride 2 for up to
+    MAX_DEPTH=5 levels, so patch dimensions must be divisible by 2^5 = 32 for
+    exact decoder reconstruction.
+
+    Args:
+        value: Upper bound (inclusive, may be a float).
+        minimum: Smallest allowed return value. Defaults to 32.
+
+    Returns:
+        Largest multiple of 32 that does not exceed value, at least minimum.
+    """
+    snapped = int(value // 32) * 32
+    return max(snapped, minimum)
+
+
+def _snap_lr_to_nnunet_compatible(
+    lr_patch: int,
+    low_res_axis: int,
+    median_ip: int,
+    median_lr: int,
+    min_lr: int,
+    target_spacing: list[float],
+) -> int:
+    """Snap lr_patch to a value compatible with the nnUNet decoder.
+
+    ConvTranspose3d upsamples by the exact stride factor. If the encoder
+    halved a dimension from an odd value (e.g. 9 → 4), the decoder produces
+    8 rather than 9, causing a skip-connection size mismatch at runtime.
+
+    This function queries the nnUNet architecture planner with a trial patch
+    to find the cumulative stride on the low-res axis (z_divisor), then snaps
+    lr_patch up to the nearest compatible multiple ≤ median_lr. If snapping
+    up would exceed median_lr, it snaps down instead.
+
+    Args:
+        lr_patch: Initial low-res axis patch size (from budget calculation).
+        low_res_axis: Index of the low-resolution axis (0, 1, or 2).
+        median_ip: Median image size on the in-plane axes.
+        median_lr: Median image size on the low-res axis.
+        min_lr: Minimum allowed patch size on the low-res axis.
+        target_spacing: Target voxel spacing in mm, [x, y, z].
+
+    Returns:
+        Snapped lr_patch that is divisible by z_divisor.
+    """
+    trial = [median_ip, median_ip, median_ip]
+    trial[low_res_axis] = lr_patch
+    _, strides, _ = get_unet_params(trial, target_spacing)
+
+    # Compute the product of all strides > 1 on the low-res axis.
+    # strides[0] is always [1,1,1] (the input block); skip it.
+    z_divisor = 1
+    for s in strides[1:]:
+        if s[low_res_axis] > 1:
+            z_divisor *= s[low_res_axis]
+
+    if z_divisor <= 1:
+        return lr_patch
+
+    # Prefer snapping up (preserves more coverage along the low-res axis).
+    snapped_up = ((lr_patch + z_divisor - 1) // z_divisor) * z_divisor
+    if snapped_up <= median_lr:
+        return snapped_up
+
+    # Fall back to snapping down if snapping up would exceed the median.
+    snapped_down = (lr_patch // z_divisor) * z_divisor
+    return max(snapped_down, min_lr)
+
+
+def get_best_patch_size(
+    median_resampled_size: list[int],
+    target_spacing: list[float],
+    batch_size_per_gpu: int = 2,
+) -> list[int]:
+    """Select a patch size from the median resampled image size and spacing.
+
+    Uses a GPU-memory-derived voxel budget and the target spacing to choose
+    between two strategies:
+
+    **Quasi-2D mode** (triggered when the target spacing is still anisotropic
+    after analysis, i.e. max/min spacing > MAX_DIVIDED_BY_MIN_SPACING_THRESHOLD):
+    The low-resolution axis is identified as the axis with the largest spacing.
+    Its patch size is chosen as the largest value that leaves the full voxel
+    budget available for the in-plane axes (clamped to
+    MIN_LOW_RES_AXIS_PATCH_SIZE … median_lr), then snapped to the nearest
+    multiple of the nnUNet cumulative stride on that axis so the decoder can
+    reconstruct without skip-connection size mismatches. Both in-plane axes
+    receive the same patch size (largest multiple of 32 that fits within the
+    budget).
+
+    **3D isotropic mode** (all other cases):
+    A physically isotropic target patch extent in mm is computed from the
+    budget, then converted to per-axis voxel counts. Axes whose raw voxel
+    count would exceed the median image size are clamped and the remaining
+    budget is redistributed to the unclamped axes. Each axis is then snapped
+    down to the nearest multiple of 32 (minimum 32).
+
+    Args:
+        median_resampled_size: Median image size after resampling, [x, y, z].
+        target_spacing: Target voxel spacing in mm, [x, y, z].
+        batch_size_per_gpu: Number of samples per GPU per step. The voxel
+            budget scales inversely with this value so that total memory per
+            step stays constant. Defaults to 2 (the MIST default).
+
+    Returns:
+        Patch size as a list of three integers.
+    """
+    budget = _get_voxel_budget(batch_size_per_gpu)
+
+    anisotropy_ratio = max(target_spacing) / min(target_spacing)
+    low_res_axis = int(np.argmax(target_spacing))
+    in_plane_axes = [i for i in range(3) if i != low_res_axis]
+
+    if anisotropy_ratio > constants.MAX_DIVIDED_BY_MIN_SPACING_THRESHOLD:
+        # Quasi-2D: maximize in-plane resolution; keep low-res axis small.
+        # Use min() so the square in-plane patch fits both in-plane axes without
+        # requiring padding on the smaller one (using max() could select a patch
+        # larger than one of the axes).
+        median_lr = median_resampled_size[low_res_axis]
+        median_ip = min(median_resampled_size[i] for i in in_plane_axes)
+
+        # Largest low-res patch that leaves the full budget for in-plane.
+        # Enforce MIN_LOW_RES_AXIS_PATCH_SIZE unless the image itself is
+        # smaller, and never exceed the median image depth.
+        min_lr = min(constants.MIN_LOW_RES_AXIS_PATCH_SIZE, median_lr)
+        lr_patch = int(np.clip(budget / (median_ip ** 2), min_lr, median_lr))
+
+        # Snap to the nearest multiple of the nnUNet cumulative low-res stride
+        # so the decoder skip connections always match in spatial size.
+        lr_patch = _snap_lr_to_nnunet_compatible(
+            lr_patch, low_res_axis, median_ip, median_lr, min_lr, target_spacing
+        )
+
+        # In-plane: both axes get the same patch (largest multiple of 32).
+        # Clamp to median_ip before snapping so the snap-to-32 always operates
+        # on a value ≤ median_ip, guaranteeing the result is a valid multiple
+        # of 32 (min(512, 491) = 491 is not a multiple of 32).
+        ip_raw = min(int(round(np.sqrt(budget / lr_patch))), median_ip)
+        ip_patch = _largest_multiple_of_32_leq(ip_raw)
+
+        patch = [ip_patch, ip_patch, ip_patch]
+        patch[low_res_axis] = lr_patch
+        return patch
+
+    # 3D isotropic mode: distribute budget proportionally in physical space,
+    # iteratively clamping axes that would exceed the median image size and
+    # redistributing the freed budget to the remaining axes.
+    free_axes = list(range(3))
+    fixed: dict[int, int] = {}
+
+    while free_axes:
+        free_spacings = [target_spacing[i] for i in free_axes]
+        remaining_budget = float(budget)
+        for v in fixed.values():
+            remaining_budget /= v
+
+        n = len(free_axes)
+        target_mm = (remaining_budget * float(np.prod(free_spacings))) ** (1.0 / n)
+
+        new_fixed = [
+            i for i in free_axes
+            if (target_mm / target_spacing[i]) >= median_resampled_size[i]
+        ]
+        if not new_fixed:
+            break
+
+        for i in new_fixed:
+            # Store the snapped value so budget redistribution reflects what
+            # will actually be placed in the patch, not the raw median.
+            fixed[i] = _largest_multiple_of_32_leq(median_resampled_size[i])
+            free_axes.remove(i)
+
+    patch = []
+    for i in range(3):
+        if i in fixed:
+            raw = float(fixed[i])
+        else:
+            raw = target_mm / target_spacing[i]
+        # Round to nearest int before snapping to avoid floating-point
+        # precision causing e.g. 127.9999 to snap to 96 instead of 128.
+        clamped = min(int(round(raw)), median_resampled_size[i])
+        patch.append(_largest_multiple_of_32_leq(clamped))
+    return patch
+
+
+def build_evaluation_config(dataset: dict[str, Any]) -> dict[str, Any]:
+    """Build evaluation field for the MIST configuration.
+
+    Args:
+        dataset: The dictionary containing the dataset description. This MUST
+            contain the 'final_classes' field with the following format:
+            {
+                'final_classes': {
+                    'final_class_1': [1, 3],
+                    'final_class_2': [2, 4]
+                }
+            }
+
+    Returns:
+        A dictionary with the following format:
+            {
+                'evaluation': {
+                    'final_class_1': {
+                        'labels': [1, 3],
+                        'metrics': {
+                            'dice': {},
+                            'haus95': {},
+                        }
+                    },
+                    'final_class_2': {
+                        'labels': [2, 4],
+                        'metrics': {
+                            'dice': {},
+                            'haus95': {},
+                        }
+                    }
+                }
+            }
+    """
+    final_classes = dataset.get("final_classes", None)
+
+    if final_classes is None:
+        raise ValueError("Missing 'final_classes' in the dataset.")
+
+    evaluation = {}
+    for class_name, labels in final_classes.items():
+        evaluation[class_name] = {
+            "labels": labels,
+            "metrics": {
+                "dice": {},
+                "haus95": {},
+            },
+        }
+    return {"evaluation": evaluation}
+
+
+def build_base_config() -> dict[str, Any]:
     """Build base configuration dictionary.
 
     Returns:
-        base_config: Base configuration dictionary.
+        Base configuration dictionary.
     """
     return {
         "mist_version": None,
@@ -222,9 +495,12 @@ def build_base_config() -> Dict[str, Any]:
             "images": None,
             "labels": None,
         },
+        "spatial_config": {
+            "patch_size": None,
+            "target_spacing": None,
+        },
         "preprocessing": {
             "skip": False,
-            "target_spacing": None,
             "crop_to_foreground": None,
             "median_resampled_image_size": None,
             "normalize_with_nonzero_mask": None,
@@ -242,11 +518,6 @@ def build_base_config() -> Dict[str, Any]:
             "params": {
                 "in_channels": None,
                 "out_channels": None,
-                "patch_size": None,
-                "target_spacing": None,
-                "use_deep_supervision": True,
-                "use_residual_blocks": True,
-                "use_pocket_model": False,
             },
         },
         "training": {
@@ -260,15 +531,14 @@ def build_base_config() -> Dict[str, Any]:
             "dali_foreground_prob": 0.6,
             "loss": {
                 "name": "dice_ce",
-                "params": {
-                    "use_dtms": False,
-                    "composite_loss_weighting": None
-                },
+                "composite_loss_weighting": None,
             },
-            "optimizer": "adam",
+            "optimizer": "adamw",
             "learning_rate": 0.001,
             "lr_scheduler": "cosine",
-            "l2_penalty": 0.00001,
+            "warmup_epochs": 20,
+            "l2_penalty": 0.0001,
+            "grad_clip_norm": 1.0,
             "amp": True,
             "augmentation": {
                 "enabled": True,
@@ -293,7 +563,6 @@ def build_base_config() -> Dict[str, Any]:
             "inferer": {
                 "name": "sliding_window",
                 "params": {
-                    "patch_size": None,
                     "patch_blend_mode": "gaussian",
                     "patch_overlap": 0.5,
                 },
@@ -304,13 +573,6 @@ def build_base_config() -> Dict[str, Any]:
             "tta": {
                 "enabled": True,
                 "strategy": "all_flips",
-            },
-        },
-        "evaluation": {
-            "metrics": ["dice", "haus95"],
-            "final_classes": None,
-            "params": {
-                "surf_dice_tol": 1.0,
             },
         },
     }

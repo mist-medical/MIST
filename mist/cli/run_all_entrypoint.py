@@ -2,7 +2,6 @@
 import argparse
 from argparse import ArgumentDefaultsHelpFormatter
 from pathlib import Path
-from typing import List, Optional
 
 # MIST imports.
 from mist.cli import args as argmod
@@ -11,9 +10,9 @@ from mist.cli.preprocess_entrypoint import preprocess_entry
 from mist.cli.train_entrypoint import train_entry
 
 
-def _ns_to_argv(ns: argparse.Namespace, keys: List[str]) -> List[str]:
+def _ns_to_argv(ns: argparse.Namespace, keys: list[str]) -> list[str]:
     """Convert a subset of Namespace fields into an argv list."""
-    argv: List[str] = []
+    argv: list[str] = []
     for k in keys:
         if not hasattr(ns, k):
             continue
@@ -34,7 +33,7 @@ def _ns_to_argv(ns: argparse.Namespace, keys: List[str]) -> List[str]:
     return argv
 
 
-def _parse_run_all_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+def _parse_run_all_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Build and parse args for the run-all entrypoint."""
     parser = argmod.ArgParser(
         prog="mist_run_all",
@@ -62,22 +61,25 @@ def _parse_run_all_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     return ns
 
 
-def run_all_entry(argv: Optional[List[str]] = None) -> None:
+def run_all_entry(argv: list[str] | None = None) -> None:
     """Entrypoint for running analyze, preprocess, and train sequentially."""
     ns = _parse_run_all_args(argv)
 
-    analyzer_keys = ["data", "results", "nfolds", "overwrite"]
+    analyzer_keys = [
+        "data", "results", "nfolds", "num_workers_analyze",
+        "verify", "data_dump", "overwrite",
+    ]
     preprocess_keys = [
-        "results", "numpy", "no_preprocess", "compute_dtms", "overwrite"
+        "results", "numpy", "num_workers_preprocess",
+        "no_preprocess", "compute_dtms", "overwrite"
     ]
     train_keys = [
         "results", "numpy",
-        "gpus",
-        "model", "pocket", "patch_size",
-        "loss", "use_dtms", "composite_loss_weighting",
+        "model", "patch_size",
+        "loss", "composite_loss_weighting",
         "epochs", "batch_size_per_gpu", "learning_rate",
         "lr_scheduler", "optimizer", "l2_penalty",
-        "folds", "overwrite",
+        "folds", "num_workers_evaluate", "overwrite",
     ]
 
     # Run each stage with the appropriate subset of args.

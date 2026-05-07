@@ -1,8 +1,6 @@
 """Tests for MIST inference utilities."""
-from typing import Tuple, Dict
 from unittest.mock import patch, MagicMock
 from pathlib import Path
-import json
 import ants
 import numpy as np
 import pandas as pd
@@ -19,28 +17,26 @@ def mock_mist_config():
         "dataset_info": {
             "modality": "ct",
         },
+        "spatial_config": {
+            "patch_size": [64, 64, 64],
+            "target_spacing": [1.0, 1.0, 1.0],
+        },
         "preprocessing": {
             "skip": False,
-            "target_spacing": [1.0, 1.0, 1.0],
             "crop_to_foreground": False,
             "normalize_with_nonzero_mask": False,
             "ct_normalization": {
-            "window_min": -100.0,
-            "window_max": 100.0,
-            "z_score_mean": 0.0,
-            "z_score_std": 1.0,
+                "window_min": -100.0,
+                "window_max": 100.0,
+                "z_score_mean": 0.0,
+                "z_score_std": 1.0,
             },
         },
         "model": {
             "architecture": "nnunet",
             "params": {
-            "in_channels": 1,
-            "out_channels": 2,
-            "patch_size": [64, 64, 64],
-            "target_spacing": [1.0, 1.0, 1.0],
-            "use_deep_supervision": False,
-            "use_residual_blocks": False,
-            "use_pocket_model": False,
+                "in_channels": 1,
+                "out_channels": 2,
             }
         },
         "training": {
@@ -54,7 +50,6 @@ def mock_mist_config():
             "inferer": {
                 "name": "sliding_window",
                 "params": {
-                    "patch_size": [64, 64, 64],
                     "patch_blend_mode": "gaussian",
                     "patch_overlap": 0.5
                 }
@@ -143,6 +138,7 @@ def test_back_to_original_space(
 
 class _DummyModel:
     """Minimal stub for a torch.nn.Module, supporting .to(...).eval()."""
+
     def __init__(self):
         self.device_arg = None
 
@@ -176,7 +172,7 @@ def test_load_test_time_models_no_checkpoints(tmp_path: Path, mock_mist_config):
 
 
 @patch("mist.models.model_loader.load_model_from_config")
-@patch("torch.cuda.is_available",return_value=False)
+@patch("torch.cuda.is_available", return_value=False)
 def test_load_test_time_models_loads_all_on_cpu_when_no_cuda(
     mock_cuda_available,
     mock_load_model,
@@ -242,57 +238,6 @@ def test_load_test_time_models_uses_provided_device(
     )
 
 
-@patch("mist.models.model_loader.load_model_from_config")
-@patch("mist.models.model_loader.convert_legacy_model_config")
-@patch("mist.utils.io.read_json_file")
-def test_load_test_time_models_converts_legacy_model_config(
-    mock_read_json,
-    mock_convert_legacy,
-    mock_load_model,
-    tmp_path: Path,
-    mock_mist_config,
-):
-    """Run with legacy model config, convert it, and load models."""
-    models_dir = tmp_path / "models"
-    models_dir.mkdir(parents=True, exist_ok=True)
-    (models_dir / "fold_0.pt").write_bytes(b"")
-
-    legacy_path = models_dir / "model_config.json"
-    legacy_payload = {"model": "legacy_arch", "n_channels": 1, "n_classes": 2}
-    legacy_path.write_text(json.dumps(legacy_payload))
-
-    dummy = _DummyModel()
-    converted = {
-        "model": {
-            "architecture": "converted_arch",
-            "params": {
-                "in_channels": 1,
-                "out_channels": 2,
-                "patch_size": [64, 64, 64],
-                "target_spacing": [1.0, 1.0, 1.0],
-                "use_deep_supervision": False,
-                "use_residual_blocks": False,
-                "use_pocket_model": False,
-            },
-        }
-    }
-
-    mock_read_json.return_value = legacy_payload
-    mock_convert_legacy.return_value = converted
-    mock_load_model.return_value = dummy
-
-    _ = iu.load_test_time_models(
-        str(models_dir),
-        mist_config=mock_mist_config,
-        device="cpu",
-    )
-
-    mock_read_json.assert_called_once_with(str(legacy_path))
-    mock_convert_legacy.assert_called_once_with(legacy_payload)
-    assert mock_load_model.call_args[0][0] == str(models_dir / "fold_0.pt")
-    assert mock_load_model.call_args[0][1] == converted
-
-
 @pytest.mark.parametrize("input_mask,original_labels,expected_output", [
     # Identity mapping.
     (np.array([[0, 1], [2, 0]]), [0, 1, 2], np.array([[0, 1], [2, 0]])),
@@ -326,7 +271,7 @@ def test_remap_mask_labels(input_mask, original_labels, expected_output):
 @patch("mist.analyze_data.analyzer_utils.is_image_3d")
 @patch("ants.image_read")
 @patch("ants.image_header_info")
-@patch("os.path.isfile")
+@patch("pathlib.Path.is_file")
 def test_validate_inference_images_success(
     mock_isfile,
     mock_image_header_info,
@@ -367,7 +312,7 @@ def test_validate_inference_images_missing_id():
         iu.validate_inference_images({"img": "/some/path/img.nii.gz"})
 
 
-@patch("os.path.isfile")
+@patch("pathlib.Path.is_file")
 def test_validate_inference_images_missing_file(mock_isfile):
     """Test that missing image file raises FileNotFoundError."""
     patient_dict = {"id": "abc", "img1": "/missing/path.nii.gz"}
@@ -378,7 +323,7 @@ def test_validate_inference_images_missing_file(mock_isfile):
 
 @patch("mist.analyze_data.analyzer_utils.is_image_3d")
 @patch("ants.image_header_info")
-@patch("os.path.isfile")
+@patch("pathlib.Path.is_file")
 def test_validate_inference_images_anchor_not_3d(
     mock_isfile,
     mock_image_header_info,
@@ -397,7 +342,7 @@ def test_validate_inference_images_anchor_not_3d(
 @patch("mist.analyze_data.analyzer_utils.is_image_3d")
 @patch("ants.image_read")
 @patch("ants.image_header_info")
-@patch("os.path.isfile")
+@patch("pathlib.Path.is_file")
 def test_validate_inference_images_header_mismatch(
     mock_isfile,
     mock_image_header_info,
@@ -437,7 +382,7 @@ def test_validate_inference_images_no_image_columns():
 @patch("mist.analyze_data.analyzer_utils.is_image_3d")
 @patch("ants.image_read")
 @patch("ants.image_header_info")
-@patch("os.path.isfile")
+@patch("pathlib.Path.is_file")
 def test_validate_inference_images_secondary_image_not_3d(
     mock_isfile,
     mock_image_header_info,
@@ -457,7 +402,7 @@ def test_validate_inference_images_secondary_image_not_3d(
 
     # Simulate 3D anchor and non-3D second image.
     mock_image_header_info.side_effect = [{"dim": [3]}, {"dim": [2]}]
-    mock_is_image_3d.side_effect = [True, False] # Second image fails.
+    mock_is_image_3d.side_effect = [True, False]  # Second image fails.
     mock_compare_headers.return_value = True
     mock_image_read.return_value = MagicMock()
 
@@ -529,8 +474,8 @@ def test_validate_paths_dataframe_parametrized(df, should_raise, match):
 
 def _make_ants_image(
     arr_xyz: np.ndarray,
-    spacing: Tuple[float, float, float] = (1.0, 1.0, 1.0),
-    origin: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+    spacing: tuple[float, float, float] = (1.0, 1.0, 1.0),
+    origin: tuple[float, float, float] = (0.0, 0.0, 0.0),
 ):
     """Create an ANTs image with basic metadata."""
     img = ants.from_numpy(arr_xyz.astype(np.float32))
@@ -540,7 +485,7 @@ def _make_ants_image(
     return img
 
 
-def _crop_with_bbox(arr: np.ndarray, bbox: Dict[str, int]) -> np.ndarray:
+def _crop_with_bbox(arr: np.ndarray, bbox: dict[str, int]) -> np.ndarray:
     """Numpy crop using the same inclusive end convention as crop_to_fg."""
     xs, xe = bbox["x_start"], bbox["x_end"]
     ys, ye = bbox["y_start"], bbox["y_end"]
@@ -550,8 +495,8 @@ def _crop_with_bbox(arr: np.ndarray, bbox: Dict[str, int]) -> np.ndarray:
 
 def _expected_decrop(
     cropped: np.ndarray,
-    og_shape: Tuple[int, int, int],
-    bbox: Dict[str, int],
+    og_shape: tuple[int, int, int],
+    bbox: dict[str, int],
 ) -> np.ndarray:
     """Construct the expected zero-padded array according to bbox placement."""
     out = np.zeros(og_shape, dtype=cropped.dtype)

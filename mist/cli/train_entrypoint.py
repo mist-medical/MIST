@@ -1,23 +1,21 @@
 """Entrypoint for running the MIST training pipeline."""
 from argparse import ArgumentDefaultsHelpFormatter
 from pathlib import Path
-from typing import List, Optional, Tuple
-import os
 import argparse
-import rich
 import pandas as pd
 import torch
 
 # MIST imports.
 from mist.cli import args as argmod
 from mist.utils import io
+from mist.utils.console import print_warning, print_error
 from mist.training.trainers.patch_3d_trainer import Patch3DTrainer
 from mist.inference.inference_runners import test_on_fold, infer_from_dataframe
 from mist.evaluation import evaluation_utils
 from mist.evaluation.evaluator import Evaluator
 
 
-def _parse_train_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+def _parse_train_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse CLI for the training pipeline.
 
     Falls back to ./results and ./numpy if not provided, then downstream
@@ -39,7 +37,7 @@ def _parse_train_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     return ns
 
 
-def _ensure_required_artifacts(ns: argparse.Namespace) -> Tuple[Path, bool]:
+def _ensure_required_artifacts(ns: argparse.Namespace) -> tuple[Path, bool]:
     """Verify results & numpy folders contain the expected structure.
 
     Returns:
@@ -94,41 +92,20 @@ def _create_train_dirs(results_dir: Path, has_test_paths: bool) -> None:
         test_pred_dir.mkdir(parents=True, exist_ok=True)
 
 
-def _set_visible_devices(mist_arguments: argparse.Namespace) -> None:
-    """Set visible CUDA devices from CLI args; return number of GPUs."""
-    # Total available GPUs.
-    total = torch.cuda.device_count()
-    if total == 0:
-        raise RuntimeError(
-            "No CUDA devices found; training requires at least one GPU."
-        )
-
-    gpus = getattr(mist_arguments, "gpus", None)
-
-    # None / [] / [-1]  -> all GPUs.
-    if gpus is None or len(gpus) == 0 or (len(gpus) == 1 and gpus[0] == -1):
-        visible_devices = ",".join(str(i) for i in range(total))
-    else:
-        # Minimal validation: indices must be within 0..total-1.
-        invalid = [i for i in gpus if i < 0 or i >= total]
-        if invalid:
-            raise ValueError(
-                f"Requested GPU index/indices out of range {invalid}; "
-                f"available indices are 0..{total - 1}."
-            )
-        visible_devices = ",".join(str(i) for i in gpus)
-
-    os.environ["CUDA_VISIBLE_DEVICES"] = visible_devices
-
-
-def train_entry(argv: Optional[List[str]] = None) -> None:
+def train_entry(argv: list[str] | None = None) -> None:
     """Entrypoint for the training command."""
-    console = rich.console.Console()
-
     ns = _parse_train_args(argv)
 
     # Validate artifacts from analyze + preprocess
     results_dir, has_test_paths = _ensure_required_artifacts(ns)
+
+    # --resume and --overwrite are mutually exclusive.
+    if getattr(ns, "resume", False) and getattr(ns, "overwrite", False):
+        raise ValueError(
+            "--resume and --overwrite are mutually exclusive. "
+            "Use --resume to continue an interrupted run, or "
+            "--overwrite to start a fresh run."
+        )
 
     # Avoid accidental overwrite of an existing results.csv.
     results_csv = results_dir / "results.csv"
@@ -139,9 +116,6 @@ def train_entry(argv: Optional[List[str]] = None) -> None:
         )
 
     _create_train_dirs(results_dir, has_test_paths)
-
-    # Set the visible GPUs (None -> use all GPUs)
-    _set_visible_devices(ns)
 
     # Train
     trainer = Patch3DTrainer(ns)
@@ -159,24 +133,22 @@ def train_entry(argv: Optional[List[str]] = None) -> None:
     )
 
     if warnings:
-        console.print(warnings)
+        print_warning(warnings)
 
     if filepaths_df.empty:
-        console.print(
-            "[red]No valid prediction-mask pairs. Skipping evaluation.[/red]"
-        )
+        print_error("No valid prediction-mask pairs. Skipping evaluation.")
     else:
         evaluation_csv = results_dir / "evaluation_paths.csv"
         filepaths_df.to_csv(evaluation_csv, index=False)
 
         evaluator = Evaluator(
             filepaths_dataframe=filepaths_df,
-            evaluation_classes=config["evaluation"]["final_classes"],
+            evaluation_config=config["evaluation"],
             output_csv_path=results_csv,
-            selected_metrics=config["evaluation"]["metrics"],
-            surf_dice_tol=config["evaluation"]["params"]["surf_dice_tol"],
         )
-        evaluator.run()
+        evaluator.run(
+            max_workers=ns.num_workers_evaluate
+        )
 
     # Optional test inference
     if has_test_paths:

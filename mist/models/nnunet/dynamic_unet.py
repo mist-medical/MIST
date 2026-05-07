@@ -7,7 +7,6 @@ This implementation is based on the original MONAI implementation, but has been
 modified to be compatible with the MIST.
 """
 from collections.abc import Sequence
-from typing import Union, Tuple, Optional, Dict
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -32,26 +31,25 @@ class DynamicUNet(nn.Module):
     prediction and deep supervision outputs. If not training, the forward method
     returns the prediction.
     """
+
     def __init__(
         self,
-        spatial_dims: int,
         in_channels: int,
         out_channels: int,
-        kernel_size: Sequence[Union[Sequence[int], int]],
-        strides: Sequence[Union[Sequence[int], int]],
-        upsample_kernel_size: Sequence[Union[Sequence[int], int]],
+        kernel_size: Sequence[Sequence[int] | int],
+        strides: Sequence[Sequence[int] | int],
+        upsample_kernel_size: Sequence[Sequence[int] | int],
         filters: Sequence[int],
-        norm_name: Union[Tuple, str],
-        act_name: Union[Tuple, str],
-        dropout: Optional[Union[Tuple, str, float]]=None,
-        use_deep_supervision: bool=False,
-        num_deep_supervision_heads: int=2,
-        use_residual_blocks: bool=False,
-        trans_bias: bool=False,
+        norm_name: tuple | str,
+        act_name: tuple | str,
+        dropout: tuple | str | float | None = None,
+        use_deep_supervision: bool = False,
+        num_deep_supervision_heads: int = 2,
+        use_residual_blocks: bool = False,
+        trans_bias: bool = False,
     ):
 
         super().__init__()
-        self.spatial_dims = spatial_dims
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.kernel_size = kernel_size
@@ -115,19 +113,17 @@ class DynamicUNet(nn.Module):
         for idx, k_i in enumerate(self.kernel_size):
             kernel, stride = k_i, self.strides[idx]
             if not isinstance(kernel, int):
-                error_message = (
-                    f"Length of kernel_size in block {idx} should be the same "
-                    "as spatial_dims."
-                )
-                if len(kernel) != self.spatial_dims:
-                    raise ValueError(error_message)
+                if len(kernel) != 3:
+                    raise ValueError(
+                        f"Length of kernel_size in block {idx} should be 3 "
+                        "(one per spatial dimension)."
+                    )
             if not isinstance(stride, int):
-                error_message = (
-                    f"Length of stride in block {idx} should be the same as "
-                    "spatial_dims."
-                )
-                if len(stride) != self.spatial_dims:
-                    raise ValueError(error_message)
+                if len(stride) != 3:
+                    raise ValueError(
+                        f"Length of stride in block {idx} should be 3 "
+                        "(one per spatial dimension)."
+                    )
 
     def check_deep_supervision_parameters(self):
         """Check that the deep supervision parameters are valid."""
@@ -152,7 +148,7 @@ class DynamicUNet(nn.Module):
         else:
             self.filters = self.filters[: len(self.strides)]
 
-    def forward(self, x: torch.Tensor) -> Union[torch.Tensor, Dict]:
+    def forward(self, x: torch.Tensor) -> torch.Tensor | dict:
         """Forward pass for the Dynamic UNet architecture."""
         skips = []
 
@@ -195,7 +191,7 @@ class DynamicUNet(nn.Module):
                 self.training and
                 i in self.deep_supervision_head_ids
             ):
-                deep_supervision_head_inputs.append(x) # pylint: disable=possibly-used-before-assignment
+                deep_supervision_head_inputs.append(x)  # pylint: disable=possibly-used-before-assignment  # noqa: E501
 
         # Reverse the deep supervision head inputs to match the order of the
         # deep supervision heads. Apply the deep supervision heads to their
@@ -227,7 +223,7 @@ class DynamicUNet(nn.Module):
     def get_input_block(self):
         """Return the input block for the UNet."""
         return self.conv_block(
-            self.spatial_dims,
+            3,
             self.in_channels,
             self.filters[0],
             self.kernel_size[0],
@@ -240,7 +236,7 @@ class DynamicUNet(nn.Module):
     def get_bottleneck(self):
         """Return the bottleneck layer for the UNet."""
         return self.conv_block(
-            self.spatial_dims,
+            3,
             self.filters[-2],
             self.filters[-1],
             self.kernel_size[-1],
@@ -261,7 +257,7 @@ class DynamicUNet(nn.Module):
             The output block for the UNet.
         """
         return dynamic_unet_blocks.UnetOutBlock(
-            self.spatial_dims,
+            3,
             self.filters[level],
             self.out_channels,
             dropout=self.dropout
@@ -278,7 +274,7 @@ class DynamicUNet(nn.Module):
             out_filters,
             kernel_size,
             strides,
-            self.conv_block, # type: ignore
+            self.conv_block,  # type: ignore
         )
 
     def get_decoder_layers(self):
@@ -293,7 +289,7 @@ class DynamicUNet(nn.Module):
             out_filters,
             kernel_size,
             strides,
-            dynamic_unet_blocks.UnetUpBlock, # type: ignore
+            dynamic_unet_blocks.UnetUpBlock,  # type: ignore
             upsample_kernel_size,
             trans_bias=self.trans_bias,
         )
@@ -302,11 +298,11 @@ class DynamicUNet(nn.Module):
         self,
         in_channels: Sequence[int],
         out_channels: Sequence[int],
-        kernel_size: Sequence[Union[Sequence[int], int]],
-        strides: Sequence[Union[Sequence[int], int]],
+        kernel_size: Sequence[Sequence[int] | int],
+        strides: Sequence[Sequence[int] | int],
         conv_block: nn.Module,
-        upsample_kernel_size: Optional[Sequence[Union[Sequence[int], int]]]=None,
-        trans_bias: bool=False,
+        upsample_kernel_size: Sequence[Sequence[int] | int] | None = None,
+        trans_bias: bool = False,
     ) -> nn.ModuleList:
         """Get a list of convolutional blocks for the UNet.
 
@@ -331,7 +327,7 @@ class DynamicUNet(nn.Module):
                     upsample_kernel_size
             ):
                 params = {
-                    "spatial_dims": self.spatial_dims,
+                    "spatial_dims": 3,
                     "in_channels": in_c,
                     "out_channels": out_c,
                     "kernel_size": kernel,
@@ -352,7 +348,7 @@ class DynamicUNet(nn.Module):
                 strides
             ):
                 params = {
-                    "spatial_dims": self.spatial_dims,
+                    "spatial_dims": 3,
                     "in_channels": in_c,
                     "out_channels": out_c,
                     "kernel_size": kernel,
@@ -366,7 +362,20 @@ class DynamicUNet(nn.Module):
         return nn.ModuleList(list_of_layers)
 
     def get_deep_supervision_heads(self):
-        """Get the deep supervision heads for the UNet."""
+        """Get the deep supervision heads for the UNet.
+
+        Each head is a 1x1 output conv from the feature maps at a decoder
+        level to out_channels. The heads are stored in order from shallowest
+        to deepest (i.e. head 0 is closest to the output). They are applied
+        in reverse during the forward pass (after
+        deep_supervision_head_inputs.reverse()), so head i is paired with
+        decoder output at deep_supervision_head_ids[-(i+1)].
+
+        The filter count for head i is filters[i+1], which matches the
+        decoder output channels at that depth because the decoder out_filters
+        list is filters[:-1][::-1] — meaning the deepest selected decoder
+        outputs correspond to filters[1], filters[2], etc.
+        """
         return nn.ModuleList(
             [
                 self.get_output_block(i + 1) for
@@ -377,10 +386,7 @@ class DynamicUNet(nn.Module):
     @staticmethod
     def initialize_weights(module):
         """Initialize the weights of the UNet."""
-        if isinstance(
-            module,
-            (nn.Conv3d, nn.Conv2d, nn.ConvTranspose3d, nn.ConvTranspose2d)
-        ):
+        if isinstance(module, (nn.Conv3d, nn.ConvTranspose3d)):
             module.weight = nn.init.kaiming_normal_(
                 module.weight, a=constants.NEGATIVE_SLOPE
             )

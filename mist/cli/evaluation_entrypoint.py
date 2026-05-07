@@ -1,18 +1,17 @@
 """Command line tool to evaluate predictions from MIST output."""
+
+import argparse
 from argparse import ArgumentDefaultsHelpFormatter
 from pathlib import Path
-from typing import Optional, List, Dict
-import argparse
+
 import pandas as pd
 
-# MIST imports.
 from mist.cli.args import ArgParser
 from mist.evaluation.evaluator import Evaluator
-from mist.metrics.metrics_registry import list_registered_metrics
 from mist.utils import io
 
 
-def _parse_eval_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+def _parse_eval_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse CLI for evaluation."""
     parser = ArgParser(
         formatter_class=ArgumentDefaultsHelpFormatter,
@@ -20,39 +19,41 @@ def _parse_eval_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     )
     parser.arg(
         "--config", type=str, required=True,
-        help="Path to config.json from a MIST run (must contain evaluation.final_classes)."
+        help=(
+            "Path to an evaluation config JSON. Accepts either a full MIST "
+            "config.json (the 'evaluation' key is extracted automatically) or "
+            "a standalone evaluation config with the nested per-class structure: "
+            "{\"class\": {\"labels\": [...], \"metrics\": {\"metric\": {params}}}}."
+        ),
     )
     parser.arg(
         "--paths-csv", type=str, required=True,
-        help="CSV with paths to predictions/masks."
+        help=(
+            "CSV with columns 'id', 'mask', and 'prediction' containing the "
+            "patient ID and absolute paths to the ground truth mask and "
+            "predicted segmentation for each case."
+        ),
     )
     parser.arg(
         "--output-csv", type=str, required=True,
-        help="Where to write the evaluation results CSV."
+        help="Path where the evaluation results CSV will be written."
     )
     parser.arg(
-        "--metrics", nargs="+", default=["dice", "haus95"],
-        choices=list_registered_metrics(),
-        help="Metrics to compute."
+        "--num-workers-evaluate", type=int, default=1,
+        help="Number of parallel workers for evaluation.",
     )
-    parser.arg(
-        "--surf-dice-tol", type=float, default=1.0,
-        help="Tolerance for surface dice."
+    parser.flag(
+        "--validate",
+        help=(
+            "Validate each mask pair before evaluation. Checks that images are "
+            "3D, have an integer or boolean dtype, and contain only labels "
+            "defined in the config. Adds I/O overhead; recommended for external "
+            "data you do not fully trust."
+        ),
     )
 
     ns = parser.parse_args(argv)
     return ns
-
-
-def _read_eval_classes(config_path: Path) -> Dict:
-    """Read evaluation classes from a MIST config file."""
-    cfg = io.read_json_file(str(config_path))
-    try:
-        return cfg["evaluation"]["final_classes"]
-    except KeyError as e:
-        raise ValueError(
-            f"'evaluation.final_classes' not found in config: {config_path}"
-        ) from e
 
 
 def _ensure_output_dir(output_csv: Path) -> None:
@@ -70,20 +71,23 @@ def run_evaluation(ns: argparse.Namespace) -> None:
 
     # Load inputs.
     df = pd.read_csv(paths_csv)
-    eval_classes = _read_eval_classes(config_path)
+    full_config = io.read_json_file(config_path)
+
+    # Extract just the evaluation portion (fallback to the full config if it's
+    # already scoped).
+    eval_config = full_config.get("evaluation", full_config)
 
     # Initialize and run.
     evaluator = Evaluator(
         filepaths_dataframe=df,
-        evaluation_classes=eval_classes,
-        output_csv_path=str(output_csv),
-        selected_metrics=ns.metrics,
-        surf_dice_tol=ns.surf_dice_tol,
+        evaluation_config=eval_config,
+        output_csv_path=output_csv,
+        validate_masks=ns.validate,
     )
-    evaluator.run()
+    evaluator.run(max_workers=ns.num_workers_evaluate)
 
 
-def evaluation_entry(argv: Optional[List[str]] = None) -> None:
+def evaluation_entry(argv: list[str] | None = None) -> None:
     """Entrypoint callable from __main__ or tests."""
     ns = _parse_eval_args(argv)
     run_evaluation(ns)

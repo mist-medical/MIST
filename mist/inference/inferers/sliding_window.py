@@ -1,5 +1,5 @@
 """Sliding window inferer implementation using MONAI."""
-from typing import Callable, Tuple, Union, Optional
+from collections.abc import Callable
 import torch
 import monai
 
@@ -7,17 +7,19 @@ import monai
 from mist.inference.inference_constants import InferenceConstants as ic
 from mist.inference.inferers.base import AbstractInferer
 from mist.inference.inferers.inferer_registry import register_inferer
+from mist.inference.inference_utils import get_default_device
 
 
 @register_inferer("sliding_window")
 class SlidingWindowInferer(AbstractInferer):
     """Sliding window inference using MONAI's built-in API."""
+
     def __init__(
         self,
-        patch_size: Tuple[int, int, int],
-        patch_overlap: float=0.5,
-        patch_blend_mode: str="gaussian",
-        device: Optional[Union[str, torch.device]]=None,
+        patch_size: tuple[int, int, int],
+        patch_overlap: float = 0.5,
+        patch_blend_mode: str = "gaussian",
+        device: str | torch.device | None = None,
     ):
         """Initialize the sliding window inferer.
 
@@ -65,9 +67,7 @@ class SlidingWindowInferer(AbstractInferer):
         self.patch_blend_mode = patch_blend_mode
 
         # Set the device for inference.
-        self.device = device or (
-            torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        )
+        self.device = device or get_default_device()
 
     def infer(
         self,
@@ -84,7 +84,8 @@ class SlidingWindowInferer(AbstractInferer):
             prediction: Softmax prediction tensor of shape (1, C, D, H, W).
         """
         # Run MONAI's sliding window inference.
-        prediction = monai.inferers.sliding_window_inference( # type: ignore
+        # MONAI stubs don't fully annotate sliding_window_inference.
+        prediction = monai.inferers.sliding_window_inference(  # type: ignore[attr-defined]
             inputs=image,
             roi_size=self.patch_size,
             sw_batch_size=ic.SLIDING_WINDOW_BATCH_SIZE,

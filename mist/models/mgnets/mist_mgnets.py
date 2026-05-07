@@ -1,17 +1,21 @@
 """Implement adaptive Multi-Grid Network (MGNet) architectures."""
 
-from typing import List, Sequence, Dict, Optional, Union, Any
+from collections import OrderedDict
+from typing import Any
+from collections.abc import Sequence
 
 import torch
 from torch import nn
 from torch.nn import functional as F
 from monai.networks.blocks.dynunet_block import UnetBasicBlock, UnetResBlock
 
+from mist.models.base_model import MISTModel
 from mist.models.nnunet import nnunet_utils
 from mist.models.nnunet.nnunet_constants import NNUnetConstants as constants
+from mist.models.mgnets.mgnets_constants import MGNetConstants as mgnet_constants
 
 
-class MGNet(nn.Module):
+class MGNet(MISTModel):
     """
     Adaptive Multi-Grid Network (FMG-Net / W-Net).
 
@@ -27,7 +31,7 @@ class MGNet(nn.Module):
     2. **Horizontal Logic (Nearest Encoder):** Every rising node (decoder)
         receives a skip connection from the *nearest* available encoder node at
         the same resolution level to its left.
-    3. **Diagonal Logic (Neighbor Peak):** A decoder node receives an additional 
+    3. **Diagonal Logic (Neighbor Peak):** A decoder node receives an additional
        input from its immediate left neighbor *only if* that neighbor was a
        local maxima (a "Peak" of a spike).
 
@@ -40,7 +44,7 @@ class MGNet(nn.Module):
         bottleneck_layer_idx: The index of the deepest layer (num_layers - 1).
         num_aux_heads: The number of deep supervision heads (if enabled).
         filters_per_layer: The number of feature channels at each depth.
-        spike_height_schedule: The sequence defining the height of intermediate 
+        spike_height_schedule: The sequence defining the height of intermediate
             spikes (V-cycles) in the grid.
         main_encoder: The initial contracting path module list.
         spikes: The intermediate up/down V-cycles module list.
@@ -55,34 +59,41 @@ class MGNet(nn.Module):
         patch_size: Sequence[int],
         target_spacing: Sequence[float],
         mg_net: str = "fmgnet",
-        use_pocket_model: bool = False,
         use_residual_blocks: bool = False,
         use_deep_supervision: bool = True,
-        num_deep_supervision_heads: Optional[int] = None,
         **kwargs: Any
     ):
         """
-        Initializes the MGNet architecture by simulating the grid traversal to 
+        Initializes the MGNet architecture by simulating the grid traversal to
         dynamically calculate channel dependencies.
+
+        MGNet always uses the pocket paradigm: filters are kept constant at
+        base_filters across all depths. Representational capacity comes from
+        the multigrid topology (number and pattern of V-cycles), not from
+        channel widening.
 
         Args:
             in_channels: Number of input image channels.
             out_channels: Number of output classes.
             patch_size: The spatial size of the input patch (e.g., 128x128x128).
             target_spacing: The voxel spacing (e.g., [1.0, 1.0, 1.0]).
-            mg_net: The topology type. Options: 'wnet', 'fmgnet', or 'unet'. 
-                Defaults to 'wnet'.
-            use_pocket_model: If True, limits filter count to base_filters at
-                all levels to reduce model size. Defaults to False.
-            use_residual_blocks: If True, uses ResBlocks; otherwise uses 
+            mg_net: The topology type. Options: 'wnet', 'fmgnet', or 'unet'.
+                Defaults to 'fmgnet'.
+            use_residual_blocks: If True, uses ResBlocks; otherwise uses
                 BasicBlocks. Defaults to False.
-            use_deep_supervision: If True, enables auxiliary loss heads at lower 
-                resolutions. Defaults to True.
-            num_deep_supervision_heads: Explicit number of aux heads. If None, 
-                defaults to (num_layers - 2). Defaults to None.
+            use_deep_supervision: If True, enables 2 auxiliary loss heads at
+                lower resolutions, matching nnUNet's default. Defaults to True.
             **kwargs: Additional keyword arguments (ignored).
         """
         super().__init__()
+
+        if len(patch_size) != 3:
+            raise ValueError(
+                f"MGNet requires a 3D patch_size, but got {len(patch_size)} "
+                "dimensions. For anisotropic data use a thin Z slice "
+                "(e.g., 256×256×5) rather than a 2D patch."
+            )
+
         self.num_classes = out_channels
         self.use_deep_supervision = use_deep_supervision
 
@@ -94,28 +105,15 @@ class MGNet(nn.Module):
         self.bottleneck_layer_idx = self.num_layers - 1
 
         # --- 2. DEEP SUPERVISION CONFIGURATION ---
-        if use_deep_supervision:
-            if num_deep_supervision_heads:
-                total_heads = num_deep_supervision_heads
-            else:
-                # Default rule: supervise all levels except the two lowest
-                # resolutions.
-                total_heads = max(1, self.num_layers - 2)
-            self.num_aux_heads = total_heads - 1
-        else:
-            self.num_aux_heads = 0
+        self.num_aux_heads = 2 if use_deep_supervision else 0
 
         # --- 3. FILTER & BLOCK CONFIGURATION ---
+        # MGNet always uses the pocket paradigm: constant filters at all depths.
+        # Representational capacity comes from the multigrid topology, not width.
         base_filters = constants.INITIAL_FILTERS
-        if use_pocket_model:
-            self.filters_per_layer = [
-                base_filters for _ in range(self.num_layers)]
-        else:
-            # Filters double every layer, capped at MAX_FILTERS_3D.
-            self.filters_per_layer = [
-                min((2 ** i) * base_filters, constants.MAX_FILTERS_3D)
-                for i in range(self.num_layers)
-            ]
+        self.filters_per_layer = [
+            base_filters for _ in range(self.num_layers)
+        ]
 
         self.block_class = (
             UnetResBlock if use_residual_blocks else UnetBasicBlock
@@ -181,7 +179,7 @@ class MGNet(nn.Module):
                     in_channels=expected_in_channels,
                     out_channels=self.filters_per_layer[depth_idx],
                     kernel_size=self.kernels[depth_idx + 1],
-                    stride=[1, 1, 1]
+                    stride=[1, 1, 1],
                 ))
                 up_samples.append(self._make_upsample(
                     in_channels=self.filters_per_layer[depth_idx + 1],
@@ -227,7 +225,7 @@ class MGNet(nn.Module):
                 in_channels=expected_in_channels,
                 out_channels=self.filters_per_layer[depth_idx],
                 kernel_size=self.kernels[depth_idx + 1],
-                stride=[1, 1, 1]
+                stride=[1, 1, 1],
             ))
             self.main_decoder_upsamples.append(self._make_upsample(
                 in_channels=self.filters_per_layer[depth_idx + 1],
@@ -247,7 +245,7 @@ class MGNet(nn.Module):
                     nn.Conv3d(
                         self.filters_per_layer[level_idx],
                         self.num_classes,
-                        kernel_size=1
+                        kernel_size=1,
                     )
                 )
 
@@ -257,27 +255,39 @@ class MGNet(nn.Module):
     # HELPER METHODS
     # =========================================================================
 
-    def _generate_sparse_w_sequence(self, max_height: int) -> List[int]:
+    def get_encoder_state_dict(self) -> OrderedDict:
+        """Return encoder weights: main encoder path only.
+
+        Spike V-cycles are excluded — they are topology-specific to the
+        multigrid structure and do not transfer cleanly across architectures.
+        """
+        return OrderedDict(
+            {k: v for k, v in self.state_dict().items()
+             if k.startswith("main_encoder.")}
+        )
+
+    def _generate_sparse_w_sequence(self, max_height: int) -> list[int]:
         """
         Generates the recursive V-cycle pattern for W-Net topology.
 
         The sequence is constructed by creating a full pyramid up to max_height
-        and interleaving it with height-1 spikes to maintain high-frequency 
+        and interleaving it with height-1 spikes to maintain high-frequency
         gradients (e.g., [1, 2, 1, 3, 1...]).
 
         Args:
-            max_height: The maximum height (depth from bottleneck) the W-Net 
+            max_height: The maximum height (depth from bottleneck) the W-Net
                 should reach.
 
         Returns:
-            A sequence of integers representing the height of each intermediate 
+            A sequence of integers representing the height of each intermediate
             spike.
         """
         if max_height <= 1:
             return [1]
 
-        core_sequence = list(range(2, max_height + 1)) + \
-            list(range(max_height - 1, 1, -1))
+        core_sequence = (
+            list(range(2, max_height + 1)) + list(range(max_height - 1, 1, -1))
+        )
         full_sequence = [1]
         for val in core_sequence:
             full_sequence.extend([val, 1])
@@ -306,24 +316,21 @@ class MGNet(nn.Module):
             The constructed convolutional block (or Sequence containing
             projection).
         """
-        if (
-            in_channels > constants.REDUCTION_THRESHOLD
-            and in_channels != out_channels
-        ):
+        if in_channels > mgnet_constants.REDUCTION_THRESHOLD:
             projection = nn.Conv3d(
                 in_channels,
-                constants.REDUCTION_THRESHOLD,
+                mgnet_constants.REDUCTION_THRESHOLD,
                 kernel_size=1,
-                bias=False
+                bias=False,
             )
             block = self.block_class(
                 spatial_dims=3,
-                in_channels=512,
+                in_channels=mgnet_constants.REDUCTION_THRESHOLD,
                 out_channels=out_channels,
                 kernel_size=kernel_size,
                 stride=stride,
                 norm_name=constants.NORMALIZATION,
-                act_name=constants.ACTIVATION
+                act_name=constants.ACTIVATION,
             )
             return nn.Sequential(projection, block)
 
@@ -334,32 +341,36 @@ class MGNet(nn.Module):
             kernel_size=kernel_size,
             stride=stride,
             norm_name=constants.NORMALIZATION,
-            act_name=constants.ACTIVATION
+            act_name=constants.ACTIVATION,
         )
 
     def _make_upsample(
-            self, in_channels: int, scale_factor: Sequence[int]
-        ) -> nn.Module:
+        self, in_channels: int, scale_factor: Sequence[int]
+    ) -> nn.Module:
         """
-        Creates a trilinear upsampling layer.
+        Creates a learnable transposed convolution upsampling layer.
+
+        Uses kernel_size == stride, which is the standard approach for
+        artifact-free upsampling and handles anisotropic strides correctly.
 
         Args:
-            in_channels: Number of input channels (unused by Upsample, but kept 
-                for interface).
-            scale_factor: The scale factor for each spatial dimension.
+            in_channels: Number of input channels.
+            scale_factor: The stride (and kernel size) for each spatial
+                dimension, derived from the encoder stride at that depth.
 
         Returns:
-            The upsampling layer.
+            The transposed convolution upsampling layer.
         """
-        return nn.Upsample(
-            scale_factor=tuple(scale_factor),
-            mode="trilinear",
-            align_corners=False
+        return nn.ConvTranspose3d(
+            in_channels,
+            in_channels,
+            kernel_size=tuple(scale_factor),
+            stride=tuple(scale_factor),
         )
 
     def _init_weights(self, module: nn.Module):
         """
-        Applies Kaiming He initialization to convolutional weights and handles 
+        Applies Kaiming He initialization to convolutional weights and handles
         InstanceNorm initialization.
 
         Args:
@@ -376,7 +387,7 @@ class MGNet(nn.Module):
             if module.bias is not None:
                 nn.init.constant_(module.bias, 0.0)
 
-    def forward(self, x: torch.Tensor) -> Union[torch.Tensor, Dict[str, Any]]:
+    def forward(self, x: torch.Tensor) -> torch.Tensor | dict[str, Any]:
         """Executes the grid traversal.
 
         Flow:
@@ -395,14 +406,14 @@ class MGNet(nn.Module):
         """
         # 1. ENCODER FEATURE REGISTRY
         # Stores the history of features at every depth.
-        encoder_feature_registry: Dict[int, List[torch.Tensor]] = {
+        encoder_feature_registry: dict[int, list[torch.Tensor]] = {
             d: [] for d in range(self.num_layers)
         }
 
         # 2. NEIGHBOR PEAK REGISTRY
         # Transient buffer. Stores a feature ONLY if the node immediately to the
         # left was a local maxima (Peak).
-        neighbor_peak_registry: Dict[int, Optional[torch.Tensor]] = {
+        neighbor_peak_registry: dict[int, torch.Tensor | None] = {
             d: None for d in range(self.num_layers)
         }
 
@@ -438,8 +449,9 @@ class MGNet(nn.Module):
                 current_features = block(torch.cat(inputs_to_concat, dim=1))
 
             # Peak reached.
-            peak_depth_idx = self.bottleneck_layer_idx - \
-                len(spike_module["up_blocks"])
+            peak_depth_idx = (
+                self.bottleneck_layer_idx - len(spike_module["up_blocks"])
+            )
             neighbor_peak_registry[peak_depth_idx] = current_features
             encoder_feature_registry[peak_depth_idx].append(current_features)
 
@@ -479,21 +491,23 @@ class MGNet(nn.Module):
                 decoder_features_for_deep_supervision.append(current_features)
 
         # --- OUTPUT ---
-        if self.training and self.use_deep_supervision:
-            decoder_features_for_deep_supervision.reverse()
+        prediction = self.final_output_conv(current_features)
 
-            final_deep_supervision_outputs = []
-            for head_idx, features in enumerate(
-                decoder_features_for_deep_supervision
-            ):
-                aux_output = self.deep_supervision_heads[head_idx](features)
-                final_deep_supervision_outputs.append(
-                    F.interpolate(aux_output, x.shape[2:])
-                )
-
+        if self.training:
+            deep_supervision_outputs = None
+            if self.use_deep_supervision:
+                decoder_features_for_deep_supervision.reverse()
+                deep_supervision_outputs = []
+                for head_idx, features in enumerate(
+                    decoder_features_for_deep_supervision
+                ):
+                    aux_output = self.deep_supervision_heads[head_idx](features)
+                    deep_supervision_outputs.append(
+                        F.interpolate(aux_output, x.shape[2:])
+                    )
             return {
-                "prediction": self.final_output_conv(current_features),
-                "deep_supervision": final_deep_supervision_outputs
+                "prediction": prediction,
+                "deep_supervision": deep_supervision_outputs,
             }
 
-        return self.final_output_conv(current_features)
+        return prediction

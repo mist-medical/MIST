@@ -1,14 +1,13 @@
 """Tests for MIST training entrypoint CLI."""
-from typing import List, Tuple
 import argparse
 import json
-import os
 from pathlib import Path
 import pandas as pd
 import pytest
 
 # MIST imports.
 import mist.cli.train_entrypoint as entry
+from mist.utils import console as console_mod
 
 
 # =============================================================================
@@ -39,7 +38,9 @@ def _patch_minimal_cli(monkeypatch) -> None:
         parser.add_argument("--results", type=str, default=None)
         parser.add_argument("--numpy", type=str, default=None)
         parser.add_argument("--gpus", nargs="+", type=int, default=[-1])
+        parser.add_argument("--num-workers-evaluate", type=int, default=1)
         parser.add_argument("--overwrite", action="store_true")
+        parser.add_argument("--resume", action="store_true")
 
     monkeypatch.setattr(entry.argmod, "ArgParser", _mk_parser, raising=True)
     monkeypatch.setattr(
@@ -216,55 +217,31 @@ def test_create_train_dirs_makes_structure(tmp_path, has_test_paths):
 
 
 # =============================================================================
-# Tests for _set_visible_devices.
-# =============================================================================
-
-
-def test_set_visible_devices_no_gpus_raises(monkeypatch):
-    """It raises a RuntimeError when torch reports 0 GPUs."""
-    monkeypatch.setattr(
-        entry.torch.cuda, "device_count", lambda: 0, raising=True
-    )
-    with pytest.raises(RuntimeError):
-        entry._set_visible_devices(
-            argparse.Namespace(gpus=[-1])
-        )
-
-
-@pytest.mark.parametrize("cli_gpus", [None, [], [-1]])
-def test_set_visible_devices_all_gpus(monkeypatch, cli_gpus):
-    """It sets CUDA_VISIBLE_DEVICES to all indices for None/[]/[-1]."""
-    monkeypatch.setattr(
-        entry.torch.cuda, "device_count", lambda: 3, raising=True
-    )
-    ns = argparse.Namespace(gpus=cli_gpus)
-    entry._set_visible_devices(ns)
-    assert os.environ.get("CUDA_VISIBLE_DEVICES") == "0,1,2"
-
-
-def test_set_visible_devices_specific_indices(monkeypatch):
-    """It sets CUDA_VISIBLE_DEVICES to the requested indices."""
-    monkeypatch.setattr(
-        entry.torch.cuda, "device_count", lambda: 4, raising=True
-    )
-    ns = argparse.Namespace(gpus=[1, 3])
-    entry._set_visible_devices(ns)
-    assert os.environ.get("CUDA_VISIBLE_DEVICES") == "1,3"
-
-
-def test_set_visible_devices_invalid_indices(monkeypatch):
-    """It raises ValueError when indices are out of range."""
-    monkeypatch.setattr(
-        entry.torch.cuda, "device_count", lambda: 2, raising=True
-    )
-    ns = argparse.Namespace(gpus=[3])
-    with pytest.raises(ValueError):
-        entry._set_visible_devices(ns)
-
-
-# =============================================================================
 # Tests for train_entry — integration behavior.
 # =============================================================================
+
+
+def test_train_entry_resume_and_overwrite_are_mutually_exclusive(
+    tmp_path, monkeypatch
+):
+    """It raises ValueError when both --resume and --overwrite are passed."""
+    _patch_minimal_cli(monkeypatch)
+
+    results_dir = tmp_path / "results"
+    numpy_dir = tmp_path / "numpy"
+    results_dir.mkdir()
+    numpy_dir.mkdir()
+    _write_required_files(results_dir, include_test=False)
+    _ensure_numpy_dirs(numpy_dir)
+
+    argv = [
+        "--results", str(results_dir),
+        "--numpy", str(numpy_dir),
+        "--resume",
+        "--overwrite",
+    ]
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        entry.train_entry(argv)
 
 
 def test_train_entry_blocks_existing_results_csv_without_overwrite(
@@ -345,7 +322,7 @@ def test_train_entry_happy_path_no_test_empty_eval(tmp_path, monkeypatch):
     )
 
     # Record folds for test_on_fold calls.
-    folds_called: List[int] = []
+    folds_called: list[int] = []
     monkeypatch.setattr(
         entry,
         "test_on_fold",
@@ -364,8 +341,8 @@ def test_train_entry_happy_path_no_test_empty_eval(tmp_path, monkeypatch):
     # Capture console prints.
     logs = []
     monkeypatch.setattr(
-        "rich.console.Console.print",
-        lambda self, *a, **k: logs.append(" ".join(map(str, a))),
+        console_mod.console, "print",
+        lambda msg, **k: logs.append(str(msg)),
     )
 
     # Evaluator should not be called since dataframe is empty.
@@ -414,11 +391,13 @@ def test_train_entry_happy_path_with_eval_and_test_infer(
 
     # Config for folds/eval params.
     config = {
-        "training": {"folds": [2]},
+        "training": {
+            "folds": [2],
+            "hardware": {"num_cpu_workers": 4},
+        },
         "evaluation": {
-            "final_classes": {"background": [0], "foreground": [1]},
-            "metrics": ["dice"],
-            "params": {"surf_dice_tol": 0.5},
+            "background": {"labels": [0], "metrics": {"dice": {}}},
+            "foreground": {"labels": [1], "metrics": {"dice": {}}},
         },
     }
     (results_dir / "config.json").write_text(json.dumps(config))
@@ -441,7 +420,7 @@ def test_train_entry_happy_path_with_eval_and_test_infer(
     )
 
     # Fold test tracker.
-    folds_called: List[int] = []
+    folds_called: list[int] = []
     monkeypatch.setattr(
         entry,
         "test_on_fold",
@@ -463,15 +442,9 @@ def test_train_entry_happy_path_with_eval_and_test_infer(
     # Evaluator stub that writes results.csv.
     runs = {"called": False}
 
-    def _mk_eval(
-        filepaths_dataframe,
-        evaluation_classes,
-        output_csv_path,
-        selected_metrics,
-        surf_dice_tol,
-    ):
+    def _mk_eval(filepaths_dataframe, evaluation_config, output_csv_path):
         class _E:
-            def run(self_nonlocal):
+            def run(self_nonlocal, max_workers=None):
                 runs["called"] = True
                 Path(output_csv_path).write_text("metric,value\n")
 
@@ -483,7 +456,7 @@ def test_train_entry_happy_path_with_eval_and_test_infer(
     test_df = pd.DataFrame({"id": [9]})
     monkeypatch.setattr(pd, "read_csv", lambda p: test_df, raising=True)
 
-    infer_calls: List[Tuple[str, str]] = []
+    infer_calls: list[tuple[str, str]] = []
 
     def _infer_from_dataframe(
         paths_dataframe,

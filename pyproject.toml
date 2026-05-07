@@ -1,6 +1,6 @@
 [project]
 name = "mist-medical"
-version = "1.0.1-beta"
+version = "2.0.0-rc"
 requires-python = ">= 3.10"
 description = "MIST is a simple and scalable end-to-end framework for medical imaging segmentation."
 readme = "README.md"
@@ -8,8 +8,8 @@ license = {file = "LICENSE"}
 authors = [
     {name = "Adrian Celaya", email = "aecelaya@rice.edu"},
     {name = "David Fuentes", email = "dtfuentes@mdanderson.org"},
+    {name= "Tucker Netherton", email = "tnetherton@mdanderson.org"},
     {name = "Beatrice Riviere", email = "riviere@rice.edu"},
-    {name = "MIST Imaging LLC"},
     {name = "Rice University"},
     {name = "The University of Texas MD Anderson Cancer Center"}
 ]
@@ -42,11 +42,13 @@ dependencies = [
     "scipy",
     "scikit-learn",
     "scikit-image",
-    "nvidia-dali-cuda120",
     "tensorboard",
     "einops",
     "pytest",
 ]
+
+[project.optional-dependencies]
+train = ["nvidia-dali-cuda120"]
 
 [project.urls]
 homepage = "https://github.com/mist-medical/MIST"
@@ -61,7 +63,10 @@ mist_train = "mist.cli.train_entrypoint:train_entry"
 mist_predict = "mist.cli.inference_entrypoint:inference_entry"
 mist_evaluate = "mist.cli.evaluation_entrypoint:evaluation_entry"
 mist_postprocess = "mist.cli.postprocess_entrypoint:postprocess_entry"
-mist_convert_dataset = "mist.cli.conversion_entrypoint:conversion_entry"
+mist_rank = "mist.cli.rank_entrypoint:rank_entry"
+mist_convert_msd = "mist.cli.convert_msd_entrypoint:convert_msd_entry"
+mist_convert_csv = "mist.cli.convert_csv_entrypoint:convert_csv_entry"
+mist_average_weights = "mist.cli.average_weights_entrypoint:average_weights_entry"
 
 [tool.codespell]
 skip = ".git"

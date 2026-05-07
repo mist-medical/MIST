@@ -1,6 +1,5 @@
 """Utility functions for nnUNet."""
 from collections.abc import Sequence
-from typing import Union, Tuple
 import numpy as np
 
 # MIST imports.
@@ -8,9 +7,9 @@ from mist.models.nnunet.nnunet_constants import NNUnetConstants as constants
 
 
 def get_padding(
-    kernel_size: Union[int, Sequence[int]],
-    stride: Union[int, Sequence[int]],
-) -> Union[int, Sequence[int]]:
+    kernel_size: int | Sequence[int],
+    stride: int | Sequence[int],
+) -> int | Sequence[int]:
     """Get padding for a convolution layer based on kernel size and stride.
 
     Args:
@@ -23,27 +22,27 @@ def get_padding(
         Padding for convolution layer as an integer or a sequence of integers.
 
     Raises:
-        AssertionError: If padding value is negative.
+        ValueError: If padding value is negative.
     """
     kernel_size_np = np.atleast_1d(kernel_size)
     stride_np = np.atleast_1d(stride)
 
     padding_np = (kernel_size_np - stride_np + 1) / 2
     if np.min(padding_np) < 0:
-        raise AssertionError(
+        raise ValueError(
             "Padding value should not be negative, please change the kernel "
             "size and/or stride."
         )
     padding = tuple(int(p) for p in padding_np)
 
-    return padding if len(padding) > 1 else padding[0] # type: ignore
+    return padding if len(padding) > 1 else padding[0]  # type: ignore
 
 
 def get_output_padding(
-    kernel_size: Union[int, Sequence[int]],
-    stride: Union[int, Sequence[int]],
-    padding: Union[int, Sequence[int]],
-) -> Union[int, Sequence[int]]:
+    kernel_size: int | Sequence[int],
+    stride: int | Sequence[int],
+    padding: int | Sequence[int],
+) -> int | Sequence[int]:
     """Get output padding of a convolution layer.
 
     This is used used for transposed convolutional layers, where we pad the
@@ -62,7 +61,7 @@ def get_output_padding(
             sequence of integers.
 
     Raises:
-        AssertionError: If out_padding value is negative.
+        ValueError: If out_padding value is negative.
     """
     kernel_size_np = np.atleast_1d(kernel_size)
     stride_np = np.atleast_1d(stride)
@@ -70,19 +69,19 @@ def get_output_padding(
 
     out_padding_np = 2 * padding_np + stride_np - kernel_size_np
     if np.min(out_padding_np) < 0:
-        raise AssertionError(
+        raise ValueError(
             "The value of out_padding should not be negative, please change "
             "the kernel size and/or stride."
         )
     out_padding = tuple(int(p) for p in out_padding_np)
 
-    return out_padding if len(out_padding) > 1 else out_padding[0] # type: ignore
+    return out_padding if len(out_padding) > 1 else out_padding[0]  # type: ignore
 
 
 def get_unet_params(
     patch_size: Sequence[int],
     spacings: Sequence[float],
-) -> Tuple[Sequence[int], Sequence[int], Sequence[int]]:
+) -> tuple[Sequence[int], Sequence[int], Sequence[int]]:
     """Get parameters for UNet architecture based on patch size and spacings.
 
     Args:

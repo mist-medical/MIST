@@ -16,8 +16,9 @@ Implementation Note:
     complex loss hierarchies (like SegmentationLoss -> Dice -> DiceCELoss).
 """
 
-from typing import Sequence, Tuple, Union
+from collections.abc import Sequence
 import math
+import warnings
 
 import torch
 from torch import nn
@@ -61,7 +62,7 @@ class SurfaceDilationLogic(nn.Module):
     def __init__(
         self,
         spacing_xyz: Sequence[float],
-        tau_mm: Union[float, str],
+        tau_mm: float | str,
         tau_safety_factor: float,
         boundary_ksize: int,
         eps: float,
@@ -100,18 +101,20 @@ class SurfaceDilationLogic(nn.Module):
             self.tau_mm = float(tau_mm)
             max_spacing = max(self.spacing_xyz)
             if self.tau_mm < max_spacing:
-                print(
-                    f"[SDDL] Warning: tau_mm ({self.tau_mm:.2f}) < "
+                warnings.warn(
+                    f"[SDDL] tau_mm ({self.tau_mm:.2f}) < "
                     f"max spacing ({max_spacing:.2f}). Dilation may be "
-                    "suboptimal (clamped to 1 voxel in coarse axis)."
+                    "suboptimal (clamped to 1 voxel in coarse axis).",
+                    UserWarning,
+                    stacklevel=2,
                 )
 
         # Pre-calculate kernels immediately.
         self.kxkykz = self._get_kernel_sizes(self.tau_mm, self.spacing_xyz)
 
     def _get_kernel_sizes(
-        self, tau: float, spacing: Tuple[float, float, float]
-    ) -> Tuple[int, int, int]:
+        self, tau: float, spacing: tuple[float, float, float]
+    ) -> tuple[int, int, int]:
         """Calculate odd kernel sizes (kx, ky, kz) based on physical spacing.
 
         Calculates radius = ceil(tau / spacing) and kernel = 2 * radius + 1.
@@ -185,7 +188,10 @@ class SurfaceDilationLogic(nn.Module):
         Returns:
             Scalar loss: 1.0 - mean(SurfaceDice).
         """
-        # Strip background channel if required.
+        # Strip background if preprocess() hasn't already removed it.
+        # When exclude_background=False, preprocess() kept all channels, so
+        # we remove channel 0 here. When exclude_background=True, preprocess()
+        # already stripped it, so no further slicing is needed.
         if not exclude_background:
             y_true = y_true[:, 1:, :, :, :]
             y_pred = y_pred[:, 1:, :, :, :]
@@ -201,8 +207,9 @@ class SurfaceDilationLogic(nn.Module):
         # 3. Dice score (sum over spatial dims D, H, W).
         spatial_dims = (2, 3, 4)
         overlap = (dilated_p * dilated_t).sum(dim=spatial_dims)
-        union = dilated_p.sum(dim=spatial_dims) + \
-            dilated_t.sum(dim=spatial_dims)
+        union = (
+            dilated_p.sum(dim=spatial_dims) + dilated_t.sum(dim=spatial_dims)
+        )
 
         s_hat = (2.0 * overlap) / (union + self.eps)
         return 1.0 - torch.mean(s_hat)
@@ -225,7 +232,7 @@ class VolumetricSDDL(DiceCELoss):
     def __init__(
         self,
         sddl_spacing_xyz: Sequence[float],
-        tau_mm: Union[float, str] = "auto",
+        tau_mm: float | str = "auto",
         tau_safety_factor: float = 1.25,
         boundary_ksize: int = 3,
         eps: float = 1e-6,
@@ -310,7 +317,7 @@ class VesselSDDL(CLDice):
     def __init__(
         self,
         sddl_spacing_xyz: Sequence[float],
-        tau_mm: Union[float, str] = "auto",
+        tau_mm: float | str = "auto",
         tau_safety_factor: float = 1.25,
         boundary_ksize: int = 3,
         eps: float = 1e-6,

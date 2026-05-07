@@ -1,11 +1,11 @@
 """Registry for segmentation metrics used in evaluation."""
 from abc import ABC, abstractmethod
-from typing import Dict, Tuple, Optional, List
 import numpy as np
 
 # MIST imports.
 from mist.metrics import segmentation_metrics
 from mist.metrics import lesion_wise_metrics
+from mist.metrics.metrics_constants import LesionWiseMetricsConstants
 
 
 class Metric(ABC):
@@ -14,14 +14,26 @@ class Metric(ABC):
     best: float  # Ideal value for this metric.
     worst: float  # Worst-case fallback value.
 
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        for attr in ("name", "best", "worst"):
+            if not any(
+                attr in base.__dict__
+                for base in cls.__mro__
+                if base not in (Metric, object)
+            ):
+                raise TypeError(
+                    f"{cls.__name__} must define class attribute '{attr}'"
+                )
+
     @abstractmethod
     def __call__(
         self,
         truth: np.ndarray,
         pred: np.ndarray,
-        spacing: Tuple[float, float, float],
+        spacing: tuple[float, float, float],
         **kwargs
-    ) -> Optional[float]:
+    ) -> float:
         """Compute the metric.
 
         Args:
@@ -33,11 +45,11 @@ class Metric(ABC):
         Returns:
             Computed metric value, or None if not computable.
         """
-        pass # pylint: disable=unnecessary-pass # pragma: no cover
+        pass  # pylint: disable=unnecessary-pass # pragma: no cover
 
 
 # Global registry for metrics.
-METRIC_REGISTRY: Dict[str, Metric] = {}
+METRIC_REGISTRY: dict[str, Metric] = {}
 
 
 def register_metric(cls):
@@ -54,7 +66,7 @@ def get_metric(name: str) -> Metric:
     return METRIC_REGISTRY[name]
 
 
-def list_registered_metrics() -> List[str]:
+def list_registered_metrics() -> list[str]:
     """List all registered metrics."""
     return sorted(METRIC_REGISTRY.keys())
 
@@ -75,7 +87,7 @@ class Hausdorff95(Metric):
     """95th percentile Hausdorff distance metric."""
     name = "haus95"
     best = 0.0
-    worst = float("inf") # Will be dynamically overridden.
+    worst = float("inf")  # Sentinel: evaluator substitutes the image diagonal.
 
     def __call__(self, truth, pred, spacing, **kwargs):
         distances = segmentation_metrics.compute_surface_distances(
@@ -107,7 +119,7 @@ class AverageSurfaceDistance(Metric):
     """Average surface distance metric."""
     name = "avg_surf"
     best = 0.0
-    worst = float("inf") # Will be dynamically overridden.
+    worst = float("inf")  # Sentinel: evaluator substitutes the image diagonal.
 
     def __call__(self, truth, pred, spacing, **kwargs):
         distances = segmentation_metrics.compute_surface_distances(
@@ -130,8 +142,18 @@ class LesionWiseDice(Metric):
             spacing=spacing,
             metrics=["dice"],
             reduction="mean",
+            min_lesion_volume=kwargs.get(
+                "min_lesion_volume", LesionWiseMetricsConstants.MIN_LESION_VOLUME
+            ),
+            dilation_iters=kwargs.get(
+                "dilation_iters", LesionWiseMetricsConstants.DILATION_ITERS
+            ),
+            gt_consolidation_iters=kwargs.get(
+                "gt_consolidation_iters",
+                LesionWiseMetricsConstants.GT_CONSOLIDATION_ITERS,
+            ),
         )
-        return result.get("lesion_wise_dice", self.worst)
+        return result.get("lesion_wise_dice", self.best)
 
 
 @register_metric
@@ -139,7 +161,7 @@ class LesionWiseHausdorff95(Metric):
     """Lesion-wise 95th percentile Hausdorff distance metric."""
     name = "lesion_wise_haus95"
     best = 0.0
-    worst = float("inf") # Will be dynamically overridden.
+    worst = float("inf")  # Sentinel: evaluator substitutes the image diagonal.
 
     def __call__(self, truth, prediction, spacing, **kwargs):
         result = lesion_wise_metrics.compute_lesion_wise_metrics(
@@ -148,8 +170,19 @@ class LesionWiseHausdorff95(Metric):
             spacing=spacing,
             metrics=["haus95"],
             reduction="mean",
+            min_lesion_volume=kwargs.get(
+                "min_lesion_volume", LesionWiseMetricsConstants.MIN_LESION_VOLUME
+            ),
+            dilation_iters=kwargs.get(
+                "dilation_iters", LesionWiseMetricsConstants.DILATION_ITERS
+            ),
+            gt_consolidation_iters=kwargs.get(
+                "gt_consolidation_iters",
+                LesionWiseMetricsConstants.GT_CONSOLIDATION_ITERS,
+            ),
         )
-        return result.get("lesion_wise_haus95", self.worst)
+        return result.get("lesion_wise_haus95", self.best)
+
 
 @register_metric
 class LesionWiseSurfaceDice(Metric):
@@ -159,13 +192,24 @@ class LesionWiseSurfaceDice(Metric):
     worst = 0.0
 
     def __call__(self, truth, prediction, spacing, **kwargs):
-        tolerance = kwargs.get("tolerance", 1.0)
         result = lesion_wise_metrics.compute_lesion_wise_metrics(
             prediction,
             truth,
             spacing=spacing,
             metrics=["surface_dice"],
-            surface_dice_tolerance_mm=tolerance,
             reduction="mean",
+            min_lesion_volume=kwargs.get(
+                "min_lesion_volume", LesionWiseMetricsConstants.MIN_LESION_VOLUME
+            ),
+            dilation_iters=kwargs.get(
+                "dilation_iters", LesionWiseMetricsConstants.DILATION_ITERS
+            ),
+            gt_consolidation_iters=kwargs.get(
+                "gt_consolidation_iters",
+                LesionWiseMetricsConstants.GT_CONSOLIDATION_ITERS,
+            ),
+            surface_dice_tolerance_mm=kwargs.get(
+                "tolerance", LesionWiseMetricsConstants.SURFACE_DICE_TOLERANCE_MM
+            ),
         )
-        return result.get("lesion_wise_surf_dice", self.worst)
+        return result.get("lesion_wise_surf_dice", self.best)

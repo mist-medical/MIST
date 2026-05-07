@@ -7,41 +7,42 @@ then undergo an inverse transformation to obtain the final prediction.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Type, Any, TypeVar, Callable
+from typing import Any, TypeVar
+from collections.abc import Callable
 
-# MIST imports.
 from mist.inference.tta.transforms import AbstractTransform, get_transform
 
-# Strategy registry now holds classes, not instances
+# Registry for strategy classes. Stores classes; instances are created on
+# demand by get_strategy() to avoid shared mutable state.
 T = TypeVar("T", bound="TTAStrategy")
-TTA_STRATEGY_REGISTRY: Dict[str, TTAStrategy] = {}
+TTA_STRATEGY_REGISTRY: dict[str, type[TTAStrategy]] = {}
 
 
-def register_strategy(name: str) -> Callable[[Type[T]], Type[T]]:
+def register_strategy(name: str) -> Callable[[type[T]], type[T]]:
     """Decorator to register a TTA strategy class by name."""
-    def decorator(cls: Type[T]) -> Type[T]:
+    def decorator(cls: type[T]) -> type[T]:
         if not issubclass(cls, TTAStrategy):
             raise TypeError(f"{cls.__name__} must inherit from TTAStrategy.")
         if name in TTA_STRATEGY_REGISTRY:
             raise KeyError(f"Strategy '{name}' is already registered.")
-        TTA_STRATEGY_REGISTRY[name] = cls() # Register an instance of the class.
+        TTA_STRATEGY_REGISTRY[name] = cls  # Register class, not an instance
         return cls
     return decorator
 
 
-def list_strategies() -> List[str]:
+def list_strategies() -> list[str]:
     """List all registered TTA strategies."""
     return list(TTA_STRATEGY_REGISTRY.keys())
 
 
 def get_strategy(name: str) -> TTAStrategy:
-    """Retrieve a registered TTA strategy."""
+    """Retrieve a fresh instance of a registered TTA strategy by name."""
     if name not in TTA_STRATEGY_REGISTRY:
         raise KeyError(
             f"TTA strategy '{name}' is not registered. "
             f"Available: [{', '.join(list_strategies())}]."
         )
-    return TTA_STRATEGY_REGISTRY[name]
+    return TTA_STRATEGY_REGISTRY[name]()
 
 
 class TTAStrategy(ABC):
@@ -51,16 +52,17 @@ class TTAStrategy(ABC):
     This class does not execute the transforms. The transforms are executed in
     core inference logic.
     """
+
     def __init__(self):
         """Initialize the transform with a name."""
         self.name = self.__class__.__name__.lower()
 
     @abstractmethod
-    def get_transforms(self) -> List[AbstractTransform]:
+    def get_transforms(self) -> list[AbstractTransform]:
         """Return a list of forward/inverse transforms to apply at inference."""
-        pass # pylint: disable=unnecessary-pass # pragma: no cover
+        pass  # pylint: disable=unnecessary-pass # pragma: no cover
 
-    def __call__(self) -> List[AbstractTransform]:
+    def __call__(self) -> list[AbstractTransform]:
         return self.get_transforms()
 
     def __repr__(self) -> str:
@@ -79,7 +81,8 @@ class NoTTAStrategy(TTAStrategy):
 
     This strategy does not apply any transformations to the input image.
     """
-    def get_transforms(self) -> List[AbstractTransform]:
+
+    def get_transforms(self) -> list[AbstractTransform]:
         return [get_transform("identity")]
 
 
@@ -89,7 +92,8 @@ class AllFlipsStrategy(TTAStrategy):
 
     This strategy applies all possible flips to the input image.
     """
-    def get_transforms(self) -> List[AbstractTransform]:
+
+    def get_transforms(self) -> list[AbstractTransform]:
         return [
             get_transform("identity"),
             get_transform("flip_x"),

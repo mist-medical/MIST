@@ -51,30 +51,36 @@ the following structure:
 
 ```text
 results/
-    logs/
-    models/
-    predictions/
+    checkpoints/                (fold checkpoints for --resume)
+    logs/                       (TensorBoard logs)
+    models/                     (trained model weights)
+    predictions/                (cross-validation and test predictions)
     config.json
-    results.csv
-    train_paths.csv
-    evaluation_paths.csv
-    test_paths.csv (if a test set is specified in dataset.json)
     fg_bboxes.csv
+    train_paths.csv
+    test_paths.csv              (only if test-data is set in dataset JSON)
+    evaluation_paths.csv
+    results.csv
+    data_dump.json              (only with --data-dump)
+    data_dump.md                (only with --data-dump)
 ```
 
 ### Breakdown of outputs
 
 | File/Directory         | Description                                                                 |
 |------------------------|-----------------------------------------------------------------------------|
+| `checkpoints/`         | Per-fold training checkpoints used by `--resume` to continue interrupted runs. |
 | `logs/`                | TensorBoard logs for each fold.                                             |
-| `models/`              | Trained PyTorch models for each fold.                                       |
-| `predictions/`         | Predictions from cross validation and test set (if specified).              |
-| `config.json`          | Dataset configuration (target spacing, normalization, patch size, etc.).    |
-| `results.csv`          | Evaluation results from five-fold cross validation.                         |
-| `train_paths.csv`      | CSV with `id`, `fold`, and paths to images/masks for training.              |
-| `evaluation_paths.csv` | CSV with `id`, `mask`, and `prediction` paths for evaluation.               |
-| `test_paths.csv`       | Same as `train_paths.csv`, but for test set (no `fold` column).             |
-| `fg_bboxes.csv`        | Bounding box information for the foreground region of each image.           |
+| `models/`              | Trained PyTorch model weights for each fold (`fold_0.pt`, `fold_1.pt`, …). |
+| `predictions/`         | Cross-validation predictions and test-set predictions (if a test set was provided). |
+| `config.json`          | Full pipeline configuration (target spacing, normalization, patch size, model, loss, etc.). Required by all downstream commands. |
+| `fg_bboxes.csv`        | Foreground bounding box for each training image, used to restore predictions to original space. |
+| `train_paths.csv`      | Paths to training images/masks with assigned fold numbers.                  |
+| `test_paths.csv`       | Paths to test images/masks. Only produced when `test-data` is set in the dataset JSON. |
+| `evaluation_paths.csv` | Ground truth and prediction paths used for cross-validation evaluation.     |
+| `results.csv`          | Per-patient and aggregate evaluation metrics from cross-validation.         |
+| `data_dump.json`       | Structured dataset statistics (machine-readable). Only produced with `--data-dump`. |
+| `data_dump.md`         | Narrative dataset summary. Only produced with `--data-dump`.                |
 
 ## Analysis
 
@@ -88,10 +94,23 @@ The **analysis step** computes dataset parameters (target spacing, normalization
 Run analysis alone with the `mist_analyze` command. This command has the
 following arguments:
 
-- `--data` (**required**): Path to your dataset JSON file.  
+- `--data` (**required**): Path to your dataset JSON file.
 - `--results`: Directory to save analysis outputs. *(default: `./results`)*
 - `--nfolds`: How many folds to split the dataset into. *(default: 5)*
+- `--num-workers-analyze`: Number of parallel workers for dataset analysis.
+*(default: 1)*
+- `--verify`: Verify dataset integrity before analysis (checks headers,
+  dimensions, and that all declared files are present).
+- `--data-dump`: Save extended dataset statistics alongside `config.json`
+  (`data_dump.json` and `data_dump.md`). See [Data Dump](#data-dump) below.
 - `--overwrite`: Overwrite previous results/configuration.
+
+!!!note
+    Paths in the dataset JSON file (i.e., `train-data` and `test-data`) can be
+    absolute or relative. Relative paths are resolved relative to the **location
+    of the JSON file itself**, so the JSON and its data can be moved to a
+    different location or machine without editing the paths, as long as their
+    relative structure is preserved.
 
 ### Example
 
@@ -101,6 +120,43 @@ Run the MIST analysis pipeline.
 mist_analyze --data /path/to/dataset.json \
              --results /path/to/analysis/results
 ```
+
+### Data Dump
+
+When the `--data-dump` flag is passed, the analysis step produces two additional
+files alongside `config.json`: `data_dump.json` and `data_dump.md`.
+
+`data_dump.json` contains a full structured summary of the dataset statistics,
+including:
+
+- **Spacing and anisotropy** – per-axis voxel spacing statistics and anisotropy
+ratio.
+- **Image dimensions** – original and estimated resampled dimensions.
+- **Intensity distributions** – per-channel foreground intensity statistics
+(mean, std, and key percentiles).
+- **Label statistics** – per-label voxel counts, presence rates, volume
+fractions (relative to both foreground and the effective image region), and
+shape descriptors:
+    - *PCA-based descriptors* — three shape metrics derived from the eigenvalues
+    of the label's spatial covariance matrix:
+        - *Linearity*: how much the shape extends along a single axis (high for
+          elongated structures such as vessels).
+        - *Planarity*: how much the shape lies in a plane (high for disc-like
+          structures).
+        - *Sphericity*: how uniformly the shape extends in all directions (high
+          for compact, roughly spherical structures).
+    - *Isoperimetric Quotient (IQ)* measuring compactness relative to a sphere.
+    - *Skeleton ratio* — the fraction of label voxels on the morphological
+    medial axis, which is the primary signal for thin, branching structures
+    such as vessels or airways.
+- **Observations** – auto-generated notes flagging anisotropy, sparse labels,
+thin/branching structures, and other dataset characteristics that may influence
+architecture or loss function choices.
+
+`data_dump.md` is a human-readable Markdown version of the same statistics,
+pre-filled with metric definitions and auto-generated observations. It is
+intended to be reviewed and annotated by the user before being passed to an LLM
+for architecture and training configuration advice.
 
 ## Preprocessing
 
@@ -116,17 +172,21 @@ To run the preprocessing portion of the MIST pipeline only, use the
 
 - `--results`: Path to the output of the analysis step. *(default: `./results`)*
 - `--numpy`: Path to save the preprocessed NumPy files. *(default: `./numpy`)*
-- `--compute-dtms`: Compute per-class distance transform maps (DTMs) from ground
-truth masks.
+- `--num-workers-preprocess`: Number of parallel workers for preprocessing.
+  *(default: 1)*
+- `--compute-dtms`: Compute per-class Distance Transform Maps (DTMs) from ground
+truth masks. DTMs encode each voxel's signed distance to the nearest label
+boundary and are required by certain loss functions (`bl`, `hdos`, `gsl`).
 - `--no-preprocess`: Skip preprocessing steps and only convert raw NIfTI files
 into NumPy format.
 - `--overwrite`: Overwrite previous preprocessing output.
 
 !!!note
-  The `--no-preprocess` flag does not completely turn off all of the
-  preprocessing steps. With this flag, the preprocessing pipeline will still
-  reorient the images to RAI, crop to the foreground (if called for by the
-  analysis pipeline), and compute DTMs (if called for by the user).
+  Use `--no-preprocess` when your images are already fully preprocessed
+  externally and stored as NIfTI files. MIST will read each image as-is and
+  convert it directly to NumPy format — reorientation, cropping, resampling,
+  and normalization are all skipped. DTMs are still computed if
+  `--compute-dtms` is also passed.
 
 ### Example
 
@@ -155,19 +215,25 @@ the following arguments:
 
 **Hardware:**
 
-- `--gpus`: IDs of GPUs to use; use `-1` for all GPUs. *(default: `-1`)*
+- `--num-workers-evaluate`: Number of parallel workers for the post-training
+  evaluation step. *(default: `1`)*
+
+!!! note
+    MIST uses all GPUs visible to the process. To restrict which GPUs are used,
+    set `CUDA_VISIBLE_DEVICES` before running MIST (e.g.,
+    `CUDA_VISIBLE_DEVICES=0,1 mist_train ...`). On HPC clusters, the job
+    scheduler sets this automatically. See
+    [Multi-GPU training](advanced_topics.md#multi-gpu-training) for details.
 
 **Model:**
 
-- `--model`: Network architecture. *(default: `nnunet`)*  
-- `--pocket`: Flag to enable the pocket version of the model (if available).
+- `--model`: Network architecture. *(default: `nnunet`)*
 - `--patch-size`: Patch size as three integers: `X Y Z`. This will overwrite the
-the choice of patch size determined by the analysis pipeline.
+  choice of patch size determined by the analysis pipeline.
 
 **Loss function:**
 
-- `--loss`: Loss function for training. *(default: `dice_ce`)*  
-- `--use-dtms`: Flag to use distance transform maps during training.  
+- `--loss`: Loss function for training. *(default: `dice_ce`)*
 - `--composite-loss-weighting`: Weighting schedule for composite losses.
 *(default: `None`)*
 
@@ -177,12 +243,41 @@ the choice of patch size determined by the analysis pipeline.
 - `--batch-size-per-gpu`: Batch size per GPU worker. *(default: `2`)*
 - `--learning-rate`: Initial learning rate. *(default: `0.001`)*
 - `--lr-scheduler`: Learning rate scheduler *(default: `cosine`)*.
-- `--optimizer`: Optimizer *(default: `adam`)*.
-- `--l2-penalty`: L2 penalty (weight decay). *(default: `0.00001`)*
+- `--warmup-epochs`: Number of linear warmup epochs before the main LR
+  schedule begins. *(default: `20`)*
+- `--optimizer`: Optimizer *(default: `adamw`)*.
+- `--l2-penalty`: L2 penalty (weight decay). *(default: `0.0001`)*
 - `--folds`: Specify which folds to run. If not provided, all folds are trained.
 - `--val-percent`: Specify a percentage of the training data to set aside as a
-validation set. If not specified, the we use the entire held out fold as a
-a validation set during training.
+  validation set. If not specified, we use the entire held out fold as a
+  validation set during training.
+- `--resume`: Resume training from the latest checkpoint. See
+  [Resuming training](#resuming-training) for details.
+
+**Transfer learning** *(experimental)*:
+
+!!! warning "Experimental feature"
+    Transfer learning is still under active development. You are welcome to
+    try it, but you may encounter rough edges. If you run into problems,
+    please [open an issue on GitHub](https://github.com/mist-medical/MIST/issues).
+
+- `--pretrained-weights`: Path to a pretrained checkpoint to initialize the
+  encoder from. Accepts a single fold checkpoint or the output of
+  `mist_average_weights`. See
+  [Transfer learning](advanced_topics.md#transfer-learning) for details.
+- `--pretrained-config`: Path to the source model's `config.json`. Required
+  when `--pretrained-weights` is set — used to validate encoder compatibility
+  between source and target models.
+- `--input-channel-strategy`: How to handle an input-channel mismatch between
+  the source and target encoder. Choices: `average` (mean over source channels),
+  `first` (use first source channel only), `skip` (keep random initialization).
+  *(default: `average`)*
+
+!!! note
+    Gradient clipping norm (`training.grad_clip_norm`, default `1.0`) is
+    configurable directly in `config.json` but is not exposed as a CLI flag.
+    See [Optimizers](advanced_topics.md#optimizers) in the advanced topics
+    for details.
 
 ### Example
 
@@ -204,6 +299,42 @@ the results with the metrics specified in the `evaluation` entry of the
 configuration file. The computed metrics will be saved in
 `./results/results.csv`.
 
+### Resuming training
+
+If a training run is interrupted (e.g., due to a preempted job, out-of-memory
+error, or system crash), it can be resumed from the last completed epoch using
+the `--resume` flag.
+
+```console
+mist_train --numpy /path/to/preprocessed/data \
+           --results /path/to/results \
+           --resume
+```
+
+MIST saves a checkpoint at the end of every completed epoch to
+`results/checkpoints/fold_{fold}_checkpoint.pt`. The checkpoint stores the
+full training state: model weights, optimizer state, learning rate scheduler
+state, AMP scaler state, epoch index, global step, and best validation loss.
+
+On resume:
+
+- **Interrupted folds** are continued from the epoch after the last completed
+  one. All training state is restored exactly, including the learning rate
+  schedule.
+- **Completed folds** (where the saved epoch equals the final epoch) are
+  skipped automatically.
+- **Missing checkpoints** (e.g., a fold that never started) fall back to
+  training from scratch with a warning.
+
+!!! warning
+    `--resume` and `--overwrite` are mutually exclusive. Passing both will
+    raise an error.
+
+!!! note
+    Checkpoints are written atomically — a temporary file is written first
+    and then renamed into place, so a crash during the save itself will never
+    leave a corrupted checkpoint on disk.
+
 ## Inference
 
 The main MIST pipeline is responsible for training and evaluating models. The
@@ -217,8 +348,10 @@ The `mist_predict` command uses the following arguments:
 
 - `--models-dir`: (**required**) Path to the `./results/models` directory.
 - `--config`: (**required**) Path to the `./results/config.json` file.
-- `--paths-csv`: (**required**) Path to CVS containing patient IDs and paths to
-imaging data (see below for more details).
+- `--paths-csv`: (**required**) Path to CSV file containing patient IDs and
+  paths to imaging data. Must have an `id` column and one column per image
+  type matching the dataset's image keys (e.g., `t1`, `t2`). See the table
+  below for the required format.
 - `--output`: (**required**) Path to directory containing predictions.
 - `--device`: Device to run inference with. This can be `cpu`, `cuda`, or the
 integer ID of a specific GPU (i.e., `1`). *(default: `cuda`)*.
@@ -257,78 +390,95 @@ with a range of postprocessing techniques to improve segmentation accuracy.
 Postprocessing is run using the `mist_postprocess` command and uses the following
 arguments:
 
-- `--base-predictions` (**required**): Path to directory containing the
-predictions which we will apply postprocessing.
-- `--output` (**required**): Path to directory where we will write the
-postprocessed predictions. This directory will be created if it does not exist.
+- `--base-predictions` (**required**): Path to directory containing the base
+predictions to postprocess.
+- `--output` (**required**): Root output directory. See
+[Output structure](#output-structure) below for details.
 - `--postprocess-strategy` (**required**): Path to JSON file defining the
-sequence of postprocessing steps that we will apply.
+sequence of postprocessing steps to apply.
+- `--num-workers-postprocess` *(optional)*: Number of parallel workers for
+postprocessing. Defaults to `1`.
+- `--num-workers-evaluate` *(optional)*: Number of parallel workers for
+evaluating postprocessed predictions. Only used when `--paths-csv` and
+`--eval-config` are provided. Defaults to `1`.
+- `--paths-csv` *(optional)*: CSV with `id` and `mask` columns containing
+patient IDs and paths to ground truth masks. When provided alongside
+`--eval-config`, evaluation is automatically run on the postprocessed
+predictions. The `train_paths.csv` generated by `mist_analyze` can be passed
+here directly — any extra columns (e.g. image channel paths) are ignored.
+- `--eval-config` *(optional)*: Path to an evaluation config JSON. Required
+when `--paths-csv` is provided. Accepts a full MIST `config.json` (the
+`evaluation` key is extracted automatically) or a standalone evaluation config.
+
+### Output structure
+
+Every `mist_postprocess` run produces the following layout under `--output`:
+
+```
+output/
+├── predictions/        # postprocessed NIfTI masks (one per patient)
+├── strategy.json       # copy of the strategy file used (for reproducibility)
+└── postprocess_results.csv   # evaluation results (only when --paths-csv and
+                              # --eval-config are provided)
+```
 
 ### Strategy-based postprocessing
 
 Postprocessing is configured using a JSON strategy file. Each strategy is a list
 of steps, where each step includes the transformation name, the target labels, a
-flag for whether the operation should be applied sequentially per label, and any
-additional parameters.
+flag for whether the operation should be applied per label or across grouped
+labels, and any additional parameters.
 
 ### Strategy file format
+
 The strategy file is a JSON file containing a list of postprocessing steps. Each
 step is a dictionary with the following required fields:
 
-- **`transform`** (`str`):  
+- **`transform`** (`str`):
   Name of the postprocessing transformation. Currently supported transformations
-  are
-  	- `remove_small_objects`: Remove connected components below a given size
-    threshold.
-	- `fill_holes_with_label`: Fill holes in a mask with a specified label.
-	- `get_top_k_connected_components`: Keep the largest `k` connected components.
-	- `replace_small_objects_with_label`: Replace the label of small objects with
-  a different label.
+  are:
+  - `remove_small_objects`: Remove connected components below a size threshold.
+  - `fill_holes_with_label`: Fill interior holes in a mask with a specified
+    label.
+  - `get_top_k_connected_components`: Keep only the `k` largest connected
+    components.
+  - `replace_small_objects_with_label`: Replace small components with a
+    different label instead of zeroing them out.
 
-  Each transformation can be applied either **sequentially per label** or
-  **across a grouped set of labels**, controlled via the `apply_sequentially`
-  flag.
+  Each transformation can be applied either **per label** (independently to each
+  label) or **grouped** (treating all specified labels as one binary mask),
+  controlled via the `per_label` flag.
 
-  Each transform is registered in the `transform_registry.py` file. You can add
-  custom postprocessing transforms by implementing them in this file and
-  registering them with the `@register_transform('name')` decorator.
+  Each transform is registered in `transform_registry.py`. Custom transforms can
+  be added by implementing a function there and decorating it with
+  `@register_transform('name', metadata={...})`.
 
-- **`apply_to_labels`** (`List[int]`):  
-  A list of label integers to which the transform should be applied.  
-  For example, `[1, 2]` will apply the transform to labels 1 and 2.
+- **`apply_to_labels`** (`List[int]`):
+  A list of label integers to which the transform should be applied.
+  For example, `[1, 2]` applies the transform to labels 1 and 2.
+  Use `[-1]` to apply to all non-zero labels.
 
-- **`apply_sequentially`** (`bool`):  
-  Indicates whether to apply the transform to each label individually (`true`),  
-  or to all the labels in the group at once (`false`).
+- **`per_label`** (`bool`):
+  Controls how the transform is applied to `apply_to_labels`:
+  - `true` — apply the transform independently to each label.
+  - `false` — group all specified labels into a single binary mask and apply
+    the transform once.
 
-- **`kwargs`** *(optional, `Dict[str, Any]`)*:  
-  Additional keyword arguments passed directly to the transform function. These
-  are transform-specific. For the currently available transforms, the following
-  keyword arguments are valid:
+  > **Note:** `replace_small_objects_with_label` always requires `per_label:
+  > true` because each component must retain its original label value.
 
-  - `small_object_threshold` – A threshold for removing or replacing small
-  objects.
-    Used in `remove_small_objects` and `replace_small_objects_with_label`. A
-    common default value is `64`.
+- **`kwargs`** *(optional, `Dict[str, Any]`)*:
+  Transform-specific keyword arguments. Valid kwargs for each transform are:
 
-  - `top_k` – The number of largest connected components to retain.
-    Used in `get_top_k_connected_components`. For example, `top_k: 1` retains
-    only the largest component.
-
-  - `fill_label` – The label value to use when filling holes.  
-    Used in `fill_holes_with_label`. For example, `fill_label: 1` will fill
-    holes using label `1`.
-
-  - `replacement_label` – The label used to replace small components. Used in
-  `replace_small_objects_with_label`. For example, `replacement_label: 1` will
-  update the label of objects smaller than `small_object_threshold` with `1`.
-
-  - `morph_cleanup` – Whether to apply morphological erosion/dilation during
-  `get_top_k_connected_components`. Set to `true` to activate cleanup.
-
-  - `morph_cleanup_iterations` – The number of iterations to use for
-  morphological erosion/dilation if `morph_cleanup` is enabled. Default is
-  usually `2`.
+  | Transform | kwarg | Description | Default |
+  |---|---|---|---|
+  | `remove_small_objects` | `small_object_threshold` | Minimum component size (voxels) to retain | `64` |
+  | `get_top_k_connected_components` | `top_k_connected_components` | Number of largest components to keep | `1` |
+  | `get_top_k_connected_components` | `apply_morphological_cleaning` | Apply erosion before and dilation after component selection | `false` |
+  | `get_top_k_connected_components` | `morphological_cleaning_iterations` | Number of erosion/dilation iterations | `2` |
+  | `fill_holes_with_label` | `fill_holes_label` | Label value to assign to filled holes | `0` |
+  | `replace_small_objects_with_label` | `small_object_threshold` | Maximum component size (voxels) to replace | `64` |
+  | `replace_small_objects_with_label` | `replacement_label` | Label to assign to small components | `0` |
 
 Below is an example strategy file that demonstrates several transformations:
 
@@ -337,7 +487,7 @@ Below is an example strategy file that demonstrates several transformations:
   {
     "transform": "remove_small_objects",
     "apply_to_labels": [1],
-    "apply_sequentially": true,
+    "per_label": true,
     "kwargs": {
       "small_object_threshold": 64
     }
@@ -345,7 +495,7 @@ Below is an example strategy file that demonstrates several transformations:
   {
     "transform": "remove_small_objects",
     "apply_to_labels": [2, 4],
-    "apply_sequentially": false,
+    "per_label": false,
     "kwargs": {
       "small_object_threshold": 100
     }
@@ -353,25 +503,25 @@ Below is an example strategy file that demonstrates several transformations:
   {
     "transform": "fill_holes_with_label",
     "apply_to_labels": [1, 2],
-    "apply_sequentially": false,
+    "per_label": false,
     "kwargs": {
-      "fill_label": 1
+      "fill_holes_label": 1
     }
   },
   {
     "transform": "get_top_k_connected_components",
     "apply_to_labels": [4],
-    "apply_sequentially": true,
+    "per_label": true,
     "kwargs": {
-      "top_k": 1,
-      "morph_cleanup": true,
-      "morph_cleanup_iterations": 1
+      "top_k_connected_components": 1,
+      "apply_morphological_cleaning": true,
+      "morphological_cleaning_iterations": 1
     }
   },
   {
     "transform": "replace_small_objects_with_label",
     "apply_to_labels": [1, 2, 4],
-    "apply_sequentially": true,
+    "per_label": true,
     "kwargs": {
       "small_object_threshold": 50,
       "replacement_label": 0
@@ -380,45 +530,47 @@ Below is an example strategy file that demonstrates several transformations:
 ]
 ```
 
-### Example
+### Examples
 
-Run the postprocessing pipeline.
+Run the postprocessing pipeline without evaluation:
 
 ```console
-mist_postprocess --base-predictions /path/to/original/predictions \
-                 --output /folder/to/save/postprocessed/predictions \
+mist_postprocess --base-predictions /path/to/predictions \
+                 --output /path/to/output \
                  --postprocess-strategy /path/to/strategy.json
 ```
 
-### Notes
+Run the postprocessing pipeline and evaluate the results:
 
-- This version of `mist_postprocess` does **not** perform evaluation or update
-the `config.json` file. It is designed to decouple strategy testing from
-evaluation logic.
-- Evaluation of postprocessing performance can be done separately using
-`mist_evaluate`.
+```console
+mist_postprocess --base-predictions /path/to/predictions \
+                 --output /path/to/output \
+                 --postprocess-strategy /path/to/strategy.json \
+                 --paths-csv /path/to/paths.csv \
+                 --eval-config /path/to/config.json
+```
 
 ## Evaluation
 
 MIST provides a flexible command-line tool to evaluate prediction masks against
-ground truth using various metrics. The evaluation script supports several
-metrics and outputs a detailed summary of the evaluation in CSV format.
+ground truth using various metrics. Metrics and their parameters are defined
+entirely in a config JSON, giving you full per-class control without any
+additional CLI flags.
 
-To run the stand-alone evaluation pipeline, use the `mist_evaluate` with the
+To run the stand-alone evaluation pipeline, use `mist_evaluate` with the
 following arguments:
 
-- `--config` (**required**): Path to the `./results/config.json` file. The
-configuration file defines the evaluation classes in the `evaluation` entry.
+- `--config` (**required**): Path to an evaluation config JSON. Accepts either a
+full MIST `config.json` (the `evaluation` key is extracted automatically) or a
+standalone evaluation config with the nested per-class structure shown below.
 - `--paths-csv` (**required**): Path to CSV file containing patient IDs and
 paths to ground truth and predicted masks.
 - `--output-csv` (**required**): Path to output CSV containing the computed
 metrics for each patient.
-- `--metrics`: Metrics to compute for each ground truth/prediction pair. Choices
-are Dice (`dice`), 95th percentile Hausdorff distance (`haus95`),
-average surface distance (`avg_surf`), and surface Dice (`surf_dice`).
-*(default: `dice haus95`)*
-- `--surf-dice-tol`: Tolerance (mm) for the surface Dice metric.
-*(default: `1.0`)*
+- `--num-workers-evaluate` *(optional)*: Number of parallel workers. *(default: 1)*
+- `--validate` *(optional)*: Validate each mask pair before evaluation. Checks
+that images are 3D, have an integer or boolean dtype, and contain only labels
+defined in the config. Recommended for external data.
 
 The paths CSV for the evaluation tool should have the following format:
 
@@ -426,16 +578,194 @@ The paths CSV for the evaluation tool should have the following format:
 |------------|----------------------------|--------------------|
 | Patient ID | Path to ground truth mask  | Path to prediction |
 
+### Evaluation config format
+
+The `evaluation` entry in `config.json` (or a standalone config file) defines
+one or more classes to evaluate. Each class specifies which label values to
+include and which metrics to compute, along with any metric-specific parameters:
+
+```json
+{
+  "class_name": {
+    "labels": [1, 2, 3],
+    "metrics": {
+      "metric_name": {"param": value}
+    }
+  }
+}
+```
+
+### Available metrics
+
+| Metric key             | Description                                   | Parameters |
+|------------------------|-----------------------------------------------|------------|
+| `dice`                 | Volumetric Sørensen–Dice coefficient          | — |
+| `haus95`               | 95th-percentile Hausdorff distance (mm)       | — |
+| `avg_surf`             | Average symmetric surface distance (mm)       | — |
+| `surf_dice`            | Surface Dice at a configurable tolerance      | `tolerance` (mm, default `1.0`) |
+| `lesion_wise_dice`     | BraTS-style lesion-wise Dice                  | see below |
+| `lesion_wise_haus95`   | BraTS-style lesion-wise HD95 (mm)             | see below |
+| `lesion_wise_surf_dice`| BraTS-style lesion-wise surface Dice          | see below |
+
+#### Lesion-wise metric parameters
+
+Lesion-wise metrics evaluate each GT lesion individually, track false positives,
+and aggregate using `sum(scores) / (num_gt_above_thresh + num_fp)` — the same
+formula used by the BraTS (Brain Tumor Segmentation) challenge. This scoring
+penalizes both missed lesions and spurious predictions equally, regardless of
+lesion size.
+
+| Parameter                 | Default | Description |
+|---------------------------|---------|-------------|
+| `min_lesion_volume`       | `10.0`  | Minimum GT lesion volume in mm³. Lesions smaller than this are excluded. |
+| `dilation_iters`          | `3`     | Dilation iterations used to match predicted components to a GT lesion. |
+| `gt_consolidation_iters`  | `0`     | Dilation iterations for merging nearby GT lesions before analysis. Set equal to `dilation_iters` to replicate BraTS-style consolidation. `0` disables consolidation. |
+| `tolerance`               | `1.0`   | Surface Dice tolerance in mm (`lesion_wise_surf_dice` only). |
+
+> **Penalization rules:** An undetected GT lesion (false negative) contributes
+> `0` to the Dice / surface Dice numerator, or the image diagonal to the HD95
+> numerator, and `1` to the denominator. Each spurious predicted lesion (false
+> positive) is penalized identically.
+
 ### Example
 
-Run the evaluation pipeline with the surface Dice using a 1.5 mm tolerance.
+Run the evaluation pipeline with Dice and HD95:
 
 ```console
 mist_evaluate --config /path/to/config.json \
               --paths-csv /path/to/evaluation/paths.csv \
-              --output-csv /path/to/output.csv \
-              --metrics dice haus95 surf_dice \
-              --surf-dice-tol 1.5
+              --output-csv /path/to/output.csv
+```
+
+### BraTS-style lesion-wise evaluation example
+
+The following standalone evaluation config replicates the BraTS glioma (GLI)
+lesion-wise evaluation protocol for Whole Tumor (WT), Tumor Core (TC), and
+Enhancing Tumor (ET). BraTS glioma label conventions: `1` = necrotic core,
+`2` = peritumoral edema, `3` = enhancing tumor.
+
+```json
+{
+  "whole_tumor": {
+    "labels": [1, 2, 3],
+    "metrics": {
+      "lesion_wise_dice": {
+        "min_lesion_volume": 50.0,
+        "dilation_iters": 3,
+        "gt_consolidation_iters": 3
+      },
+      "lesion_wise_haus95": {
+        "min_lesion_volume": 50.0,
+        "dilation_iters": 3,
+        "gt_consolidation_iters": 3
+      }
+    }
+  },
+  "tumor_core": {
+    "labels": [1, 3],
+    "metrics": {
+      "lesion_wise_dice": {
+        "min_lesion_volume": 50.0,
+        "dilation_iters": 3,
+        "gt_consolidation_iters": 3
+      },
+      "lesion_wise_haus95": {
+        "min_lesion_volume": 50.0,
+        "dilation_iters": 3,
+        "gt_consolidation_iters": 3
+      }
+    }
+  },
+  "enhancing_tumor": {
+    "labels": [3],
+    "metrics": {
+      "lesion_wise_dice": {
+        "min_lesion_volume": 50.0,
+        "dilation_iters": 3,
+        "gt_consolidation_iters": 3
+      },
+      "lesion_wise_haus95": {
+        "min_lesion_volume": 50.0,
+        "dilation_iters": 3,
+        "gt_consolidation_iters": 3
+      }
+    }
+  }
+}
+```
+
+Save this as `brats_eval_config.json` and run:
+
+```console
+mist_evaluate --config brats_eval_config.json \
+              --paths-csv /path/to/evaluation/paths.csv \
+              --output-csv /path/to/brats_results.csv
+```
+
+## Ranking
+
+`mist_rank` ranks two or more evaluation result CSVs (typically the outputs of
+`mist_evaluate`) using a BraTS-style scheme. For each (patient, metric) cell
+the strategies are ranked from best (1) to worst with average tie handling,
+then aggregated by mean rank per strategy.
+
+The tool is generic: it can rank any group of result CSVs that share the same
+patient set and metric columns. Common use cases include comparing several
+trained models, several postprocessing strategies, or several agent-proposed
+configurations.
+
+`mist_rank` infers each metric's direction (whether higher or lower values are
+better) from MIST's metric registry, so no extra configuration is needed for
+CSVs produced by `mist_evaluate`. Non-MIST metric columns can be handled by
+supplying a JSON file via `--metric-direction-overrides`.
+
+The `mist_rank` command takes the following arguments:
+
+- `--results` (**required**): Two or more paths to evaluation result CSVs.
+  All CSVs must share the same id column and metric columns.
+- `--output-csv` (**required**): Path where the summary ranking CSV will be
+  written. Columns: `strategy`, `average_rank`.
+- `--names` *(optional)*: Friendly labels, one per `--results` CSV in the same
+  order. Defaults to the file stem of each results CSV.
+- `--output-detailed-csv` *(optional)*: Path for an additional per-metric
+  breakdown CSV containing mean ranks per strategy per metric column.
+- `--metric-direction-overrides` *(optional)*: Path to a JSON file mapping
+  metric column name to `"higher"` or `"lower"`. Required only for columns
+  whose suffix does not match a registered MIST metric.
+- `--id-column` *(optional)*: Name of the column identifying each patient.
+  *(default: `id`)*
+
+Aggregate summary rows automatically appended by `mist_evaluate` (`Mean`,
+`Std`, `25th Percentile`, `Median`, `75th Percentile`) are stripped before
+ranking, so result CSVs can be passed in directly without any preprocessing.
+
+### Example
+
+Rank three model evaluations:
+
+```console
+mist_rank --results results_modelA.csv results_modelB.csv results_modelC.csv \
+          --names modelA modelB modelC \
+          --output-csv ranked_summary.csv \
+          --output-detailed-csv ranked_per_metric.csv
+```
+
+### Direction overrides example
+
+If your CSV contains a custom metric whose name is not in the MIST registry,
+provide its direction explicitly:
+
+```json
+{
+  "WT_my_custom_metric": "higher",
+  "WT_distance_to_centerline": "lower"
+}
+```
+
+```console
+mist_rank --results results_a.csv results_b.csv \
+          --output-csv ranked.csv \
+          --metric-direction-overrides directions.json
 ```
 
 ## Converting CSV and MSD Data
@@ -443,46 +773,51 @@ mist_evaluate --config /path/to/config.json \
 Several popular formats exist for different datasets, like the Medical
 Segmentation Decathlon (MSD) or simple CSV files with file paths to images and
 masks. To bridge the usability gap between these kinds of datasets and MIST, we
-provide a conversion tool called `mist_convert_dataset` to take MSD or CSV
-formatted data and convert it to MIST-compatible data.
+provide two dedicated conversion commands.
 
-The `mist_convert_dataset` uses the following arguments:
+Both commands copy data into a MIST-compatible directory structure and generate
+a `dataset.json` file. Paths inside the generated `dataset.json` are written
+as relative paths, making the converted dataset portable across machines and
+cloud environments.
 
-- `--format`: (**required**) The format of the given dataset, which can be
-either `msd` or `csv`.
-- ```--output```: (**required**) Path to the new MIST formatted dataset,
-- At least one of the following are required depending on the chosen format:
-  - `--msd-source`: Path to the MSD dataset, if that is what you are converting.
-  - `--train-csv`: Path to the CSV file containing training data, if that is
-  what you are using
-  - `--test-csv`: Path to CSV file containing test data.
+### `mist_convert_msd`
 
-The format for CSV data should be as follows:
+Converts a Medical Segmentation Decathlon dataset.
 
-| id         | mask                       | images             |
-|------------|----------------------------|--------------------|
-| Patient ID | Path to ground truth mask  | Path to images     |
+| Argument | Required | Description |
+|---|---|---|
+| `--source` | Yes | Path to the MSD dataset directory (must contain `dataset.json`). |
+| `--output` | Yes | Directory to save the converted MIST-format dataset. |
+| `--num-workers-conversion` | No | Number of parallel threads for file copying. *(default: 1)* |
+
+```console
+mist_convert_msd --source /path/to/msd/dataset \
+                 --output /path/to/mist/dataset
+```
+
+The MSD `dataset.json` is used to automatically populate the task name,
+modality, labels, and class definitions in the generated MIST `dataset.json`.
+
+### `mist_convert_csv`
+
+Converts a CSV-format dataset.
+
+| Argument | Required | Description |
+|---|---|---|
+| `--train-csv` | Yes | Path to training CSV with columns: `id`, `mask`, `image1` [, `image2`, ...]. |
+| `--output` | Yes | Directory to save the converted MIST-format dataset. |
+| `--test-csv` | No | Path to optional test CSV with columns: `id`, `image1` [, `image2`, ...]. |
+| `--num-workers-conversion` | No | Number of parallel threads for file copying. *(default: 1)* |
+
+```console
+mist_convert_csv --train-csv /path/to/train.csv \
+                 --output /path/to/mist/dataset \
+                 --test-csv /path/to/test.csv
+```
 
 !!! note
-	If converting a CSV file, this command will reformat the CSV dataset to a
-  MIST-compatible one, but will require the user to fill in details in its
-  corresponding dataset JSON file.
-
-### Example
-
-Convert a MSD dataset into a MIST-compatible dataset.
-
-```console
-mist_convert_dataset --format msd \
-                     --output /path/to/mist/dataset \
-                     --msd-source /path/to/msd/top_level/directory \
-```
-
-Convert a CSV dataset into a MIST-compatible dataset.
-
-```console
-mist_convert_dataset --format csv \
-                     --output /path/to/mist/dataset \
-                     --train-csv /path/to/training/data.csv \
-                     --test-csv /path/to/test/data.csv
-```
+    CSV conversion copies the data into MIST format but cannot infer task
+    name, modality, labels, or class definitions automatically. After
+    conversion, open the generated `dataset.json` and fill in the `task`,
+    `modality`, `labels`, and `final_classes` fields before running
+    `mist_analyze`.

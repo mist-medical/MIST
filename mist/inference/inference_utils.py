@@ -1,25 +1,28 @@
 """Utility functions for MIST inference modules."""
-from typing import Any, Dict, Optional, Tuple, List, Union
+from typing import Any
 from collections.abc import Callable
 from pathlib import Path
-import os
+
 import ants
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import torch
 
-# MIST imports.
-from mist.utils import io
 from mist.analyze_data import analyzer_utils
 from mist.preprocessing import preprocess
 from mist.inference.inference_constants import InferenceConstants as ic
 from mist.models import model_loader
 
 
+def get_default_device() -> str:
+    """Return the default inference device (CUDA if available, else CPU)."""
+    return "cuda" if torch.cuda.is_available() else "cpu"
+
+
 def decrop_from_fg(
     ants_image: ants.core.ants_image.ANTsImage,
-    fg_bbox: Dict[str, int],
+    fg_bbox: dict[str, int],
 ) -> ants.core.ants_image.ANTsImage:
     """Decrop image to original size using foreground bounding box.
 
@@ -30,6 +33,10 @@ def decrop_from_fg(
     Returns:
         Decropped ANTs image object.
     """
+    # The bounding box indices are inclusive, so the right padding along each
+    # axis is: og_size - end - 1. Equivalently: (og_size - end) - 1. The -1
+    # accounts for the fact that `x_end` is the last included voxel index,
+    # not a one-past-the-end pointer.
     padding = [
         (
             np.max([0, fg_bbox["x_start"]]),
@@ -50,9 +57,9 @@ def decrop_from_fg(
 def back_to_original_space(
     raw_prediction: npt.NDArray[Any],
     original_ants_image: ants.core.ants_image.ANTsImage,
-    target_spacing: Tuple[float, float, float],
-    training_labels: List[int],
-    foreground_bounding_box: Optional[Dict[str, Any]],
+    target_spacing: tuple[float, float, float],
+    training_labels: list[int],
+    foreground_bounding_box: dict[str, Any] | None,
 ) -> ants.core.ants_image.ANTsImage:
     """Place 3D prediction back into original image space.
 
@@ -127,30 +134,24 @@ def back_to_original_space(
     # Copy header from original image onto the prediction so they match. This
     # will take care of other details in the header like the origin and the
     # image bounding box.
-    prediction = original_ants_image.new_image_like(prediction.numpy()) # type: ignore
+    # ANTs stubs don't annotate new_image_like's return type.
+    prediction = original_ants_image.new_image_like(prediction.numpy())  # type: ignore[no-any-return]  # noqa: E501
     return prediction
 
 
 def load_test_time_models(
     models_dir: str,
-    mist_config: Dict,
-    device: Optional[Union[str, torch.device]]=None,
-) -> List[Callable[[torch.Tensor], torch.Tensor]]:
+    mist_config: dict,
+    device: str | torch.device | None = None,
+) -> list[Callable[[torch.Tensor], torch.Tensor]]:
     """Load one or more models for test-time inference.
 
     This function loads all models matching the pattern `fold_*.pt` in the
-    specified directory, along with the shared model config JSON. For versions
-    of MIST prior to 1.0.0b0, the model directory should contain the fold
-    weights (i.e., `fold_0.pt`, `fold_1.pt`, etc.) and a model_config.json
-    file. For MIST 1.0.0b0 and later, the model directory should contain only
-    the model weights (i.e., `fold_0.pt`, `fold_1.pt`, etc.). The model
-    configuration for these newer versions is stored in the MIST configuration
-    file under the "model" key.
+    specified directory. The model configuration is read from the MIST
+    configuration file under the "model" key.
 
-    The function will validate the existence of the model directory and the
-    MIST configuration file. It will also ensure that at least one model
-    checkpoint file is found. If `load_first_model_only` is set to True, only
-    the first model (i.e., `fold_0.pt`) will be loaded.
+    The function will validate the existence of the model directory and ensure
+    that at least one model checkpoint file is found.
 
     Args:
         models_dir: Path to directory with `fold_*.pt` model weights.
@@ -166,7 +167,7 @@ def load_test_time_models(
         ValueError: If no model checkpoint files are found.
     """
     # Set the device if not provided.
-    device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+    device = device or get_default_device()
 
     # Ensure the models directory and config file exist.
     models_path = Path(models_dir)
@@ -183,12 +184,6 @@ def load_test_time_models(
             f"No model checkpoints found in {models_path}, (expected fold_*.pt)"
         )
 
-    # Check if a legacy model config file exists.
-    config_path = models_path / "model_config.json"
-    if config_path.is_file():
-        legacy_config = io.read_json_file(str(config_path))
-        mist_config = model_loader.convert_legacy_model_config(legacy_config)
-
     models = []
     for model_path in pt_files:
         model_path = str(model_path)
@@ -199,7 +194,7 @@ def load_test_time_models(
 
 def remap_mask_labels(
     mask_npy: npt.NDArray[Any],
-    original_labels: List[int],
+    original_labels: list[int],
 ) -> npt.NDArray[Any]:
     """Remap label indices in a predicted mask to their original values.
 
@@ -219,8 +214,8 @@ def remap_mask_labels(
 
 
 def validate_inference_images(
-    patient_dict: Dict[str, str]
-) -> Tuple[ants.core.ants_image.ANTsImage, List[str]]:
+    patient_dict: dict[str, str]
+) -> tuple[ants.core.ants_image.ANTsImage, list[str]]:
     """Validate all images listed in the patient dictionary.
 
     Ensures that each image file exists, is a valid 3D image, and that all
@@ -255,13 +250,13 @@ def validate_inference_images(
 
     # Check all files exist.
     for image_path in image_paths:
-        if not os.path.isfile(image_path):
+        if not Path(image_path).is_file():
             raise FileNotFoundError(
-                f"Image file not found: {os.path.basename(image_path)}"
+                f"Image file not found: {Path(image_path).name}"
             )
 
     # Load anchor image. Check if it is 3D before proceeding.
-    anchor_filename = os.path.basename(image_paths[0])
+    anchor_filename = Path(image_paths[0]).name
     anchor_header = ants.image_header_info(image_paths[0])
     if not analyzer_utils.is_image_3d(anchor_header):
         raise ValueError(f"Anchor image is not 3D: {anchor_filename}")
@@ -269,7 +264,7 @@ def validate_inference_images(
 
     # Check header compatibility for additional modalities.
     for image_path in image_paths[1:]:
-        current_filename = os.path.basename(image_path)
+        current_filename = Path(image_path).name
         current_header = ants.image_header_info(image_path)
         if not analyzer_utils.is_image_3d(current_header):
             raise ValueError(f"Image is not 3D: {current_filename}")

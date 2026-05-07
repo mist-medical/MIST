@@ -1,6 +1,6 @@
 """3D patch trainer for MIST built on top of BaseTrainer."""
 
-from typing import Tuple, Any, Dict
+from typing import Any
 
 import torch
 from monai.inferers import sliding_window_inference
@@ -15,10 +15,10 @@ class Patch3DTrainer(BaseTrainer):
 
     def build_dataloaders(
         self,
-        fold_data: Dict[str, Any],
+        fold_data: dict[str, Any],
         rank: int,
         world_size: int,
-    ) -> Tuple[Any, Any]:
+    ) -> tuple[Any, Any]:
         """Build DALI dataloaders for training and validation.
 
         This method constructs the DALI-based training and validation data
@@ -56,7 +56,7 @@ class Patch3DTrainer(BaseTrainer):
             batch_size=training["batch_size_per_gpu"],
             oversampling=training["dali_foreground_prob"],
             labels=train_labels,
-            roi_size=self.config["model"]["params"]["patch_size"],
+            roi_size=self.config["spatial_config"]["patch_size"],
             seed=training["seed"],
             num_workers=training["hardware"]["num_cpu_workers"],
             use_augmentation=training["augmentation"]["enabled"],
@@ -102,24 +102,21 @@ class Patch3DTrainer(BaseTrainer):
         batch = kwargs["data"]
 
         # Unpack the state. This includes the model, optimizer, scaler, loss
-        # function (i.e., criterion), composite weight scheduler, and the
-        # current epoch.
+        # function (i.e., criterion), and the alpha weight for composite losses
+        # (pre-computed once per epoch by the training loop).
         model = state["model"]
         optimizer = state["optimizer"]
         scaler = state["scaler"]
         criterion = state["loss_function"]
-        composite_loss_weighting = state["composite_loss_weighting"]
+        alpha = state["alpha"]
 
         image = batch["image"]
         label = batch["label"]
         dtm = batch.get("dtm", None)
 
-        epoch = state["epoch"]
-        if composite_loss_weighting:
-            alpha = composite_loss_weighting(epoch)
-        else:
-            # Default to 0.5 for safe handling of alpha parameter.
-            alpha = 0.5
+        max_norm = self.config["training"].get(
+            "grad_clip_norm", constants.GRAD_CLIP_VALUE
+        )
 
         optimizer.zero_grad()
         if scaler is not None:
@@ -137,9 +134,7 @@ class Patch3DTrainer(BaseTrainer):
 
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(
-                model.parameters(), max_norm=constants.GRAD_CLIP_VALUE
-            )
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=max_norm)
             scaler.step(optimizer)
             scaler.update()
         else:
@@ -155,9 +150,7 @@ class Patch3DTrainer(BaseTrainer):
             )
 
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(
-                model.parameters(), max_norm=constants.GRAD_CLIP_VALUE
-            )
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=max_norm)
             optimizer.step()
         return loss
 
@@ -184,7 +177,7 @@ class Patch3DTrainer(BaseTrainer):
 
         # Unpack the model from the state.
         model = state["model"]
-        patch_size = self.config["model"]["params"]["patch_size"]
+        patch_size = self.config["spatial_config"]["patch_size"]
 
         # Unpack overlap parameters from the configuration.
         overlap = self.config["inference"]["inferer"]["params"]["patch_overlap"]
