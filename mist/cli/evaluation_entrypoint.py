@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from mist.cli.args import ArgParser
+from mist.cli.args import ArgParser, positive_int
 from mist.evaluation.evaluator import Evaluator
 from mist.utils import io
 
@@ -39,7 +39,7 @@ def _parse_eval_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Path where the evaluation results CSV will be written."
     )
     parser.arg(
-        "--num-workers-evaluate", type=int, default=1,
+        "--num-workers-evaluate", type=positive_int, default=1,
         help="Number of parallel workers for evaluation.",
     )
     parser.flag(

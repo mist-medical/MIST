@@ -31,7 +31,11 @@ def _parse_inference_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     p.arg(
         "--paths-csv", type=str, required=True,
-        help="CSV with an 'id' column and one or more image path columns."
+        help=(
+            "CSV with an 'id' column and one column per image type matching "
+            "the dataset's image keys (e.g., 't1', 't2'). See docs for the "
+            "required format."
+        ),
     )
     p.arg(
         "--output", type=str, required=True,
@@ -45,7 +49,7 @@ def _parse_inference_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     p.arg(
         "--postprocess-strategy", type=str, default=None,
-        help="(Optional) Path to postprocessing strategy JSON file."
+        help="Path to postprocessing strategy JSON file.",
     )
     return p.parse_args(argv)
 

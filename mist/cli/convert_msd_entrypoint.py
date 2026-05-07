@@ -3,7 +3,7 @@ from argparse import ArgumentDefaultsHelpFormatter
 from pathlib import Path
 import argparse
 
-from mist.cli.args import ArgParser
+from mist.cli.args import ArgParser, positive_int
 from mist.conversion_tools.msd import convert_msd
 
 
@@ -24,7 +24,7 @@ def _parse_convert_msd_args(
         help="Directory to save the converted MIST-format dataset.",
     )
     parser.arg(
-        "--num-workers-conversion", type=int, default=1,
+        "--num-workers-conversion", type=positive_int, default=1,
         help="Number of parallel threads for file copying.",
     )
     return parser.parse_args(argv)

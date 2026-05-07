@@ -3,7 +3,7 @@ from argparse import ArgumentDefaultsHelpFormatter
 from pathlib import Path
 import argparse
 
-from mist.cli.args import ArgParser
+from mist.cli.args import ArgParser, positive_int
 from mist.conversion_tools.csv import convert_csv
 
 
@@ -32,7 +32,7 @@ def _parse_convert_csv_args(
         ),
     )
     parser.arg(
-        "--num-workers-conversion", type=int, default=1,
+        "--num-workers-conversion", type=positive_int, default=1,
         help="Number of parallel threads for file copying.",
     )
     return parser.parse_args(argv)
