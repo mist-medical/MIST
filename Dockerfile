@@ -5,7 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install MIST.
 RUN pip install --upgrade pip \
-    && pip install --upgrade --no-cache-dir mist-medical
+    && pip install --upgrade --no-cache-dir "mist-medical[train]"
 
 # Create app directory.
 RUN mkdir /app
