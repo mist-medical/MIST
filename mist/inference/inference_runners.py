@@ -280,6 +280,9 @@ def test_on_fold(
             else:
                 # Write prediction as .nii.gz file.
                 ants.image_write(prediction, filename)
+            finally:
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
 
     # Print error messages if any occurred during inference.
     if error_messages:
@@ -396,9 +399,9 @@ def infer_from_dataframe(
                 preprocessed_image = np.expand_dims(
                     preprocessed_image, axis=ic.NUMPY_TO_TORCH_EXPAND_DIMS_AXES
                 )
-                preprocessed_image = torch.Tensor(preprocessed_image.copy())
-                preprocessed_image = preprocessed_image.to(torch.float32)
-                preprocessed_image = preprocessed_image.to(device)
+                preprocessed_image = torch.from_numpy(
+                    np.ascontiguousarray(preprocessed_image)
+                ).to(torch.float32).to(device)
 
                 # Perform prediction and restoration to original space.
                 prediction = predict_single_example(
@@ -432,6 +435,9 @@ def infer_from_dataframe(
             else:
                 # Write prediction as .nii.gz file.
                 ants.image_write(prediction, prediction_filename)
+            finally:
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
 
     # Print a summary of the inference results. If there are any error or
     # warning messages, print them. Otherwise, print a success message.
