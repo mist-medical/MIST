@@ -314,7 +314,7 @@ mist_train --numpy /path/to/preprocessed/data \
 MIST saves a checkpoint at the end of every completed epoch to
 `results/checkpoints/fold_{fold}_checkpoint.pt`. The checkpoint stores the
 full training state: model weights, optimizer state, learning rate scheduler
-state, AMP scaler state, epoch index, global step, and best validation loss.
+state, epoch index, global step, and best validation loss.
 
 On resume:
 

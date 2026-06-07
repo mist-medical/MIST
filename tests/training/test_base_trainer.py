@@ -540,7 +540,7 @@ def test_build_components_multi_gpu_wraps_with_ddp(
     trainer = DummyTrainer(mist_args)
     state = trainer.build_components(rank=0, world_size=2)
     assert isinstance(state["model"], DummyDDP)
-    assert state["scaler"].is_enabled() is True
+    assert "scaler" not in state
 
 
 def test_setup_initializes_process_group_once(
@@ -1426,52 +1426,6 @@ def test_build_components_spacing_aware_loss_injects_spacing(
 
     assert "sddl_spacing_xyz" in received_params
     assert received_params["sddl_spacing_xyz"] == [1.0, 1.0, 1.0]
-
-
-# =============================================
-# Coverage gap: load_checkpoint with AMP scaler
-# =============================================
-
-def test_load_checkpoint_restores_scaler_state(
-    tmp_pipeline, mist_args, monkeypatch
-):
-    """When state has a scaler and the checkpoint has scaler_state_dict,
-    the scaler's load_state_dict is called."""
-    monkeypatch.setattr(torch, "save", _real_torch_save)
-    monkeypatch.setattr(torch, "load", _real_torch_load)
-    monkeypatch.setattr(bt.BaseTrainer, "save_checkpoint", _real_save_checkpoint)
-
-    trainer = DummyTrainer(mist_args)
-    state = trainer.build_components(rank=0, world_size=1)
-
-    # Write a checkpoint that includes a fake scaler_state_dict.
-    path = trainer._checkpoint_path(0)
-    model = state["model"]
-    fake_checkpoint = {
-        "model_state_dict": model.state_dict(),
-        "optimizer_state_dict": state["optimizer"].state_dict(),
-        "lr_scheduler_state_dict": state["lr_scheduler"].state_dict(),
-        "scaler_state_dict": {"scale": 65536.0},
-        "epoch": 2,
-        "global_step": 100,
-        "best_val_loss": 0.3,
-    }
-    _real_torch_save(fake_checkpoint, path)
-
-    # Attach a fake scaler with a load_state_dict tracker.
-    scaler_loads = []
-
-    class FakeScaler:
-        def load_state_dict(self, sd):
-            scaler_loads.append(sd)
-
-    state["scaler"] = FakeScaler()
-
-    loaded = trainer.load_checkpoint(fold=0, state=state)
-
-    assert loaded is True
-    assert len(scaler_loads) == 1
-    assert scaler_loads[0] == {"scale": 65536.0}
 
 
 # =============================================

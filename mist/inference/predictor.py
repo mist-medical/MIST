@@ -1,4 +1,5 @@
 """Predictor class to chain together inference, TTA, and ensembling."""
+import contextlib
 from collections.abc import Callable
 
 import torch
@@ -26,6 +27,8 @@ class Predictor:
             mist.inference.tta.strategies module.
         device: Torch device to use for inference. If None, defaults to CUDA if
             available, otherwise CPU.
+        use_amp: Whether to use automatic mixed precision (AMP) during
+            inference. Only applied when CUDA is available. Default is False.
     """
 
     def __init__(
@@ -35,6 +38,7 @@ class Predictor:
         ensembler: AbstractEnsembler,
         tta_transforms: list[AbstractTransform],
         device: str | torch.device | None = None,
+        use_amp: bool = False,
     ):
         """Initialize the predictor.
 
@@ -46,12 +50,15 @@ class Predictor:
                 transforms are available as tta strategies in the
                 mist.inference.tta.strategies module.
             device: Torch device to use for inference.
+            use_amp: Whether to use automatic mixed precision during inference.
+                Only takes effect when CUDA is available.
         """
         self.models = models
         self.inferer = inferer
         self.ensembler = ensembler
         self.tta_transforms = tta_transforms
         self.device = device or get_default_device()
+        self.use_amp = use_amp
 
     def __call__(self, image: torch.Tensor) -> torch.Tensor:
         """Call the predictor like a function."""
@@ -69,19 +76,26 @@ class Predictor:
         image = image.to(self.device)
         all_predictions = []
 
-        for model in self.models:
-            model_predictions = []
+        amp_context = (
+            torch.autocast(device_type="cuda", dtype=torch.bfloat16)
+            if self.use_amp and torch.cuda.is_available()
+            else contextlib.nullcontext()
+        )
 
-            # Apply TTA if defined.
-            for transform in self.tta_transforms:
-                augmented_image = transform(image)
-                prediction = self.inferer(augmented_image, model)
-                restored = transform.inverse(prediction)
-                model_predictions.append(restored)
+        with amp_context:
+            for model in self.models:
+                model_predictions = []
 
-            # Ensembling across TTA variants for this model.
-            combined_prediction = self.ensembler(model_predictions)
-            all_predictions.append(combined_prediction)
+                # Apply TTA if defined.
+                for transform in self.tta_transforms:
+                    augmented_image = transform(image)
+                    prediction = self.inferer(augmented_image, model)
+                    restored = transform.inverse(prediction)
+                    model_predictions.append(restored)
+
+                # Ensembling across TTA variants for this model.
+                combined_prediction = self.ensembler(model_predictions)
+                all_predictions.append(combined_prediction)
 
         # Final ensemble across all models.
         return self.ensembler(all_predictions)

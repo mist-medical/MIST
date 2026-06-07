@@ -65,12 +65,14 @@ def _build_predictor(
     inferer = get_inferer(inferer_name)(**inferer_params)
     ensembler = get_ensembler(ensembler_strategy)
     tta_transforms = get_strategy(tta_strategy if tta_enabled else "none")()
+    use_amp = mist_configuration.get("training", {}).get("amp", False)
     return Predictor(
         models=models,
         inferer=inferer,
         ensembler=ensembler,
         tta_transforms=tta_transforms,
         device=device,
+        use_amp=use_amp,
     )
 
 
@@ -358,7 +360,7 @@ def infer_from_dataframe(
     error_messages = []
 
     # Start inference loop.
-    with progress_bar.get_progress_bar("Running inference") as pb:
+    with torch.no_grad(), progress_bar.get_progress_bar("Running inference") as pb:
         for patient_index in pb.track(range(len(paths_dataframe))):
             patient = paths_dataframe.iloc[patient_index].to_dict()
             patient_id = patient["id"]

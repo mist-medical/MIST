@@ -213,3 +213,82 @@ def test_predictor_default_device_is_cpu_without_cuda(monkeypatch):
         tta_transforms=[IdentityTransform()],
     )
     assert predictor.device == "cpu"
+
+
+def test_predictor_use_amp_defaults_to_false():
+    """use_amp defaults to False when not specified."""
+    predictor = _make_predictor()
+    assert predictor.use_amp is False
+
+
+def test_predictor_use_amp_stored(monkeypatch):
+    """use_amp=True is stored on the predictor."""
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    predictor = _make_predictor(use_amp=True)
+    assert predictor.use_amp is True
+
+
+def test_predictor_use_amp_calls_autocast_when_cuda_available(monkeypatch):
+    """use_amp=True with CUDA available enters torch.autocast."""
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+
+    entered = []
+
+    class _FakeAutocast:
+        def __enter__(self):
+            entered.append(True)
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+    monkeypatch.setattr(torch, "autocast", lambda **_: _FakeAutocast())
+
+    predictor = _make_predictor(use_amp=True)
+    predictor(torch.ones(1, 1, 4, 4, 4))
+
+    assert entered, "torch.autocast context should have been entered"
+
+
+def test_predictor_use_amp_skips_autocast_when_cuda_unavailable(monkeypatch):
+    """use_amp=True without CUDA does not enter torch.autocast."""
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+
+    autocast_entered = []
+
+    class _FakeAutocast:
+        def __enter__(self):
+            autocast_entered.append(True)
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+    monkeypatch.setattr(torch, "autocast", lambda **_: _FakeAutocast())
+
+    predictor = _make_predictor(use_amp=True)
+    predictor(torch.ones(1, 1, 4, 4, 4))
+
+    assert not autocast_entered, "torch.autocast should not be entered without CUDA"
+
+
+def test_predictor_use_amp_false_skips_autocast(monkeypatch):
+    """use_amp=False never enters torch.autocast even when CUDA is available."""
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+
+    autocast_entered = []
+
+    class _FakeAutocast:
+        def __enter__(self):
+            autocast_entered.append(True)
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+    monkeypatch.setattr(torch, "autocast", lambda **_: _FakeAutocast())
+
+    predictor = _make_predictor(use_amp=False)
+    predictor(torch.ones(1, 1, 4, 4, 4))
+
+    assert not autocast_entered, "torch.autocast should not be entered when use_amp=False"

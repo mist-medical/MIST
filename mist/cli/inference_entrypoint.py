@@ -113,18 +113,17 @@ def run_inference(ns: argparse.Namespace) -> None:
     mist_cfg = io.read_json_file(str(config_path))
 
     # Execute inference
-    with torch.no_grad():
-        inference_runners.infer_from_dataframe(
-            paths_dataframe=df,
-            output_directory=str(output_dir),
-            mist_configuration=mist_cfg,
-            models_directory=str(models_dir),
-            postprocessing_strategy_filepath=(
-                str(Path(ns.postprocess_strategy).expanduser().resolve())
-                if ns.postprocess_strategy is not None else None
-            ),
-            device=device,
-        )
+    inference_runners.infer_from_dataframe(
+        paths_dataframe=df,
+        output_directory=str(output_dir),
+        mist_configuration=mist_cfg,
+        models_directory=str(models_dir),
+        postprocessing_strategy_filepath=(
+            str(Path(ns.postprocess_strategy).expanduser().resolve())
+            if ns.postprocess_strategy is not None else None
+        ),
+        device=device,
+    )
 
 
 def inference_entry(argv: list[str] | None = None) -> None:

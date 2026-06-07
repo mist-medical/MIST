@@ -62,41 +62,6 @@ def no_op_autocast() -> Any:
     yield
 
 
-class FakeScaler:
-    """Fake GradScaler with a toggle for AMP enabled/disabled."""
-
-    def __init__(self, enabled: bool) -> None:
-        """Initialize with an enabled flag."""
-        self.enabled = enabled
-        self._scaled = 0
-        self._stepped = 0
-        self._updated = 0
-        self._unscaled = 0  # NEW: Track unscale calls
-
-    def scale(self, loss: torch.Tensor) -> "FakeScaler":
-        """Pretend to scale the loss; return self for chaining .backward()."""
-        self._scaled += 1
-        self._loss = loss
-        return self
-
-    def backward(self) -> None:
-        """Call backward on the stored loss."""
-        self._loss.backward()
-
-    def unscale_(self, optimizer: torch.optim.Optimizer) -> None:
-        """Mock the unscale_ method."""
-        self._unscaled += 1
-
-    def step(self, optimizer: torch.optim.Optimizer) -> None:
-        """Record an optimizer step."""
-        optimizer.step()
-        self._stepped += 1
-
-    def update(self) -> None:
-        """Record an update call."""
-        self._updated += 1
-
-
 @pytest.fixture(autouse=True)
 def patch_cuda(monkeypatch):
     """Pretend CUDA exists and make .to(...) a no-op (CPU-only tests)."""
@@ -286,17 +251,16 @@ def test_build_dataloaders_passes_expected_args(
 
 
 @pytest.mark.parametrize("amp_enabled", [False, True])
-def test_training_step_criterion_optimizer_and_scaler(
+def test_training_step_uses_amp_context_when_configured(
     tmp_pipeline, mist_args, monkeypatch, amp_enabled,
 ):
-    """Exercise Patch3DTrainer.training_step with/without AMP."""
+    """training_step enters torch.autocast(bfloat16) iff training.amp is True."""
     t = Patch3DTrainer(mist_args)
+    t.config["training"]["amp"] = amp_enabled
 
-    # Model and optimizer.
     model = DummyModel()
     opt = torch.optim.SGD(model.parameters(), lr=0.1)
 
-    # Spy on optimizer.step to ensure it fires exactly once.
     step_calls = {"count": 0}
     _orig_step = opt.step
 
@@ -306,40 +270,38 @@ def test_training_step_criterion_optimizer_and_scaler(
 
     monkeypatch.setattr(opt, "step", _spy_step)
 
-    # Fake criterion that records inputs and returns a simple scalar loss.
     called = {}
 
     def fake_criterion(*, y_true, y_pred, y_supervision, alpha, dtm):
         called["y_true"] = y_true
         called["y_pred"] = y_pred
-        called["y_sup"] = y_supervision
         called["alpha"] = alpha
-        called["dtm"] = dtm
         return (y_pred - y_true).pow(2).mean()
 
-    # Scaler and (for AMP) a CPU-safe autocast no-op.
-    if amp_enabled:
-        scaler = FakeScaler(enabled=True)
+    autocast_entered = []
 
-        class _NoOpAutocast:
-            def __enter__(self): return self
-            def __exit__(self, exc_type, exc, tb): return False
+    class _FakeAutocast:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
 
-        monkeypatch.setattr(torch, "autocast", lambda *a, **k: _NoOpAutocast())
-    else:
-        scaler = None
+        def __enter__(self):
+            autocast_entered.append(self.kwargs)
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+    monkeypatch.setattr(torch, "autocast", _FakeAutocast)
 
     state = {
         "model": model,
         "optimizer": opt,
-        "scaler": scaler,
         "loss_function": fake_criterion,
         "composite_loss_weighting": None,
         "epoch": 0,
         "global_step": 0,
         "alpha": 0.5,
     }
-
     batch = {
         "image": torch.zeros(2, 4, dtype=torch.float32),
         "label": torch.zeros(2, 4, dtype=torch.float32),
@@ -348,29 +310,22 @@ def test_training_step_criterion_optimizer_and_scaler(
 
     loss = t.training_step(state=state, data=batch)
 
-    # Assertions common to both branches.
     assert isinstance(loss, torch.Tensor)
     assert "y_pred" in called and "y_true" in called
-
     assert called["alpha"] == 0.5
-
     assert step_calls["count"] == 1
 
-    # Branch-specific assertions.
     if amp_enabled:
-        assert isinstance(state["scaler"], FakeScaler)
-        assert state["scaler"].enabled is True
-        assert state["scaler"]._scaled == 1
-        assert state["scaler"]._stepped == 1
-        assert state["scaler"]._updated == 1
-        assert state["scaler"]._unscaled == 1
+        assert len(autocast_entered) == 1
+        assert autocast_entered[0]["dtype"] == torch.bfloat16
     else:
-        assert state["scaler"] is None
+        assert len(autocast_entered) == 0
 
 
 def test_training_step_parameters_updated_after_step(tmp_pipeline, mist_args):
     """Model parameters change after a training step with non-zero gradient."""
     t = Patch3DTrainer(mist_args)
+    t.config["training"]["amp"] = False
     model = DummyModel()
     opt = torch.optim.SGD(model.parameters(), lr=0.1)
 
@@ -380,7 +335,7 @@ def test_training_step_parameters_updated_after_step(tmp_pipeline, mist_args):
         return (kwargs["y_pred"] - kwargs["y_true"]).pow(2).mean()
 
     state = {
-        "model": model, "optimizer": opt, "scaler": None,
+        "model": model, "optimizer": opt,
         "loss_function": real_criterion, "composite_loss_weighting": None,
         "epoch": 0, "alpha": 0.5,
     }
@@ -411,6 +366,7 @@ def test_validation_step_calls_sliding_window_and_validation_loss(
       - The trainer's `validation_loss` is called with the prediction.
     """
     t = Patch3DTrainer(mist_args)
+    t.config["training"]["amp"] = False
     model = DummyModel()
 
     # Make the patched SWI return a tensor shaped like the inputs.
@@ -455,3 +411,76 @@ def test_validation_step_calls_sliding_window_and_validation_loss(
     # Ensure validation loss consumed y_true/y_pred.
     assert captured["y_true"] is not None
     assert captured["y_pred"] is not None
+
+
+@patch("mist.training.trainers.patch_3d_trainer.sliding_window_inference")
+def test_validation_step_uses_autocast_when_amp_enabled(
+    mock_swi, tmp_pipeline, mist_args, monkeypatch
+):
+    """validation_step enters torch.autocast(bfloat16) when training.amp=True."""
+    t = Patch3DTrainer(mist_args)
+    t.config["training"]["amp"] = True
+    model = DummyModel()
+    mock_swi.side_effect = lambda **kwargs: torch.zeros_like(kwargs["inputs"])
+    t.validation_loss = (  # type: ignore[attr-defined]
+        lambda y_true, y_pred: (y_pred - y_true).pow(2).mean()
+    )
+
+    autocast_entered = []
+
+    class _FakeAutocast:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def __enter__(self):
+            autocast_entered.append(self.kwargs)
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+    monkeypatch.setattr(torch, "autocast", _FakeAutocast)
+
+    t.validation_step(state={"model": model}, data={
+        "image": torch.ones(1, 4, dtype=torch.float32),
+        "label": torch.zeros(1, 4, dtype=torch.float32),
+    })
+
+    assert len(autocast_entered) == 1
+    assert autocast_entered[0]["dtype"] == torch.bfloat16
+
+
+@patch("mist.training.trainers.patch_3d_trainer.sliding_window_inference")
+def test_validation_step_no_autocast_when_amp_disabled(
+    mock_swi, tmp_pipeline, mist_args, monkeypatch
+):
+    """validation_step does not enter torch.autocast when training.amp=False."""
+    t = Patch3DTrainer(mist_args)
+    t.config["training"]["amp"] = False
+    model = DummyModel()
+    mock_swi.side_effect = lambda **kwargs: torch.zeros_like(kwargs["inputs"])
+    t.validation_loss = (  # type: ignore[attr-defined]
+        lambda y_true, y_pred: (y_pred - y_true).pow(2).mean()
+    )
+
+    autocast_entered = []
+
+    class _FakeAutocast:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            autocast_entered.append(True)
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+    monkeypatch.setattr(torch, "autocast", _FakeAutocast)
+
+    t.validation_step(state={"model": model}, data={
+        "image": torch.ones(1, 4, dtype=torch.float32),
+        "label": torch.zeros(1, 4, dtype=torch.float32),
+    })
+
+    assert not autocast_entered, "autocast should not be entered when amp=False"

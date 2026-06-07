@@ -236,10 +236,18 @@ def fold_runner(mock_mist_config, monkeypatch, tmp_path):
     monkeypatch.setattr("mist.utils.console.console.print", lambda msg: printed.append(str(msg)))
     monkeypatch.setattr(ir, "predict_single_example", predict_single)
     monkeypatch.setattr(ir, "Predictor", MagicMock(return_value=MagicMock()))
-    monkeypatch.setattr(ir, "get_strategy", MagicMock(return_value=lambda: SimpleNamespace(name="tta")))
-    monkeypatch.setattr(ir, "get_ensembler", MagicMock(return_value=SimpleNamespace(name="ensembler")))
-    monkeypatch.setattr(ir, "get_inferer", MagicMock(return_value=lambda **_: SimpleNamespace(name="inferer")))
-    monkeypatch.setattr(ir.model_loader, "load_model_from_config", MagicMock(return_value=_DummyModel()))
+    monkeypatch.setattr(
+        ir, "get_strategy", MagicMock(return_value=lambda: SimpleNamespace(name="tta"))
+    )
+    monkeypatch.setattr(
+        ir, "get_ensembler", MagicMock(return_value=SimpleNamespace(name="ensembler"))
+    )
+    monkeypatch.setattr(
+        ir, "get_inferer", MagicMock(return_value=lambda **_: SimpleNamespace(name="inferer"))
+    )
+    monkeypatch.setattr(
+        ir.model_loader, "load_model_from_config", MagicMock(return_value=_DummyModel())
+    )
     mock_dali_module = MagicMock()
     mock_dali_module.get_test_dataset = mock_get_test_dataset
     monkeypatch.setattr(ir, "dali_loader", mock_dali_module)
@@ -309,9 +317,16 @@ def infer_runner(mock_mist_config, monkeypatch, tmp_path):
     monkeypatch.setattr("mist.utils.console.console.print", lambda msg: printed.append(str(msg)))
     monkeypatch.setattr(ir, "predict_single_example", predict_single)
     monkeypatch.setattr(ir, "Predictor", MagicMock(return_value=MagicMock()))
-    monkeypatch.setattr(ir, "get_strategy", MagicMock(return_value=lambda: SimpleNamespace(name="tta")))
-    monkeypatch.setattr(ir, "get_ensembler", MagicMock(return_value=SimpleNamespace(name="ensembler")))
-    monkeypatch.setattr(ir, "get_inferer", MagicMock(return_value=lambda **_: SimpleNamespace(name="inferer")))
+    monkeypatch.setattr(
+        ir, "get_strategy", MagicMock(return_value=lambda: SimpleNamespace(name="tta"))
+    )
+    monkeypatch.setattr(
+        ir, "get_ensembler", MagicMock(return_value=SimpleNamespace(name="ensembler"))
+    )
+    monkeypatch.setattr(
+        ir, "get_inferer",
+        MagicMock(return_value=lambda **_: SimpleNamespace(name="inferer")),
+    )
     monkeypatch.setattr(
         ir.inference_utils, "load_test_time_models",
         MagicMock(return_value=[MagicMock(name="model0")]),
@@ -733,3 +748,78 @@ def test_infer_from_dataframe_device_resolution(
     infer_runner.run(cfg=copy.deepcopy(mock_mist_config), device=explicit_device)
 
     assert observed["device"] == expected
+
+
+# =======================
+# _build_predictor tests
+# =======================
+
+@pytest.mark.parametrize("amp_flag", [True, False])
+def test_build_predictor_passes_use_amp_from_config(
+    mock_mist_config, monkeypatch, amp_flag
+):
+    """_build_predictor reads training.amp and passes use_amp to Predictor."""
+    cfg = copy.deepcopy(mock_mist_config)
+    cfg["training"]["amp"] = amp_flag
+
+    observed = {}
+
+    class _CapturePred:
+        def __init__(self, **kwargs):
+            observed.update(kwargs)
+
+    monkeypatch.setattr(ir, "Predictor", _CapturePred)
+    monkeypatch.setattr(ir, "get_inferer", MagicMock(return_value=lambda **_: MagicMock()))
+    monkeypatch.setattr(ir, "get_ensembler", MagicMock(return_value=MagicMock()))
+    monkeypatch.setattr(ir, "get_strategy", MagicMock(return_value=lambda: []))
+
+    ir._build_predictor(cfg, models=[], device="cpu")
+
+    assert observed.get("use_amp") is amp_flag
+
+
+def test_build_predictor_use_amp_false_when_amp_missing(
+    mock_mist_config, monkeypatch
+):
+    """_build_predictor defaults use_amp=False when training.amp is absent."""
+    cfg = copy.deepcopy(mock_mist_config)
+    cfg["training"].pop("amp", None)
+
+    observed = {}
+
+    class _CapturePred:
+        def __init__(self, **kwargs):
+            observed.update(kwargs)
+
+    monkeypatch.setattr(ir, "Predictor", _CapturePred)
+    monkeypatch.setattr(ir, "get_inferer", MagicMock(return_value=lambda **_: MagicMock()))
+    monkeypatch.setattr(ir, "get_ensembler", MagicMock(return_value=MagicMock()))
+    monkeypatch.setattr(ir, "get_strategy", MagicMock(return_value=lambda: []))
+
+    ir._build_predictor(cfg, models=[], device="cpu")
+
+    assert observed.get("use_amp") is False
+
+
+# ==================================
+# infer_from_dataframe no_grad test
+# ==================================
+
+def test_infer_from_dataframe_runs_under_no_grad(
+    infer_runner, mock_mist_config, monkeypatch
+):
+    """infer_from_dataframe wraps inference in torch.no_grad()."""
+    no_grad_entered = []
+
+    original_no_grad = torch.no_grad
+
+    class _TrackingNoGrad(original_no_grad):
+        def __enter__(self):
+            no_grad_entered.append(True)
+            return super().__enter__()
+
+    monkeypatch.setattr(torch, "no_grad", _TrackingNoGrad)
+
+    infer_runner.run(cfg=copy.deepcopy(mock_mist_config))
+
+    assert no_grad_entered, "torch.no_grad() should be entered during infer_from_dataframe"

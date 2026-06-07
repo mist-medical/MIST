@@ -596,16 +596,12 @@ class BaseTrainer(ABC):
             composite_loss_weighting = None
 
         # Get the optimizer.
-        eps = (
-            TrainerConstants.AMP_EPS if training["amp"]
-            else TrainerConstants.NO_AMP_EPS
-        )
         optimizer = get_optimizer(
             name=training["optimizer"],
             params=model.parameters(),
             learning_rate=training["learning_rate"],
             weight_decay=training["l2_penalty"],
-            eps=eps,
+            eps=TrainerConstants.OPTIMIZER_EPS,
         )
 
         # Get learning rate scheduler.
@@ -616,17 +612,12 @@ class BaseTrainer(ABC):
             warmup_epochs=training.get("warmup_epochs", 0),
         )
 
-        # Get gradient scaler if AMP is enabled.
-        scaler = torch.amp.GradScaler(
-            "cuda") if training["amp"] else None  # type: ignore
-
         return {
             "model": model,
             "loss_function": loss_function,
             "composite_loss_weighting": composite_loss_weighting,
             "optimizer": optimizer,
             "lr_scheduler": lr_scheduler,
-            "scaler": scaler,
             "epoch": 0,
             "global_step": 0,
             "best_val_loss": np.inf,
@@ -640,10 +631,9 @@ class BaseTrainer(ABC):
     def save_checkpoint(self, fold: int, state: dict[str, Any]) -> None:
         """Save a training checkpoint for the given fold (rank 0 only).
 
-        Saves the current model weights, optimizer, LR scheduler, and scaler
-        states alongside training bookkeeping (epoch, global step, best
-        validation loss) so that training can be resumed exactly from this
-        point.
+        Saves the current model weights, optimizer, and LR scheduler states
+        alongside training bookkeeping (epoch, global step, best validation
+        loss) so that training can be resumed exactly from this point.
 
         Args:
             fold: The fold index being trained.
@@ -651,7 +641,6 @@ class BaseTrainer(ABC):
         """
         model = state["model"]
         unwrapped = model.module if hasattr(model, "module") else model
-        scaler = state["scaler"]
         checkpoint = {
             "fold": fold,
             "epoch": state["epoch"],
@@ -660,7 +649,6 @@ class BaseTrainer(ABC):
             "model_state_dict": unwrapped.state_dict(),
             "optimizer_state_dict": state["optimizer"].state_dict(),
             "lr_scheduler_state_dict": state["lr_scheduler"].state_dict(),
-            "scaler_state_dict": scaler.state_dict() if scaler is not None else None,
         }
         # Write to a temp file then atomically rename so a mid-write SIGKILL
         # never leaves a corrupted checkpoint on disk.
@@ -672,9 +660,9 @@ class BaseTrainer(ABC):
     def load_checkpoint(self, fold: int, state: dict[str, Any]) -> bool:
         """Load a training checkpoint into state (all ranks).
 
-        Restores model weights, optimizer, LR scheduler, and scaler states
-        from the latest checkpoint for the given fold. If no checkpoint exists,
-        returns False and leaves state unchanged.
+        Restores model weights, optimizer, and LR scheduler states from the
+        latest checkpoint for the given fold. If no checkpoint exists, returns
+        False and leaves state unchanged.
 
         Args:
             fold: The fold index being trained.
@@ -697,10 +685,6 @@ class BaseTrainer(ABC):
         # Restore optimizer and scheduler states.
         state["optimizer"].load_state_dict(checkpoint["optimizer_state_dict"])
         state["lr_scheduler"].load_state_dict(checkpoint["lr_scheduler_state_dict"])
-
-        # Restore scaler state if AMP is enabled.
-        if state["scaler"] is not None and checkpoint["scaler_state_dict"] is not None:
-            state["scaler"].load_state_dict(checkpoint["scaler_state_dict"])
 
         # Restore bookkeeping — epoch is incremented so the loop starts on the
         # next unfinished epoch.
