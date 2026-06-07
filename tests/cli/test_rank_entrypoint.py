@@ -57,6 +57,23 @@ class TestParseRankArgs:
         ])
         assert ns.output_detailed_csv == str(tmp_path / "detailed.csv")
 
+    def test_significance_csv_parsed(self, tmp_path):
+        """--significance-csv is captured when provided."""
+        ns = entry._parse_rank_args([
+            "--results", str(tmp_path / "a.csv"), str(tmp_path / "b.csv"),
+            "--output-csv", str(tmp_path / "out.csv"),
+            "--significance-csv", str(tmp_path / "sig.csv"),
+        ])
+        assert ns.significance_csv == str(tmp_path / "sig.csv")
+
+    def test_significance_csv_default_is_none(self, tmp_path):
+        """--significance-csv defaults to None when not provided."""
+        ns = entry._parse_rank_args([
+            "--results", str(tmp_path / "a.csv"), str(tmp_path / "b.csv"),
+            "--output-csv", str(tmp_path / "out.csv"),
+        ])
+        assert ns.significance_csv is None
+
     def test_overrides_path_parsed(self, tmp_path):
         """--metric-direction-overrides is captured when provided."""
         ns = entry._parse_rank_args([
@@ -121,6 +138,7 @@ def _make_ns(
     names=None,
     output_detailed_csv=None,
     metric_direction_overrides=None,
+    significance_csv=None,
     id_column="id",
 ):
     """Build a Namespace mirroring _parse_rank_args output."""
@@ -134,6 +152,9 @@ def _make_ns(
         metric_direction_overrides=(
             None if metric_direction_overrides is None
             else str(metric_direction_overrides)
+        ),
+        significance_csv=(
+            None if significance_csv is None else str(significance_csv)
         ),
         id_column=id_column,
     )
@@ -283,6 +304,60 @@ class TestRunRank:
                 tmp_path, results=[a, b], output_csv=out,
                 names=["only_one"],
             ))
+
+    def test_writes_significance_csv_when_path_given(self, tmp_path):
+        """run_rank writes a pairwise significance CSV when requested."""
+        n = 20
+        ids = [f"p{i}" for i in range(n)]
+        a = tmp_path / "a.csv"
+        b = tmp_path / "b.csv"
+        pd.DataFrame({"id": ids, "WT_dice": [0.9] * n}).to_csv(a, index=False)
+        pd.DataFrame({"id": ids, "WT_dice": [0.5] * n}).to_csv(b, index=False)
+
+        out = tmp_path / "ranked.csv"
+        sig = tmp_path / "sig" / "significance.csv"
+        entry.run_rank(_make_ns(
+            tmp_path, results=[a, b], output_csv=out,
+            names=["a", "b"], significance_csv=sig,
+        ))
+
+        assert sig.exists()
+        df = pd.read_csv(sig, index_col="strategy")
+        assert df.shape == (2, 2)
+        assert list(df.index) == ["a", "b"]
+        assert list(df.columns) == ["a", "b"]
+
+    def test_no_significance_csv_when_not_requested(self, tmp_path):
+        """No significance CSV is written when --significance-csv is omitted."""
+        a = tmp_path / "a.csv"
+        b = tmp_path / "b.csv"
+        _write_results_csv(a, ids=["p1"], WT_dice=[0.9])
+        _write_results_csv(b, ids=["p1"], WT_dice=[0.5])
+
+        out = tmp_path / "ranked.csv"
+        sig = tmp_path / "significance.csv"
+        entry.run_rank(_make_ns(
+            tmp_path, results=[a, b], output_csv=out, names=["a", "b"]
+        ))
+        assert not sig.exists()
+
+    def test_significance_csv_creates_parent_directory(self, tmp_path):
+        """Parent directory of --significance-csv is created if missing."""
+        n = 10
+        ids = [f"p{i}" for i in range(n)]
+        a = tmp_path / "a.csv"
+        b = tmp_path / "b.csv"
+        pd.DataFrame({"id": ids, "WT_dice": [0.9] * n}).to_csv(a, index=False)
+        pd.DataFrame({"id": ids, "WT_dice": [0.5] * n}).to_csv(b, index=False)
+
+        out = tmp_path / "ranked.csv"
+        sig = tmp_path / "deep" / "nested" / "sig.csv"
+        entry.run_rank(_make_ns(
+            tmp_path, results=[a, b], output_csv=out,
+            names=["a", "b"], significance_csv=sig,
+        ))
+        assert sig.parent.is_dir()
+        assert sig.exists()
 
 
 # ---------------------------------------------------------------------------

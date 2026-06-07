@@ -6,9 +6,11 @@ import pytest
 from mist.evaluation import ranking
 from mist.evaluation.ranking import (
     SUMMARY_ROW_IDS,
+    _build_rank_tensor,
     _direction_for_column,
     _strip_summary_rows,
     _suffix_match_metric,
+    compute_pairwise_significance,
     rank_results,
 )
 
@@ -418,3 +420,173 @@ class TestRankResultsErrors:
         df_b = pd.DataFrame({"WT_dice": [0.5]})
         with pytest.raises(ValueError, match="missing the required id column"):
             rank_results([df_a, df_b], names=["a", "b"])
+
+
+# ---------------------------------------------------------------------------
+# _build_rank_tensor
+# ---------------------------------------------------------------------------
+
+class TestBuildRankTensor:
+    """Tests for ranking._build_rank_tensor (the shared internal helper)."""
+
+    def test_returns_correct_shapes(self):
+        """Returned tensor has shape (n_metrics, n_patients, n_strategies)."""
+        ids = [f"p{i}" for i in range(5)]
+        df_a = _df(ids=ids, WT_dice=[0.9, 0.8, 0.7, 0.6, 0.5])
+        df_b = _df(ids=ids, WT_dice=[0.5, 0.4, 0.3, 0.2, 0.1])
+        _, metric_cols, ranks = _build_rank_tensor(
+            [df_a, df_b], names=["a", "b"],
+            direction_overrides=None, id_column="id",
+        )
+        assert ranks.shape == (1, 5, 2)
+        assert metric_cols == ["WT_dice"]
+
+    def test_rank_1_assigned_to_best_strategy(self):
+        """Strategy with higher dice gets rank 1 (higher-is-better)."""
+        df_a = _df(ids=["p1"], WT_dice=[0.9])
+        df_b = _df(ids=["p1"], WT_dice=[0.5])
+        _, _, ranks = _build_rank_tensor(
+            [df_a, df_b], names=["a", "b"],
+            direction_overrides=None, id_column="id",
+        )
+        # ranks[metric=0, patient=0, strategy=0] should be 1 (a wins).
+        assert ranks[0, 0, 0] == pytest.approx(1.0)
+        assert ranks[0, 0, 1] == pytest.approx(2.0)
+
+
+# ---------------------------------------------------------------------------
+# compute_pairwise_significance
+# ---------------------------------------------------------------------------
+
+class TestComputePairwiseSignificance:
+    """Tests for ranking.compute_pairwise_significance."""
+
+    def _make_dfs(self, n_patients, a_scores, b_scores, metric="WT_dice"):
+        """Build two result DataFrames with the given per-patient scores."""
+        ids = [f"p{i}" for i in range(n_patients)]
+        df_a = pd.DataFrame({"id": ids, metric: a_scores})
+        df_b = pd.DataFrame({"id": ids, metric: b_scores})
+        return df_a, df_b
+
+    def test_returns_square_dataframe(self):
+        """Output is a square DataFrame indexed and columned by strategy names."""
+        df_a, df_b = self._make_dfs(
+            20, [0.9] * 20, [0.5] * 20
+        )
+        result = compute_pairwise_significance(
+            [df_a, df_b], names=["a", "b"]
+        )
+        assert result.shape == (2, 2)
+        assert list(result.index) == ["a", "b"]
+        assert list(result.columns) == ["a", "b"]
+
+    def test_diagonal_is_nan(self):
+        """Diagonal entries (same strategy vs itself) are NaN."""
+        df_a, df_b = self._make_dfs(10, [0.9] * 10, [0.5] * 10)
+        result = compute_pairwise_significance(
+            [df_a, df_b], names=["a", "b"]
+        )
+        assert np.isnan(result.loc["a", "a"])
+        assert np.isnan(result.loc["b", "b"])
+
+    def test_clear_winner_has_low_p_value(self):
+        """When A consistently outperforms B, p(A>B) should be small."""
+        # A always scores higher; with 30 patients this should be significant.
+        n = 30
+        df_a, df_b = self._make_dfs(
+            n,
+            [0.9 + 0.01 * i for i in range(n)],
+            [0.3 + 0.01 * i for i in range(n)],
+        )
+        result = compute_pairwise_significance(
+            [df_a, df_b], names=["a", "b"]
+        )
+        assert result.loc["a", "b"] < 0.05
+
+    def test_clear_winner_reverse_direction_large_p(self):
+        """When A always beats B, p(B>A) should be large."""
+        n = 30
+        df_a, df_b = self._make_dfs(
+            n,
+            [0.9 + 0.01 * i for i in range(n)],
+            [0.3 + 0.01 * i for i in range(n)],
+        )
+        result = compute_pairwise_significance(
+            [df_a, df_b], names=["a", "b"]
+        )
+        assert result.loc["b", "a"] > 0.5
+
+    def test_identical_scores_returns_one(self):
+        """When all per-patient differences are zero, p-value is 1.0."""
+        scores = [0.8] * 20
+        df_a, df_b = self._make_dfs(20, scores, scores)
+        result = compute_pairwise_significance(
+            [df_a, df_b], names=["a", "b"]
+        )
+        assert result.loc["a", "b"] == pytest.approx(1.0)
+        assert result.loc["b", "a"] == pytest.approx(1.0)
+
+    def test_three_strategies(self):
+        """Three-strategy matrix has correct shape and NaN diagonal."""
+        n = 20
+        ids = [f"p{i}" for i in range(n)]
+        df_a = pd.DataFrame({"id": ids, "WT_dice": [0.9] * n})
+        df_b = pd.DataFrame({"id": ids, "WT_dice": [0.6] * n})
+        df_c = pd.DataFrame({"id": ids, "WT_dice": [0.3] * n})
+        result = compute_pairwise_significance(
+            [df_a, df_b, df_c], names=["a", "b", "c"]
+        )
+        assert result.shape == (3, 3)
+        assert all(np.isnan(result.loc[n, n]) for n in ["a", "b", "c"])
+
+    def test_default_names(self):
+        """Default names follow strategy_<index> when names is None."""
+        df_a, df_b = self._make_dfs(10, [0.9] * 10, [0.5] * 10)
+        result = compute_pairwise_significance([df_a, df_b])
+        assert list(result.index) == ["strategy_0", "strategy_1"]
+
+    def test_multiple_metrics(self):
+        """Significance test aggregates correctly across multiple metrics."""
+        n = 20
+        ids = [f"p{i}" for i in range(n)]
+        df_a = pd.DataFrame({
+            "id": ids, "WT_dice": [0.9] * n, "WT_haus95": [1.0] * n
+        })
+        df_b = pd.DataFrame({
+            "id": ids, "WT_dice": [0.5] * n, "WT_haus95": [5.0] * n
+        })
+        result = compute_pairwise_significance(
+            [df_a, df_b], names=["a", "b"]
+        )
+        # A wins on both metrics consistently.
+        assert result.loc["a", "b"] < 0.05
+
+    def test_index_name_is_strategy(self):
+        """The index of the output DataFrame is named 'strategy'."""
+        df_a, df_b = self._make_dfs(10, [0.9] * 10, [0.5] * 10)
+        result = compute_pairwise_significance(
+            [df_a, df_b], names=["a", "b"]
+        )
+        assert result.index.name == "strategy"
+
+    def test_fewer_than_two_raises(self):
+        """Fewer than two DataFrames raises ValueError."""
+        df_a = _df(ids=["p1"], WT_dice=[0.9])
+        with pytest.raises(ValueError, match="at least 2 DataFrames"):
+            compute_pairwise_significance([df_a])
+
+    def test_names_length_mismatch_raises(self):
+        """names length must equal len(results)."""
+        df_a, df_b = self._make_dfs(5, [0.9] * 5, [0.5] * 5)
+        with pytest.raises(ValueError, match="names has length"):
+            compute_pairwise_significance(
+                [df_a, df_b], names=["only_one"]
+            )
+
+    def test_duplicate_names_raises(self):
+        """Duplicate names raise ValueError."""
+        df_a, df_b = self._make_dfs(5, [0.9] * 5, [0.5] * 5)
+        with pytest.raises(ValueError, match="names must be unique"):
+            compute_pairwise_significance(
+                [df_a, df_b], names=["same", "same"]
+            )

@@ -792,6 +792,12 @@ The `mist_rank` command takes the following arguments:
   order. Defaults to the file stem of each results CSV.
 - `--output-detailed-csv` *(optional)*: Path for an additional per-metric
   breakdown CSV containing mean ranks per strategy per metric column.
+- `--significance-csv` *(optional)*: Path for a pairwise significance matrix
+  CSV. Entry `[A, B]` is the p-value for the one-sided Wilcoxon signed-rank
+  test that strategy A's per-patient mean rank is significantly lower (better)
+  than strategy B's. Diagonal entries are `NaN`. Lower p-values indicate
+  stronger evidence that A outperforms B. Computed from the same rank tensor
+  used for ranking — no extra evaluation required.
 - `--metric-direction-overrides` *(optional)*: Path to a JSON file mapping
   metric column name to `"higher"` or `"lower"`. Required only for columns
   whose suffix does not match a registered MIST metric.
@@ -810,7 +816,8 @@ Rank three model evaluations:
 mist_rank --results results_modelA.csv results_modelB.csv results_modelC.csv \
           --names modelA modelB modelC \
           --output-csv ranked_summary.csv \
-          --output-detailed-csv ranked_per_metric.csv
+          --output-detailed-csv ranked_per_metric.csv \
+          --significance-csv significance.csv
 ```
 
 ### Direction overrides example

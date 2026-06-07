@@ -15,13 +15,17 @@ Direction (whether higher or lower values are better) is auto-detected for
 any column whose suffix matches a metric registered in
 mist.metrics.metrics_registry. Columns from external metrics can be handled
 via a direction_overrides mapping.
+
+Pairwise statistical significance between strategies is available via
+compute_pairwise_significance, which runs Wilcoxon signed-rank tests on
+per-patient mean ranks derived from the same rank tensor used for ranking.
 """
 from collections.abc import Mapping
 from typing import Literal
 
 import numpy as np
 import pandas as pd
-from scipy.stats import rankdata
+from scipy.stats import rankdata, wilcoxon
 
 from mist.metrics.metrics_registry import METRIC_REGISTRY
 
@@ -96,6 +100,115 @@ def _direction_for_column(
     return "higher" if metric.best > metric.worst else "lower"
 
 
+def _build_rank_tensor(
+    results: list[pd.DataFrame],
+    names: list[str],
+    direction_overrides: Mapping[str, str] | None,
+    id_column: str,
+) -> tuple[list[pd.DataFrame], list[str], np.ndarray]:
+    """Validate inputs, align DataFrames, and build the rank tensor.
+
+    Encapsulates all validation and rank computation shared between
+    rank_results and compute_pairwise_significance.
+
+    Args:
+        results: List of result DataFrames (>= 2), already name-checked.
+        names: Unique strategy names, one per DataFrame.
+        direction_overrides: Optional column-direction mapping.
+        id_column: Name of the patient ID column.
+
+    Returns:
+        Tuple of (aligned, metric_columns, ranks) where:
+            aligned: DataFrames sorted by id and stripped of summary rows.
+            metric_columns: Ordered list of metric column names.
+            ranks: Array of shape (n_metrics, n_patients, n_strategies)
+                where ranks[m, p, s] is the rank of strategy s for metric m
+                on patient p (rank 1 = best).
+
+    Raises:
+        ValueError: On any validation failure (see rank_results docstring).
+    """
+    cleaned: list[pd.DataFrame] = []
+    for i, df in enumerate(results):
+        df = _strip_summary_rows(df, id_column)
+        if df[id_column].duplicated().any():
+            raise ValueError(
+                f"DataFrame at index {i} has duplicate patient IDs in "
+                f"column '{id_column}'."
+            )
+        if df.empty:
+            raise ValueError(
+                f"DataFrame at index {i} has no rows after removing summary "
+                "rows. Cannot rank empty results."
+            )
+        cleaned.append(df)
+
+    reference_cols = list(cleaned[0].columns)
+    for i, df in enumerate(cleaned[1:], start=1):
+        if list(df.columns) != reference_cols:
+            raise ValueError(
+                f"DataFrame at index {i} has different columns than "
+                "DataFrame at index 0. All result DataFrames must share "
+                "the same columns."
+            )
+
+    reference_ids = sorted(cleaned[0][id_column].astype(str).tolist())
+    for i, df in enumerate(cleaned[1:], start=1):
+        df_ids = sorted(df[id_column].astype(str).tolist())
+        if df_ids != reference_ids:
+            raise ValueError(
+                f"DataFrame at index {i} has different patient IDs than "
+                "DataFrame at index 0. All result DataFrames must share "
+                "the same patient set."
+            )
+
+    aligned = [
+        df.assign(_sort_key=df[id_column].astype(str))
+          .sort_values("_sort_key")
+          .drop(columns="_sort_key")
+          .reset_index(drop=True)
+        for df in cleaned
+    ]
+
+    metric_columns = [c for c in reference_cols if c != id_column]
+    if not metric_columns:
+        raise ValueError(
+            "No metric columns found in result DataFrames "
+            f"(all columns: {reference_cols})."
+        )
+
+    for i, df in enumerate(aligned):
+        for col in metric_columns:
+            if df[col].isna().any():
+                raise ValueError(
+                    f"DataFrame at index {i} has NaN values in column "
+                    f"'{col}'. Replace or drop NaN values before ranking."
+                )
+
+    directions = {
+        col: _direction_for_column(col, direction_overrides)
+        for col in metric_columns
+    }
+
+    n_strategies = len(aligned)
+    n_patients = len(aligned[0])
+    n_metrics = len(metric_columns)
+
+    ranks = np.empty((n_metrics, n_patients, n_strategies), dtype=float)
+    for m_idx, col in enumerate(metric_columns):
+        values = np.stack(
+            [df[col].to_numpy(dtype=float) for df in aligned], axis=1
+        )
+        if directions[col] == "higher":
+            values = -values
+        for p_idx in range(n_patients):
+            ranks[m_idx, p_idx, :] = rankdata(
+                values[p_idx, :], method="average"
+            )
+
+    return aligned, metric_columns, ranks
+
+
 def rank_results(
     results: list[pd.DataFrame],
     names: list[str] | None = None,
@@ -149,105 +262,97 @@ def rank_results(
     if len(set(names)) != len(names):
         raise ValueError(f"names must be unique, got {names}.")
 
-    # Strip summary rows and validate per-DataFrame.
-    cleaned: list[pd.DataFrame] = []
-    for i, df in enumerate(results):
-        df = _strip_summary_rows(df, id_column)
-        if df[id_column].duplicated().any():
-            raise ValueError(
-                f"DataFrame at index {i} has duplicate patient IDs in "
-                f"column '{id_column}'."
-            )
-        if df.empty:
-            raise ValueError(
-                f"DataFrame at index {i} has no rows after removing summary "
-                "rows. Cannot rank empty results."
-            )
-        cleaned.append(df)
+    _, metric_columns, ranks = _build_rank_tensor(
+        results, names, direction_overrides, id_column
+    )
 
-    # Validate columns are identical across all DataFrames.
-    reference_cols = list(cleaned[0].columns)
-    for i, df in enumerate(cleaned[1:], start=1):
-        if list(df.columns) != reference_cols:
-            raise ValueError(
-                f"DataFrame at index {i} has different columns than "
-                "DataFrame at index 0. All result DataFrames must share "
-                "the same columns."
-            )
-
-    # Validate patient IDs are identical across all DataFrames.
-    reference_ids = sorted(cleaned[0][id_column].astype(str).tolist())
-    for i, df in enumerate(cleaned[1:], start=1):
-        df_ids = sorted(df[id_column].astype(str).tolist())
-        if df_ids != reference_ids:
-            raise ValueError(
-                f"DataFrame at index {i} has different patient IDs than "
-                "DataFrame at index 0. All result DataFrames must share "
-                "the same patient set."
-            )
-
-    # Sort each DataFrame by id (as string) so rows align across strategies.
-    aligned = [
-        df.assign(_sort_key=df[id_column].astype(str))
-          .sort_values("_sort_key")
-          .drop(columns="_sort_key")
-          .reset_index(drop=True)
-        for df in cleaned
-    ]
-
-    metric_columns = [c for c in reference_cols if c != id_column]
-    if not metric_columns:
-        raise ValueError(
-            "No metric columns found in result DataFrames "
-            f"(all columns: {reference_cols})."
-        )
-
-    # Validate metric values are finite.
-    for i, df in enumerate(aligned):
-        for col in metric_columns:
-            if df[col].isna().any():
-                raise ValueError(
-                    f"DataFrame at index {i} has NaN values in column "
-                    f"'{col}'. Replace or drop NaN values before ranking."
-                )
-
-    # Resolve direction for each metric column.
-    directions = {
-        col: _direction_for_column(col, direction_overrides)
-        for col in metric_columns
-    }
-
-    n_strategies = len(aligned)
-    n_patients = len(aligned[0])
-    n_metrics = len(metric_columns)
-
-    # ranks[m, p, s] = rank of strategy s for metric m on patient p.
-    ranks = np.empty((n_metrics, n_patients, n_strategies), dtype=float)
-    for m_idx, col in enumerate(metric_columns):
-        # Stack values across strategies: shape (n_patients, n_strategies).
-        values = np.stack(
-            [df[col].to_numpy(dtype=float) for df in aligned], axis=1
-        )
-        # rankdata(method="average") ranks ascending (smallest -> 1).
-        # For "higher is better" metrics, negate so the largest -> 1.
-        if directions[col] == "higher":
-            values = -values
-        for p_idx in range(n_patients):
-            ranks[m_idx, p_idx, :] = rankdata(
-                values[p_idx, :], method="average"
-            )
-
-    # Summary: mean per strategy across all (metric, patient).
     avg_ranks = ranks.mean(axis=(0, 1))
     summary_df = pd.DataFrame({
         "strategy": names,
         "average_rank": avg_ranks,
     }).sort_values("average_rank", ignore_index=True)
 
-    # Detailed: mean per (strategy, metric) across patients.
     per_metric_means = ranks.mean(axis=1)  # (n_metrics, n_strategies)
     detailed_df = pd.DataFrame({"strategy": names})
     for m_idx, col in enumerate(metric_columns):
         detailed_df[col] = per_metric_means[m_idx, :]
 
     return summary_df, detailed_df
+
+
+def compute_pairwise_significance(
+    results: list[pd.DataFrame],
+    names: list[str] | None = None,
+    direction_overrides: Mapping[str, str] | None = None,
+    id_column: str = "id",
+) -> pd.DataFrame:
+    """Compute pairwise statistical significance between strategies.
+
+    For each ordered pair (A, B), runs a one-sided Wilcoxon signed-rank test
+    on per-patient mean ranks to determine whether strategy A's rankings are
+    significantly lower (better) than strategy B's.
+
+    The test operates on per-patient mean ranks derived from the same rank
+    tensor used by rank_results, so direction handling (higher/lower is
+    better per metric) is already encoded in the ranks.
+
+    Args:
+        results: List of result DataFrames (>= 2). Same requirements as
+            rank_results.
+        names: Optional friendly labels, one per DataFrame. Defaults to
+            "strategy_0", "strategy_1", ...
+        direction_overrides: Optional mapping of column name to "higher" or
+            "lower". Required for unregistered metric columns.
+        id_column: Name of the patient ID column. Defaults to "id".
+
+    Returns:
+        Square DataFrame of shape (n_strategies, n_strategies). Entry
+        [A, B] is the p-value for the one-sided test "strategy A's
+        per-patient mean rank is significantly lower (better) than strategy
+        B's". Diagonal entries are NaN. Lower p-values indicate stronger
+        evidence that A outperforms B.
+
+    Raises:
+        ValueError: Same conditions as rank_results.
+    """
+    if len(results) < 2:
+        raise ValueError(
+            "compute_pairwise_significance requires at least 2 DataFrames, "
+            f"got {len(results)}."
+        )
+
+    if names is None:
+        names = [f"strategy_{i}" for i in range(len(results))]
+    elif len(names) != len(results):
+        raise ValueError(
+            f"names has length {len(names)} but results has length "
+            f"{len(results)}."
+        )
+    if len(set(names)) != len(names):
+        raise ValueError(f"names must be unique, got {names}.")
+
+    _, _, ranks = _build_rank_tensor(
+        results, names, direction_overrides, id_column
+    )
+
+    # Per-patient mean rank across all metrics: shape (n_patients, n_strategies).
+    per_patient_mean_ranks = ranks.mean(axis=0)
+
+    matrix = pd.DataFrame(
+        np.nan, index=names, columns=names, dtype=float
+    )
+    for i, name_i in enumerate(names):
+        for j, name_j in enumerate(names):
+            if i == j:
+                continue
+            a = per_patient_mean_ranks[:, i]
+            b = per_patient_mean_ranks[:, j]
+            diff = a - b
+            if np.all(diff == 0):
+                p_value = 1.0
+            else:
+                _, p_value = wilcoxon(a, b, alternative="less")
+            matrix.loc[name_i, name_j] = p_value
+
+    matrix.index.name = "strategy"
+    return matrix

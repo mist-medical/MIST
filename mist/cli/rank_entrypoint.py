@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 
 from mist.cli.args import ArgParser
-from mist.evaluation.ranking import rank_results
+from mist.evaluation.ranking import rank_results, compute_pairwise_significance
 from mist.utils import io
 
 
@@ -60,6 +60,15 @@ def _parse_rank_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.arg(
         "--id-column", type=str, default="id",
         help="Name of the column identifying each patient.",
+    )
+    parser.arg(
+        "--significance-csv", type=str, default=None,
+        help=(
+            "Optional path for a pairwise significance matrix CSV. Entry "
+            "[A, B] is the p-value for the one-sided Wilcoxon signed-rank "
+            "test that strategy A's per-patient mean rank is significantly "
+            "lower (better) than strategy B's. Diagonal entries are NaN."
+        ),
     )
 
     ns = parser.parse_args(argv)
@@ -118,6 +127,17 @@ def run_rank(ns: argparse.Namespace) -> None:
         detailed_csv = Path(ns.output_detailed_csv).expanduser().resolve()
         _ensure_output_dir(detailed_csv)
         detailed_df.to_csv(detailed_csv, index=False)
+
+    if ns.significance_csv is not None:
+        significance_df = compute_pairwise_significance(
+            results=results,
+            names=names,
+            direction_overrides=direction_overrides,
+            id_column=ns.id_column,
+        )
+        sig_csv = Path(ns.significance_csv).expanduser().resolve()
+        _ensure_output_dir(sig_csv)
+        significance_df.to_csv(sig_csv)
 
 
 def rank_entry(argv: list[str] | None = None) -> None:
