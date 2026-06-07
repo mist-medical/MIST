@@ -403,6 +403,44 @@ mist_predict --models-dir /path/to/models \
              --postprocess-strategy /path/to/postprocess.json
 ```
 
+## Ensembling predictions from multiple models
+
+`mist_ensemble` combines discrete NIfTI predictions from two or more separately
+trained MIST models into a single consensus segmentation. This is useful when
+you have trained models with different loss functions, architectures, or random
+seeds and want to combine them without re-running inference.
+
+!!! note
+    `mist_ensemble` operates on label maps (post-argmax NIfTI files), not on
+    softmax outputs. Each input directory should contain one `.nii.gz` file per
+    patient. All directories must contain the same set of patient files.
+
+The `mist_ensemble` command uses the following arguments:
+
+- `--predictions`: (**required**) Two or more directories containing NIfTI
+  predictions, one file per patient named `<patient_id>.nii.gz`.
+- `--output`: (**required**) Directory where consensus predictions will be written.
+- `--ensemble-backend`: Algorithm used to combine label maps. *(default: `staple`)*
+
+### Ensemble backends
+
+| Backend | Description |
+|---|---|
+| `staple` | STAPLE (Simultaneous Truth and Performance Level Estimation) — estimates each model's per-label sensitivity and specificity via EM to produce a principled consensus. Works for binary and multi-class label maps. |
+| `majority_vote` | Assigns each voxel the label that appears most frequently across all inputs. Faster and simpler than STAPLE; useful as a sanity-check baseline. Ties are broken by assigning label 0 (background). |
+
+### Example
+
+Combine predictions from three models trained with different loss functions.
+
+```console
+mist_ensemble --predictions /path/to/pred_dice \
+                            /path/to/pred_ce \
+                            /path/to/pred_hdos \
+              --output /path/to/ensemble_output \
+              --ensemble-backend staple
+```
+
 ## Postprocessing
 
 MIST includes a flexible postprocessing utility that allows users to apply
