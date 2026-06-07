@@ -853,7 +853,7 @@ class BaseTrainer(ABC):
             # Run the validation steps for this epoch. Rank 0 shows a progress
             # bar and tracks best loss; other ranks run silently.
             state["model"].eval()
-            with torch.no_grad():
+            with torch.inference_mode():
                 pbv_ctx = (
                     progress_bar.ValidationProgressBar(val_steps)
                     if rank == 0

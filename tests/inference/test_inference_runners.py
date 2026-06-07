@@ -51,6 +51,7 @@ def mock_mist_config():
         },
         "training": {
             "seed": 42,
+            "batch_size_per_gpu": 2,
             "hardware": {"num_gpus": 2, "num_cpu_workers": 8},
         },
         "inference": {
@@ -801,25 +802,50 @@ def test_build_predictor_use_amp_false_when_amp_missing(
     assert observed.get("use_amp") is False
 
 
+def test_build_predictor_sw_batch_size_is_2x_batch_size_per_gpu(
+    mock_mist_config, monkeypatch
+):
+    """_build_predictor passes sw_batch_size = 2 * batch_size_per_gpu."""
+    cfg = copy.deepcopy(mock_mist_config)
+    cfg["training"]["batch_size_per_gpu"] = 3
+
+    captured_inferer_kwargs = {}
+
+    def _capture_inferer(**kwargs):
+        captured_inferer_kwargs.update(kwargs)
+        return MagicMock()
+
+    monkeypatch.setattr(ir, "Predictor", MagicMock(return_value=MagicMock()))
+    monkeypatch.setattr(ir, "get_inferer", MagicMock(return_value=_capture_inferer))
+    monkeypatch.setattr(ir, "get_ensembler", MagicMock(return_value=MagicMock()))
+    monkeypatch.setattr(ir, "get_strategy", MagicMock(return_value=lambda: []))
+
+    ir._build_predictor(cfg, models=[], device="cpu")
+
+    assert captured_inferer_kwargs.get("sw_batch_size") == 6
+
+
 # ==================================
 # infer_from_dataframe no_grad test
 # ==================================
 
-def test_infer_from_dataframe_runs_under_no_grad(
+def test_infer_from_dataframe_runs_under_inference_mode(
     infer_runner, mock_mist_config, monkeypatch
 ):
-    """infer_from_dataframe wraps inference in torch.no_grad()."""
-    no_grad_entered = []
+    """infer_from_dataframe wraps inference in torch.inference_mode()."""
+    inference_mode_entered = []
 
-    original_no_grad = torch.no_grad
+    original_inference_mode = torch.inference_mode
 
-    class _TrackingNoGrad(original_no_grad):
+    class _TrackingInferenceMode(original_inference_mode):
         def __enter__(self):
-            no_grad_entered.append(True)
+            inference_mode_entered.append(True)
             return super().__enter__()
 
-    monkeypatch.setattr(torch, "no_grad", _TrackingNoGrad)
+    monkeypatch.setattr(torch, "inference_mode", _TrackingInferenceMode)
 
     infer_runner.run(cfg=copy.deepcopy(mock_mist_config))
 
-    assert no_grad_entered, "torch.no_grad() should be entered during infer_from_dataframe"
+    assert inference_mode_entered, (
+        "torch.inference_mode() should be entered during infer_from_dataframe"
+    )

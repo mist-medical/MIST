@@ -14,9 +14,6 @@ class InferenceConstants:
     # Batch axis for the model output.
     BATCH_AXIS: int = 0
 
-    # Batch size for sliding window inference.
-    SLIDING_WINDOW_BATCH_SIZE: int = 1
-
     # Ignored columns in the patient data CSV file.
     PATIENT_DF_IGNORED_COLUMNS: frozenset[str] = frozenset(
         {"id", "fold", "mask"}

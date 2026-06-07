@@ -62,6 +62,9 @@ def _build_predictor(
 
     inferer_params["patch_size"] = mist_configuration["spatial_config"]["patch_size"]
     inferer_params["device"] = device
+    inferer_params["sw_batch_size"] = (
+        2 * mist_configuration["training"]["batch_size_per_gpu"]
+    )
     inferer = get_inferer(inferer_name)(**inferer_params)
     ensembler = get_ensembler(ensembler_strategy)
     tta_transforms = get_strategy(tta_strategy if tta_enabled else "none")()
@@ -225,7 +228,7 @@ def test_on_fold(
 
     # Begin inference loop.
     with (
-        torch.no_grad(),
+        torch.inference_mode(),
         progress_bar.get_progress_bar(f'Testing on fold {fold_number}') as pb
     ):
         for image_index in pb.track(range(len(test_df))):
@@ -360,7 +363,7 @@ def infer_from_dataframe(
     error_messages = []
 
     # Start inference loop.
-    with torch.no_grad(), progress_bar.get_progress_bar("Running inference") as pb:
+    with torch.inference_mode(), progress_bar.get_progress_bar("Running inference") as pb:
         for patient_index in pb.track(range(len(paths_dataframe))):
             patient = paths_dataframe.iloc[patient_index].to_dict()
             patient_id = patient["id"]

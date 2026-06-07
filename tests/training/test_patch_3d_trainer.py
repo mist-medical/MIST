@@ -404,7 +404,8 @@ def test_validation_step_calls_sliding_window_and_validation_loss(
         t.config["inference"]["inferer"]["params"]["patch_overlap"]
     )
     assert kwargs["overlap"] == pytest.approx(expected_overlap)
-    assert kwargs["sw_batch_size"] == 1
+    expected_sw_batch_size = 2 * t.config["training"]["batch_size_per_gpu"]
+    assert kwargs["sw_batch_size"] == expected_sw_batch_size
     assert kwargs["predictor"] is model
     assert kwargs["device"] == batch["image"].device
 

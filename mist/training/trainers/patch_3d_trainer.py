@@ -178,6 +178,7 @@ class Patch3DTrainer(BaseTrainer):
         label = batch["label"]
 
         # Perform sliding window inference for validation.
+        sw_batch_size = 2 * self.config["training"]["batch_size_per_gpu"]
         amp_context = (
             torch.autocast(device_type="cuda", dtype=torch.bfloat16)
             if self.config["training"]["amp"]
@@ -188,7 +189,7 @@ class Patch3DTrainer(BaseTrainer):
                 inputs=image,
                 roi_size=patch_size,
                 overlap=overlap,
-                sw_batch_size=1,
+                sw_batch_size=sw_batch_size,
                 predictor=model,
                 device=image.device,
             )

@@ -26,8 +26,10 @@ class DummyInferer(AbstractInferer):
 
 def test_dummy_inferer_call_and_repr():
     """Test __call__, __eq__, and __repr__ for AbstractInferer."""
+    def model(x):
+        return x + 1
+
     image = torch.rand(1, 1, 8, 8, 8)
-    model = lambda x: x + 1
     dummy = DummyInferer()
     result = dummy(image, model)
     assert torch.allclose(result, image + 1)
@@ -65,9 +67,24 @@ def test_sliding_window_inferer_basic(mock_sw_inference):
     mock_sw_inference.assert_called_once()
 
 
+@patch(
+    "mist.inference.inferers.sliding_window.monai.inferers.sliding_window_inference"
+)
+def test_sliding_window_inferer_sw_batch_size_passed_to_monai(mock_sw_inference):
+    """sw_batch_size is forwarded to MONAI's sliding_window_inference."""
+    image = torch.rand(1, 1, 32, 32, 32)
+    mock_sw_inference.return_value = image
+
+    inferer = SlidingWindowInferer(patch_size=(16, 16, 16), sw_batch_size=4)
+    inferer(image, MagicMock(return_value=image))
+
+    assert mock_sw_inference.call_args.kwargs["sw_batch_size"] == 4
+
+
 @pytest.mark.parametrize("kwargs,match", [
     ({"patch_size": (16, 16)}, "patch_size must be a tuple of length 3"),
     ({"patch_size": (16, -1, 16)}, "must be positive integers"),
+    ({"patch_size": (16, 16, 16), "sw_batch_size": 0}, "sw_batch_size must be a positive integer"),
     ({"patch_size": (16, 16, 16), "patch_overlap": 1.5}, "patch_overlap must be in the range"),
     ({"patch_size": (16, 16, 16), "patch_blend_mode": "linear"}, "Unsupported blend mode"),
 ])
