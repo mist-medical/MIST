@@ -198,7 +198,7 @@ def add_train_args(parser: ArgParser) -> None:
         help="Batch size per GPU/CPU worker.",
     )
     g.add_argument(
-        "--learning-rate", type=positive_float, default=0.001,
+        "--learning-rate", type=positive_float, default=None,
         help="Learning rate.",
     )
     g.add_argument(
@@ -210,7 +210,7 @@ def add_train_args(parser: ArgParser) -> None:
     g.add_argument(
         "--warmup-epochs",
         type=non_negative_int,
-        default=20,
+        default=None,
         help="Number of linear warmup epochs before the main LR schedule.",
     )
     g.add_argument(
