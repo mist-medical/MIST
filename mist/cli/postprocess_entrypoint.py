@@ -183,7 +183,9 @@ def run_postprocess(ns: argparse.Namespace) -> None:
     _validate_eval_args(ns)
     base_dir, output_dir, predictions_dir, strategy_path = _prepare_io(ns)
 
-    shutil.copy(strategy_path, output_dir / "strategy.json")
+    dst = output_dir / "strategy.json"
+    if strategy_path.resolve() != dst.resolve():
+        shutil.copy(strategy_path, dst)
 
     postprocessor = Postprocessor(strategy_path=str(strategy_path))
     postprocessor.run(
