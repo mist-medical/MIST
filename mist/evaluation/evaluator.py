@@ -65,9 +65,7 @@ class Evaluator:
         self.filepaths_dataframe = df.set_index("id")
 
         # 3. Validate and store the evaluation configuration.
-        self.evaluation_config = self._validate_evaluation_config(
-            evaluation_config
-        )
+        self.evaluation_config = self._validate_evaluation_config(evaluation_config)
         self.output_csv_path = Path(output_csv_path)
 
         # 4. Initialize the results DataFrame structure using the validated
@@ -82,13 +80,11 @@ class Evaluator:
 
     @staticmethod
     def _validate_filepaths_dataframe(
-        filepaths_dataframe: pd.DataFrame
+        filepaths_dataframe: pd.DataFrame,
     ) -> pd.DataFrame:
         """Check if the filepaths DataFrame has the required columns."""
         required_columns = ["id", "mask", "prediction"]
-        if not all(
-            col in filepaths_dataframe.columns for col in required_columns
-        ):
+        if not all(col in filepaths_dataframe.columns for col in required_columns):
             raise ValueError(
                 f"DataFrame must contain columns: {', '.join(required_columns)}"
             )
@@ -96,7 +92,7 @@ class Evaluator:
 
     @staticmethod
     def _validate_evaluation_config(
-        evaluation_config: dict[str, Any]
+        evaluation_config: dict[str, Any],
     ) -> dict[str, Any]:
         """Validate the evaluation configuration dictionary.
 
@@ -122,8 +118,7 @@ class Evaluator:
             class_labels = class_info["labels"]
             if not isinstance(class_labels, list) or not class_labels:
                 raise ValueError(
-                    f"Class '{class_name}' must have a non-empty list of class "
-                    "labels."
+                    f"Class '{class_name}' must have a non-empty list of class labels."
                 )
             if any(label <= 0 for label in class_labels):
                 raise ValueError(
@@ -131,9 +126,7 @@ class Evaluator:
                 )
 
             if not isinstance(class_info["metrics"], dict):
-                raise ValueError(
-                    f"Metrics for '{class_name}' must be a dictionary."
-                )
+                raise ValueError(f"Metrics for '{class_name}' must be a dictionary.")
 
         return evaluation_config
 
@@ -151,7 +144,7 @@ class Evaluator:
         num_mask_voxels: int,
         num_prediction_voxels: int,
         best_case_value: float,
-        worst_case_value: float
+        worst_case_value: float,
     ) -> float | None:
         """Return best/worst case values for empty masks."""
         if num_mask_voxels == 0 and num_prediction_voxels == 0:
@@ -161,8 +154,7 @@ class Evaluator:
         return None
 
     def _load_patient_data(
-        self,
-        patient_id: str
+        self, patient_id: str
     ) -> dict[str, ants.core.ants_image.ANTsImage]:
         """Load the ground truth and prediction paths for a given patient ID."""
         try:
@@ -175,35 +167,33 @@ class Evaluator:
 
         row_data = row.to_dict()
 
-        if not Path(row_data['mask']).exists():
+        if not Path(row_data["mask"]).exists():
             raise FileNotFoundError(f"Mask not found: {row_data['mask']}")
-        if not Path(row_data['prediction']).exists():
-            raise FileNotFoundError(
-                f"Prediction not found: {row_data['prediction']}")
+        if not Path(row_data["prediction"]).exists():
+            raise FileNotFoundError(f"Prediction not found: {row_data['prediction']}")
 
         # Optional validation: checks 3D shape, integer dtype, and valid labels.
         # Adds I/O overhead (extra image read) but catches bad data early.
         if self.validate_masks:
             mask_error = evaluation_utils.validate_mask(
-                row_data['mask'],
+                row_data["mask"],
                 self.evaluation_config,
                 mask_type="ground truth mask",
             )
             pred_error = evaluation_utils.validate_mask(
-                row_data['prediction'],
+                row_data["prediction"],
                 self.evaluation_config,
                 mask_type="prediction",
             )
             errors = [e for e in (mask_error, pred_error) if e]
             if errors:
                 raise ValueError(
-                    f"Mask validation failed for {patient_id}: "
-                    + " | ".join(errors)
+                    f"Mask validation failed for {patient_id}: " + " | ".join(errors)
                 )
 
         # Validate headers before loading heavy image data.
-        mask_header = ants.image_header_info(row_data['mask'])
-        pred_header = ants.image_header_info(row_data['prediction'])
+        mask_header = ants.image_header_info(row_data["mask"])
+        pred_header = ants.image_header_info(row_data["prediction"])
 
         if not analyzer_utils.compare_headers(mask_header, pred_header):
             raise ValueError(
@@ -212,8 +202,8 @@ class Evaluator:
             )
 
         return {
-            "mask": ants.image_read(row_data['mask']),
-            "prediction": ants.image_read(row_data['prediction'])
+            "mask": ants.image_read(row_data["mask"]),
+            "prediction": ants.image_read(row_data["prediction"]),
         }
 
     def _compute_metrics(
@@ -223,7 +213,7 @@ class Evaluator:
         prediction: np.ndarray,
         spacing: tuple[float, ...],
         class_metrics_config: dict[str, dict[str, Any]],
-        diagonal_distance_override: float | None = None
+        diagonal_distance_override: float | None = None,
     ) -> tuple[dict[str, float], str | None]:
         """Compute metrics for a binary mask pair."""
         result = {}
@@ -235,17 +225,14 @@ class Evaluator:
         if diagonal_distance_override is not None:
             diagonal_distance_mm = diagonal_distance_override
         else:
-            diagonal_distance_mm = self._compute_diagonal_distance(
-                mask.shape, spacing
-            )
+            diagonal_distance_mm = self._compute_diagonal_distance(mask.shape, spacing)
 
         for metric_name, metric_kwargs in class_metrics_config.items():
             metric = get_metric(metric_name)
 
             # Determine worst-case value for this metric (e.g. inf or diagonal).
             worst = (
-                diagonal_distance_mm if metric.worst == float("inf")
-                else metric.worst
+                diagonal_distance_mm if metric.worst == float("inf") else metric.worst
             )
 
             # Check for edge cases (empty masks).
@@ -259,9 +246,7 @@ class Evaluator:
                 try:
                     # Unpack the specific kwargs mapped to this metric from the
                     # config.
-                    val = metric(
-                        mask, prediction, spacing, **metric_kwargs
-                    )
+                    val = metric(mask, prediction, spacing, **metric_kwargs)
 
                     # Sanity check for NaNs or Infs.
                     if np.isnan(val) or np.isinf(val):
@@ -292,9 +277,7 @@ class Evaluator:
         results: dict[str, str | float] = {"id": patient_id}
         patient_errors = []
 
-        full_diagonal_distance = self._compute_diagonal_distance(
-            mask.shape, spacing
-        )
+        full_diagonal_distance = self._compute_diagonal_distance(mask.shape, spacing)
 
         for class_name, class_info in self.evaluation_config.items():
             class_labels = class_info["labels"]
@@ -307,10 +290,8 @@ class Evaluator:
                 binary_sub_mask = np.isin(mask, class_labels)
                 binary_sub_prediction = np.isin(prediction, class_labels)
 
-            binary_sub_mask, binary_sub_prediction = (
-                evaluation_utils.crop_to_union(
-                    binary_sub_mask, binary_sub_prediction
-                )
+            binary_sub_mask, binary_sub_prediction = evaluation_utils.crop_to_union(
+                binary_sub_mask, binary_sub_prediction
             )
 
             class_metrics, class_errs = self._compute_metrics(
@@ -329,13 +310,10 @@ class Evaluator:
             if class_errs:
                 patient_errors.append(f"[{class_name}] {class_errs}")
 
-        return (
-            results, "\n".join(patient_errors) if patient_errors else None
-        )
+        return (results, "\n".join(patient_errors) if patient_errors else None)
 
     def _evaluate_patient_pipeline(
-        self,
-        patient_id: str
+        self, patient_id: str
     ) -> tuple[dict | None, str | None]:
         """Complete evaluation for a single patient to be run in parallel."""
         patient_data = None
@@ -388,10 +366,9 @@ class Evaluator:
         patient_ids = self.filepaths_dataframe.index.tolist()
 
         # Execute in parallel
-        with (
-            concurrent.futures.ProcessPoolExecutor(max_workers=max_workers)
-            as executor
-        ):
+        with concurrent.futures.ProcessPoolExecutor(
+            max_workers=max_workers
+        ) as executor:
             # Submit all patient tasks to the executor.
             future_to_patient = {
                 executor.submit(self._evaluate_patient_pipeline, pid): pid
@@ -402,7 +379,7 @@ class Evaluator:
                 # Track them as they complete (order doesn't matter).
                 for future in pb.track(
                     concurrent.futures.as_completed(future_to_patient),
-                    total=len(patient_ids)
+                    total=len(patient_ids),
                 ):
                     result, patient_errors = future.result()
 
@@ -418,8 +395,7 @@ class Evaluator:
         # Create DataFrame.
         if results_list:
             self.results_dataframe = pd.DataFrame(
-                results_list,
-                columns=self.results_dataframe.columns
+                results_list, columns=self.results_dataframe.columns
             )
 
         # Compute summary stats (Mean, Std, etc.).

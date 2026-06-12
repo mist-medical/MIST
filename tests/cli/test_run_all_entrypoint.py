@@ -1,4 +1,5 @@
 """Tests for mist_run_all CLI entrypoint."""
+
 import argparse
 from pathlib import Path
 import pytest
@@ -15,6 +16,7 @@ import mist.cli.run_all_entrypoint as entry
 
 def _patch_minimal_cli(monkeypatch) -> None:
     """Patch argmod.* to a minimal CLI for deterministic parsing."""
+
     def _mk_parser(**kwargs):
         return argparse.ArgumentParser(**kwargs)
 
@@ -55,44 +57,47 @@ def _patch_minimal_cli(monkeypatch) -> None:
     monkeypatch.setattr(
         entry.argmod, "add_preprocess_args", _add_preprocess_args, raising=True
     )
-    monkeypatch.setattr(
-        entry.argmod, "add_train_args", _add_train_args, raising=True
-    )
+    monkeypatch.setattr(entry.argmod, "add_train_args", _add_train_args, raising=True)
 
 
 # =============================================================================
 # Tests for _ns_to_argv.
 # =============================================================================
 
+
 def test_ns_to_argv_includes_scalars_bools_lists_and_converts_dashes():
     """Converts scalars, True flags, lists/tuples and underscores -> dashes."""
     ns = argparse.Namespace(
         data="ds.json",
         nfolds=5,
-        overwrite=True,             # Boolean True included.
-        patch_size=(32, 32, 32),    # Tuple flattened.
+        overwrite=True,  # Boolean True included.
+        patch_size=(32, 32, 32),  # Tuple flattened.
         model="mednext",
     )
-    keys = [
-        "data", "nfolds", "overwrite", "patch_size", "model"
-    ]
+    keys = ["data", "nfolds", "overwrite", "patch_size", "model"]
     out = entry._ns_to_argv(ns, keys)
     assert out == [
-        "--data", "ds.json",
-        "--nfolds", "5",
+        "--data",
+        "ds.json",
+        "--nfolds",
+        "5",
         "--overwrite",
-        "--patch-size", "32", "32", "32",
-        "--model", "mednext",
+        "--patch-size",
+        "32",
+        "32",
+        "32",
+        "--model",
+        "mednext",
     ]
 
 
 def test_ns_to_argv_skips_missing_none_false_and_empty_list():
     """Skip missing attributes, None values, False booleans, and empty lists."""
     ns = argparse.Namespace(
-        data=None,              # Skipped.
-        overwrite=False,        # Skipped.
-        folds=[],               # Skipped.
-        results="out",          # Included.
+        data=None,  # Skipped.
+        overwrite=False,  # Skipped.
+        folds=[],  # Skipped.
+        results="out",  # Included.
     )
     keys = ["data", "overwrite", "folds", "results", "not_present"]
     out = entry._ns_to_argv(ns, keys)
@@ -102,6 +107,7 @@ def test_ns_to_argv_skips_missing_none_false_and_empty_list():
 # =============================================================================
 # Tests for _parse_run_all_args.
 # =============================================================================
+
 
 def test_parse_run_all_args_requires_data(monkeypatch):
     """It raises SystemExit when --data is missing."""
@@ -126,13 +132,19 @@ def test_parse_run_all_args_explicit_values(monkeypatch, tmp_path):
     npy = tmp_path / "n"
     ns = entry._parse_run_all_args(
         argv=[
-            "--data", "d.json",
-            "--results", str(res),
-            "--numpy", str(npy),
-            "--nfolds", "3",
+            "--data",
+            "d.json",
+            "--results",
+            str(res),
+            "--numpy",
+            str(npy),
+            "--nfolds",
+            "3",
             "--overwrite",
-            "--epochs", "10",
-            "--batch-size-per-gpu", "2",
+            "--epochs",
+            "10",
+            "--batch-size-per-gpu",
+            "2",
         ]
     )
     assert ns.data == "d.json"
@@ -147,6 +159,7 @@ def test_parse_run_all_args_explicit_values(monkeypatch, tmp_path):
 # =============================================================================
 # Tests for run_all_entry.
 # =============================================================================
+
 
 def test_run_all_entry_forwards_subsets_correctly(monkeypatch, tmp_path):
     """It forwards correct subsets to analyze, preprocess, and train."""
@@ -170,42 +183,79 @@ def test_run_all_entry_forwards_subsets_correctly(monkeypatch, tmp_path):
 
     argv = [
         # Analyzer.
-        "--data", "d.json",
-        "--results", str(tmp_path / "out"),
-        "--nfolds", "4",
+        "--data",
+        "d.json",
+        "--results",
+        str(tmp_path / "out"),
+        "--nfolds",
+        "4",
         "--overwrite",
         # Preprocess.
-        "--numpy", str(tmp_path / "np"),
+        "--numpy",
+        str(tmp_path / "np"),
         "--no-preprocess",
         "--compute-dtms",
         # Train.
-        "--model", "mednext",
-        "--patch-size", "48", "64", "32",
-        "--loss", "dice",
-        "--epochs", "20",
-        "--batch-size-per-gpu", "2",
-        "--learning-rate", "0.001",
-        "--lr-scheduler", "cos",
-        "--optimizer", "adam",
-        "--l2-penalty", "0.0005",
-        "--folds", "0", "2",
-        "--overwrite",     # Appears multiple times; conflict_handler=resolve.
+        "--model",
+        "mednext",
+        "--patch-size",
+        "48",
+        "64",
+        "32",
+        "--loss",
+        "dice",
+        "--epochs",
+        "20",
+        "--batch-size-per-gpu",
+        "2",
+        "--learning-rate",
+        "0.001",
+        "--lr-scheduler",
+        "cos",
+        "--optimizer",
+        "adam",
+        "--l2-penalty",
+        "0.0005",
+        "--folds",
+        "0",
+        "2",
+        "--overwrite",  # Appears multiple times; conflict_handler=resolve.
     ]
 
     # Build expected subsets from the parsed Namespace.
     ns = entry._parse_run_all_args(argv=argv)
-    analyzer_keys = ["data", "results", "nfolds", "num_workers_analyze", "verify", "data_dump", "overwrite"]
+    analyzer_keys = [
+        "data",
+        "results",
+        "nfolds",
+        "num_workers_analyze",
+        "verify",
+        "data_dump",
+        "overwrite",
+    ]
     preprocess_keys = [
-        "results", "numpy", "num_workers_preprocess",
-        "no_preprocess", "compute_dtms", "overwrite"
+        "results",
+        "numpy",
+        "num_workers_preprocess",
+        "no_preprocess",
+        "compute_dtms",
+        "overwrite",
     ]
     train_keys = [
-        "results", "numpy",
-        "model", "patch_size",
-        "loss", "composite_loss_weighting",
-        "epochs", "batch_size_per_gpu", "learning_rate",
-        "lr_scheduler", "optimizer", "l2_penalty",
-        "folds", "overwrite",
+        "results",
+        "numpy",
+        "model",
+        "patch_size",
+        "loss",
+        "composite_loss_weighting",
+        "epochs",
+        "batch_size_per_gpu",
+        "learning_rate",
+        "lr_scheduler",
+        "optimizer",
+        "l2_penalty",
+        "folds",
+        "overwrite",
     ]
     expected_an = entry._ns_to_argv(ns, analyzer_keys)
     expected_pre = entry._ns_to_argv(ns, preprocess_keys)
@@ -252,16 +302,28 @@ def test_run_all_entry_handles_false_flags_and_empty_lists(monkeypatch):
 
     analyze_keys = ["data", "results", "nfolds", "num_workers_analyze", "overwrite"]
     preprocess_keys = [
-        "results", "numpy", "num_workers_preprocess",
-        "no_preprocess", "compute_dtms", "overwrite"
+        "results",
+        "numpy",
+        "num_workers_preprocess",
+        "no_preprocess",
+        "compute_dtms",
+        "overwrite",
     ]
     train_keys = [
-        "results", "numpy",
-        "model", "patch_size",
-        "loss", "composite_loss_weighting",
-        "epochs", "batch_size_per_gpu", "learning_rate",
-        "lr_scheduler", "optimizer", "l2_penalty",
-        "folds", "overwrite",
+        "results",
+        "numpy",
+        "model",
+        "patch_size",
+        "loss",
+        "composite_loss_weighting",
+        "epochs",
+        "batch_size_per_gpu",
+        "learning_rate",
+        "lr_scheduler",
+        "optimizer",
+        "l2_penalty",
+        "folds",
+        "overwrite",
     ]
 
     expected_an = entry._ns_to_argv(ns, analyze_keys)
@@ -269,9 +331,7 @@ def test_run_all_entry_handles_false_flags_and_empty_lists(monkeypatch):
     expected_tr = entry._ns_to_argv(ns, train_keys)
 
     # Run orchestrator with minimal args (false/empty are omitted naturally).
-    entry.run_all_entry(
-        argv=["--data", "d.json", "--results", "r", "--numpy", "n"]
-    )
+    entry.run_all_entry(argv=["--data", "d.json", "--results", "r", "--numpy", "n"])
 
     assert calls["analyze"] == expected_an
     assert calls["preprocess"] == expected_pre
@@ -284,7 +344,9 @@ def test_run_all_entry_forwards_num_workers_analyze(monkeypatch):
 
     calls = {"analyze": None}
     monkeypatch.setattr(
-        entry, "analyze_entry", lambda a: calls.__setitem__("analyze", list(a)),
+        entry,
+        "analyze_entry",
+        lambda a: calls.__setitem__("analyze", list(a)),
         raising=True,
     )
     monkeypatch.setattr(entry, "preprocess_entry", lambda _: None, raising=True)

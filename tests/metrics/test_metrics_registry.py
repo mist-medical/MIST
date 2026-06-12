@@ -1,4 +1,5 @@
 """Unit tests for metrics_registry module in MIST."""
+
 import numpy as np
 import pytest
 
@@ -28,6 +29,7 @@ def synthetic_masks():
 def test_metric_subclass_missing_required_attr_raises():
     """Subclass missing name, best, or worst raises TypeError at definition."""
     with pytest.raises(TypeError, match="must define class attribute 'name'"):
+
         class BadMetric(Metric):  # pylint: disable=unused-variable
             best = 1.0
             worst = 0.0
@@ -39,8 +41,13 @@ def test_metric_subclass_missing_required_attr_raises():
 def test_registry_contains_all_metrics():
     """Should register all metric classes by name."""
     expected_names = {
-        "dice", "haus95", "surf_dice", "avg_surf",
-        "lesion_wise_dice", "lesion_wise_haus95", "lesion_wise_surf_dice",
+        "dice",
+        "haus95",
+        "surf_dice",
+        "avg_surf",
+        "lesion_wise_dice",
+        "lesion_wise_haus95",
+        "lesion_wise_surf_dice",
     }
     assert expected_names.issubset(set(METRIC_REGISTRY.keys()))
 
@@ -105,6 +112,7 @@ def test_average_surface_distance_metric(synthetic_masks):
 # Lesion-wise metrics: kwargs forwarding
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def lesion_masks():
     """Two well-separated 3D lesions with perfect overlap."""
@@ -163,7 +171,9 @@ def test_lesion_wise_dice_min_volume_kwarg_forwarded(lesion_masks):
     metric = get_metric("lesion_wise_dice")
     # All GT lesions filtered AND prediction is empty → denominator=0 → best case.
     empty_pred = np.zeros_like(pred)
-    result = metric(gt, empty_pred, spacing, min_lesion_volume=10000.0, dilation_iters=1)
+    result = metric(
+        gt, empty_pred, spacing, min_lesion_volume=10000.0, dilation_iters=1
+    )
     assert result == metric.best
 
 
@@ -184,8 +194,11 @@ def test_lesion_wise_haus95_fp_penalized(lesion_masks):
     pred_with_fp[8:11, 8:11, 8:11] = True
     metric = get_metric("lesion_wise_haus95")
     result = metric(
-        gt, pred_with_fp, spacing,
-        min_lesion_volume=0.0, dilation_iters=1,
+        gt,
+        pred_with_fp,
+        spacing,
+        min_lesion_volume=0.0,
+        dilation_iters=1,
     )
     assert result > 0.0
 

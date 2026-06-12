@@ -1,4 +1,5 @@
 """Tests for MIST TTA transforms and strategies."""
+
 import torch
 import pytest
 
@@ -46,16 +47,19 @@ def test_transform_hash_and_eq():
 
 
 # Parameterized tests for TTA flips.
-@pytest.mark.parametrize("name, dims", [
-    ("identity", []),
-    ("flip_x", [2]),
-    ("flip_y", [3]),
-    ("flip_z", [4]),
-    ("flip_xy", [2, 3]),
-    ("flip_xz", [2, 4]),
-    ("flip_yz", [3, 4]),
-    ("flip_xyz", [2, 3, 4]),
-])
+@pytest.mark.parametrize(
+    "name, dims",
+    [
+        ("identity", []),
+        ("flip_x", [2]),
+        ("flip_y", [3]),
+        ("flip_z", [4]),
+        ("flip_xy", [2, 3]),
+        ("flip_xz", [2, 4]),
+        ("flip_yz", [3, 4]),
+        ("flip_xyz", [2, 3, 4]),
+    ],
+)
 def test_transform_forward_inverse_symmetry(name, dims):
     """Test that forward + inverse = identity for registered transforms."""
     transform = get_transform(name)
@@ -109,10 +113,12 @@ def test_get_strategy_invalid_name():
 
 def test_register_strategy_invalid_class():
     """Test that registering a non-strategy raises TypeError."""
+
     class NotAStrategy:
         pass
 
     with pytest.raises(TypeError, match="must inherit from TTAStrategy"):
+
         @register_strategy("bad")
         class Bad(NotAStrategy):
             pass
@@ -121,6 +127,7 @@ def test_register_strategy_invalid_class():
 def test_register_strategy_duplicate_name():
     """Test that registering a duplicate strategy name raises KeyError."""
     with pytest.raises(KeyError, match="already registered"):
+
         @register_strategy("none")
         class Duplicate(TTAStrategy):
             def get_transforms(self):
@@ -162,10 +169,12 @@ def test_get_transform_invalid_name():
 
 def test_register_transform_invalid_class():
     """Test that registering a non-transform raises TypeError."""
+
     class NotATransform:
         pass
 
     with pytest.raises(TypeError, match="must subclass AbstractTransform"):
+
         @register_transform("bad")
         class Bad(NotATransform):
             pass
@@ -174,7 +183,11 @@ def test_register_transform_invalid_class():
 def test_register_transform_duplicate_name():
     """Test that duplicate transform registration raises KeyError."""
     with pytest.raises(KeyError, match="already registered"):
+
         @register_transform("identity")
         class DuplicateTransform(AbstractTransform):
-            def forward(self, image): return image
-            def inverse(self, prediction): return prediction
+            def forward(self, image):
+                return image
+
+            def inverse(self, prediction):
+                return prediction

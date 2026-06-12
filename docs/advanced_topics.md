@@ -564,8 +564,8 @@ produce DTMs in the same range.
 Without normalization, raw distances scale with structure size — a large organ
 may have interior distances in the hundreds of voxels, producing much larger
 gradients from the boundary loss term than a small lesion would. This imbalance
-can destabilize training and is particularly problematic under automatic mixed
-precision (AMP), where large values risk overflow in float16.
+can destabilize training, especially when combining boundary losses with
+region-based losses that operate on probabilities in [0, 1].
 
 Normalization is strongly recommended and enabled by default. To disable it,
 set `preprocessing.normalize_dtms` to `false` in `config.json`.
@@ -941,6 +941,38 @@ Or set it directly in `config.json`:
     "warmup_epochs": 20
 }
 ```
+
+## Automatic mixed precision
+
+Setting `training.amp` to `true` in `config.json` enables automatic mixed
+precision (AMP) using bfloat16 (BF16). BF16 has the same exponent range as
+float32, so it never requires gradient loss scaling and is numerically more
+stable than float16. It is supported on NVIDIA Ampere and later GPUs (A100,
+RTX 30 series, and newer).
+
+AMP applies to the full training loop and is also propagated to inference:
+
+- **Validation** — sliding-window inference during each training epoch runs
+  under `torch.autocast` when AMP is enabled, keeping validation precision
+  consistent with training.
+- **Fold testing** and **standalone prediction** (`mist_predict`) — the
+  `Predictor` enters `torch.autocast` for all forward passes. AMP is silently
+  skipped if CUDA is unavailable (CPU-only inference always runs in float32).
+
+`training.amp` is set to `true` by default. To disable AMP, set it to `false`
+in `config.json`:
+
+```json
+"training": {
+  "amp": false
+}
+```
+
+!!! note
+    BF16 AMP is only applied on CUDA devices. CPU inference always runs in
+    float32 regardless of this setting. Pre-Ampere NVIDIA GPUs (e.g. V100,
+    T4, RTX 20 series) do not support BF16; on those devices, disable AMP and
+    train in float32.
 
 ## Transfer learning
 

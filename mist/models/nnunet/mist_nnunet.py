@@ -1,4 +1,5 @@
 """MIST implementation of nnUNet."""
+
 from collections import OrderedDict
 from collections.abc import Sequence
 import torch
@@ -50,15 +51,15 @@ class NNUNet(MISTModel):
                 f"{len(target_spacing)}."
             )
 
-        kernel_sizes, strides, _ = (
-            nnunet_utils.get_unet_params(patch_size, target_spacing)
+        kernel_sizes, strides, _ = nnunet_utils.get_unet_params(
+            patch_size, target_spacing
         )
 
         if use_pocket_model:
             filters = [constants.INITIAL_FILTERS] * len(strides)
         else:
             filters = [
-                min(2 ** i * constants.INITIAL_FILTERS, constants.MAX_FILTERS_3D)
+                min(2**i * constants.INITIAL_FILTERS, constants.MAX_FILTERS_3D)
                 for i in range(len(strides))
             ]
 
@@ -84,8 +85,11 @@ class NNUNet(MISTModel):
             "unet.bottleneck.",
         )
         return OrderedDict(
-            {k: v for k, v in self.state_dict().items()
-             if k.startswith(encoder_prefixes)}
+            {
+                k: v
+                for k, v in self.state_dict().items()
+                if k.startswith(encoder_prefixes)
+            }
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor | dict:

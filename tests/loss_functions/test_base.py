@@ -30,8 +30,7 @@ def test_preprocess_with_background():
     assert y_true_onehot.shape == y_pred_softmax.shape
     assert y_true_onehot.shape[1] == y_pred.shape[1]
     assert torch.allclose(
-        y_pred_softmax.sum(dim=1), torch.ones_like(y_pred_softmax[:, 0]),
-        atol=1e-4
+        y_pred_softmax.sum(dim=1), torch.ones_like(y_pred_softmax[:, 0]), atol=1e-4
     )
 
 
@@ -51,8 +50,8 @@ def test_preprocess_invalid_inputs_raise():
     y_pred = torch.randn((1, 3, 4, 4, 4))
 
     bad_shapes = [
-        torch.randn((1, 2, 4, 4)),      # Not 5D.
-        torch.randn((1, 2, 4, 4, 4)),   # Wrong channel count.
+        torch.randn((1, 2, 4, 4)),  # Not 5D.
+        torch.randn((1, 2, 4, 4, 4)),  # Wrong channel count.
     ]
     for y_true in bad_shapes:
         with pytest.raises(ValueError):

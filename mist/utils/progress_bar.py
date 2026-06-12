@@ -1,4 +1,5 @@
 """Progress bars for MIST training and validation loops."""
+
 import numpy as np
 from rich.progress import (
     BarColumn,
@@ -22,9 +23,7 @@ class TrainProgressBar(Progress):
 
         epoch_width = len(str(epochs))
         self.progress = Progress(
-            TextColumn(
-                f"Fold {fold}: Epoch{current_epoch: {epoch_width}}/{epochs}"
-            ),
+            TextColumn(f"Fold {fold}: Epoch{current_epoch: {epoch_width}}/{epochs}"),
             BarColumn(),
             MofNCompleteColumn(),
             TextColumn("•"),
@@ -77,9 +76,7 @@ class ValidationProgressBar(Progress):
         )
 
         self.task = self.progress.add_task(
-            description="Validation",
-            total=val_steps,
-            loss="val_loss: "
+            description="Validation", total=val_steps, loss="val_loss: "
         )
 
     def update(self, loss):

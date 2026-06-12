@@ -1,4 +1,5 @@
 """Tests for mist.analyze_data.analyze_utils."""
+
 import logging
 from typing import Any
 from pathlib import Path
@@ -22,9 +23,7 @@ def _make_header(
     dims: tuple[int, ...] = (64, 64, 32),
     origin: tuple[float, ...] = (0.0, 0.0, 0.0),
     spacing: tuple[float, ...] = (1.0, 1.0, 2.5),
-    direction: (
-        np.ndarray | list[float] | tuple[float, ...]
-    ) = np.eye(3),
+    direction: (np.ndarray | list[float] | tuple[float, ...]) = np.eye(3),
 ) -> dict[str, Any]:
     """Helper to construct a header dict."""
     return {
@@ -44,6 +43,7 @@ def _touch(path: Path):
 # ---------------------------------------------------------------------------
 # compare_headers
 # ---------------------------------------------------------------------------
+
 
 class TestCompareHeaders:
     """Tests for analyzer_utils.compare_headers."""
@@ -85,6 +85,7 @@ class TestCompareHeaders:
 # is_image_3d
 # ---------------------------------------------------------------------------
 
+
 class TestIsImage3D:
     """Tests for analyzer_utils.is_image_3d."""
 
@@ -100,6 +101,7 @@ class TestIsImage3D:
 # ---------------------------------------------------------------------------
 # get_resampled_image_dimensions
 # ---------------------------------------------------------------------------
+
 
 class TestGetResampledImageDimensions:
     """Tests for analyzer_utils.get_resampled_image_dimensions."""
@@ -139,6 +141,7 @@ class TestGetResampledImageDimensions:
 # get_float32_example_memory_size
 # ---------------------------------------------------------------------------
 
+
 class TestGetFloat32ExampleMemorySize:
     """Tests for analyzer_utils.get_float32_example_memory_size."""
 
@@ -152,18 +155,14 @@ class TestGetFloat32ExampleMemorySize:
     )
     def test_memory_size_correct(self, dims, channels, labels):
         """Memory equals 4 * prod(dims) * (channels + labels)."""
-        expected = (
-            4 * int(np.prod(np.array(dims))) * (channels + labels)
-        )
-        assert (
-            au.get_float32_example_memory_size(dims, channels, labels)
-            == expected
-        )
+        expected = 4 * int(np.prod(np.array(dims))) * (channels + labels)
+        assert au.get_float32_example_memory_size(dims, channels, labels) == expected
 
 
 # ---------------------------------------------------------------------------
 # get_files_df
 # ---------------------------------------------------------------------------
+
 
 def _make_dataset_info(base: Path) -> dict[str, Any]:
     """Create a dataset_info structure for mocking utils.io.read_json_file."""
@@ -194,9 +193,7 @@ class TestGetFilesDF:
         df = au.get_files_df("fake/path/dataset.json", "train")
         assert df["id"].tolist() == ["patient_a", "patient_b", "patient_c"]
 
-    def test_missing_image_emits_warning(
-        self, monkeypatch, tmp_path: Path, caplog
-    ):
+    def test_missing_image_emits_warning(self, monkeypatch, tmp_path: Path, caplog):
         """A patient missing an image file produces a warning."""
         base = tmp_path
         ds_info = _make_dataset_info(base)
@@ -265,35 +262,19 @@ class TestGetFilesDF:
 
         df = au.get_files_df("fake/path/dataset.json", "train")
 
-        assert list(df.columns) == [
-            "id", "mask", "image_1", "image_2", "image_3"
-        ]
-        assert set(df["id"].tolist()) == {
-            "patient_1", "patient_2", "patient_3"
-        }
+        assert list(df.columns) == ["id", "mask", "image_1", "image_2", "image_3"]
+        assert set(df["id"].tolist()) == {"patient_1", "patient_2", "patient_3"}
 
         row1 = df[df["id"] == "patient_1"].iloc[0]
         assert row1["mask"].endswith("train/patient_1/mask.nii.gz")
-        assert row1["image_1"].endswith(
-            "train/patient_1/image_1.nii.gz"
-        )
-        assert row1["image_2"].endswith(
-            "train/patient_1/image_2.nii.gz"
-        )
-        assert row1["image_3"].endswith(
-            "train/patient_1/image_3.nii.gz"
-        )
+        assert row1["image_1"].endswith("train/patient_1/image_1.nii.gz")
+        assert row1["image_2"].endswith("train/patient_1/image_2.nii.gz")
+        assert row1["image_3"].endswith("train/patient_1/image_3.nii.gz")
 
         row2 = df[df["id"] == "patient_2"].iloc[0]
-        assert row2["image_1"].endswith(
-            "train/patient_2/image_1_time0.nii.gz"
-        )
-        assert row2["image_2"].endswith(
-            "train/patient_2/image_2_alt.nii.gz"
-        )
-        assert row2["mask"].endswith(
-            "train/patient_2/mask_final.nii.gz"
-        )
+        assert row2["image_1"].endswith("train/patient_2/image_1_time0.nii.gz")
+        assert row2["image_2"].endswith("train/patient_2/image_2_alt.nii.gz")
+        assert row2["mask"].endswith("train/patient_2/mask_final.nii.gz")
         assert pd.isna(row2["image_3"])
 
         row3 = df[df["id"] == "patient_3"].iloc[0]
@@ -320,31 +301,24 @@ class TestGetFilesDF:
 
         df = au.get_files_df("fake/path/dataset.json", "test")
 
-        assert list(df.columns) == [
-            "id", "image_1", "image_2", "image_3"
-        ]
+        assert list(df.columns) == ["id", "image_1", "image_2", "image_3"]
         assert set(df["id"].tolist()) == {"patient_A", "patient_B"}
 
         rowA = df[df["id"] == "patient_A"].iloc[0]
-        assert rowA["image_1"].endswith(
-            "test/patient_A/image_1.nii.gz"
-        )
-        assert rowA["image_2"].endswith(
-            "test/patient_A/image_2.nii.gz"
-        )
+        assert rowA["image_1"].endswith("test/patient_A/image_1.nii.gz")
+        assert rowA["image_2"].endswith("test/patient_A/image_2.nii.gz")
         assert pd.isna(rowA["image_3"])
 
         rowB = df[df["id"] == "patient_B"].iloc[0]
         assert pd.isna(rowB["image_1"])
         assert pd.isna(rowB["image_2"])
-        assert rowB["image_3"].endswith(
-            "test/patient_B/image_3.nii.gz"
-        )
+        assert rowB["image_3"].endswith("test/patient_B/image_3.nii.gz")
 
 
 # ---------------------------------------------------------------------------
 # add_folds_to_df
 # ---------------------------------------------------------------------------
+
 
 class TestAddFoldsToDf:
     """Tests for analyzer_utils.add_folds_to_df."""
@@ -372,11 +346,12 @@ class TestAddFoldsToDf:
 
 
 # ---------------------------------------------------------------------------
-# _largest_multiple_of_32_leq
+# _largest_multiple_of_32_leq (float inputs)
 # ---------------------------------------------------------------------------
 
-class TestLargestMultipleOf32Leq:
-    """Tests for analyzer_utils._largest_multiple_of_32_leq."""
+
+class TestLargestMultipleOf32LeqFloat:
+    """Tests for analyzer_utils._largest_multiple_of_32_leq with float inputs."""
 
     @pytest.mark.parametrize(
         "value, expected",
@@ -402,10 +377,11 @@ class TestLargestMultipleOf32Leq:
 
 
 # ---------------------------------------------------------------------------
-# _get_voxel_budget
+# _get_voxel_budget (mock-based)
 # ---------------------------------------------------------------------------
 
-class TestGetVoxelBudget:
+
+class TestGetVoxelBudgetMockPatch:
     """Tests for analyzer_utils._get_voxel_budget."""
 
     def test_returns_default_when_cuda_unavailable(self, monkeypatch):
@@ -426,9 +402,7 @@ class TestGetVoxelBudget:
 
         monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
         monkeypatch.setattr(torch.cuda, "device_count", lambda: 1)
-        monkeypatch.setattr(
-            torch.cuda, "get_device_properties", lambda i: fake_props
-        )
+        monkeypatch.setattr(torch.cuda, "get_device_properties", lambda i: fake_props)
 
         expected = 2 * _C.PATCH_BUDGET_REFERENCE_VOXELS
         assert au._get_voxel_budget() == expected
@@ -438,7 +412,7 @@ class TestGetVoxelBudget:
         small = MagicMock()
         small.total_memory = _C.PATCH_BUDGET_REFERENCE_GPU_MEMORY_BYTES // 2  # 8 GB
         large = MagicMock()
-        large.total_memory = _C.PATCH_BUDGET_REFERENCE_GPU_MEMORY_BYTES * 2   # 32 GB
+        large.total_memory = _C.PATCH_BUDGET_REFERENCE_GPU_MEMORY_BYTES * 2  # 32 GB
 
         monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
         monkeypatch.setattr(torch.cuda, "device_count", lambda: 2)
@@ -468,6 +442,7 @@ class TestGetVoxelBudget:
 # ---------------------------------------------------------------------------
 # _snap_lr_to_nnunet_compatible
 # ---------------------------------------------------------------------------
+
 
 class TestSnapLrToNnunetCompatible:
     """Unit tests for analyzer_utils._snap_lr_to_nnunet_compatible.
@@ -628,6 +603,7 @@ class TestSnapLrToNnunetCompatible:
 # get_best_patch_size
 # ---------------------------------------------------------------------------
 
+
 class TestGetBestPatchSize:
     """Tests for analyzer_utils.get_best_patch_size."""
 
@@ -635,7 +611,7 @@ class TestGetBestPatchSize:
     @pytest.fixture(autouse=True)
     def pin_budget(self, monkeypatch):
         monkeypatch.setattr(
-            au, "_get_voxel_budget", lambda batch_size_per_gpu=2: 128 ** 3
+            au, "_get_voxel_budget", lambda batch_size_per_gpu=2: 128**3
         )
 
     # --- 3D isotropic mode ---
@@ -718,9 +694,7 @@ class TestGetBestPatchSize:
 
     # --- nnUNet compatibility snapping ---
 
-    def test_quasi_2d_prostate_lr_snapped_up_to_nnunet_compatible(
-        self, monkeypatch
-    ):
+    def test_quasi_2d_prostate_lr_snapped_up_to_nnunet_compatible(self, monkeypatch):
         """Prostate-like dataset: lr_raw=18 is not divisible by z_divisor=4.
 
         Budget is pinned so that budget/320^2 = 18 exactly, reproducing the
@@ -731,30 +705,24 @@ class TestGetBestPatchSize:
         """
         # budget = 18 * 320^2 → lr_raw = 18 exactly.
         monkeypatch.setattr(
-            au, "_get_voxel_budget", lambda batch_size_per_gpu=2: 18 * 320 ** 2
+            au, "_get_voxel_budget", lambda batch_size_per_gpu=2: 18 * 320**2
         )
-        result = au.get_best_patch_size(
-            [320, 320, 20], [0.625, 0.625, 3.6]
-        )
+        result = au.get_best_patch_size([320, 320, 20], [0.625, 0.625, 3.6])
         # z must be snapped from 18 → 20 (divisible by 4, ≤ median_lr=20).
         assert result[2] == 20
         # In-plane recomputed with lr_patch=20: snap(sqrt(18*320^2/20))=288.
         assert result[0] == result[1] == 288
 
-    def test_quasi_2d_snap_down_when_snap_up_exceeds_median_lr(
-        self, monkeypatch
-    ):
+    def test_quasi_2d_snap_down_when_snap_up_exceeds_median_lr(self, monkeypatch):
         """When snapping up exceeds median_lr, the patch snaps down instead.
 
         median_lr=19, z_divisor=4.  Snapping 18 up → 20 > 19, so we snap
         down to 16 instead.
         """
         monkeypatch.setattr(
-            au, "_get_voxel_budget", lambda batch_size_per_gpu=2: 18 * 320 ** 2
+            au, "_get_voxel_budget", lambda batch_size_per_gpu=2: 18 * 320**2
         )
-        result = au.get_best_patch_size(
-            [320, 320, 19], [0.625, 0.625, 3.6]
-        )
+        result = au.get_best_patch_size([320, 320, 19], [0.625, 0.625, 3.6])
         # snapped_up=20 > median_lr=19 → snapped_down=16.
         assert result[2] == 16
 
@@ -766,15 +734,15 @@ class TestGetBestPatchSize:
         """
         # budget = 18 * 320^2 triggers the prostate-like regime.
         monkeypatch.setattr(
-            au, "_get_voxel_budget", lambda batch_size_per_gpu=2: 18 * 320 ** 2
+            au, "_get_voxel_budget", lambda batch_size_per_gpu=2: 18 * 320**2
         )
         scenarios = [
             # (median, spacing)
-            ([320, 320, 20], [0.625, 0.625, 3.6]),   # prostate
-            ([512, 512, 40], [0.8, 0.8, 3.0]),        # thick-slice CT
-            ([512, 512,  8], [0.8, 0.8, 3.0]),        # very thin z
-            ([40, 512, 512], [3.0, 0.8, 0.8]),       # low-res on axis 0
-            ([512,  40, 512], [0.8, 3.0, 0.8]),       # low-res on axis 1
+            ([320, 320, 20], [0.625, 0.625, 3.6]),  # prostate
+            ([512, 512, 40], [0.8, 0.8, 3.0]),  # thick-slice CT
+            ([512, 512, 8], [0.8, 0.8, 3.0]),  # very thin z
+            ([40, 512, 512], [3.0, 0.8, 0.8]),  # low-res on axis 0
+            ([512, 40, 512], [0.8, 3.0, 0.8]),  # low-res on axis 1
         ]
         for median, spacing in scenarios:
             result = au.get_best_patch_size(median, spacing)
@@ -801,7 +769,7 @@ class TestGetBestPatchSize:
         monkeypatch.setattr(
             au,
             "_get_voxel_budget",
-            lambda batch_size_per_gpu=2: 128 ** 3 // batch_size_per_gpu * 2,
+            lambda batch_size_per_gpu=2: 128**3 // batch_size_per_gpu * 2,
         )
         result_bs2 = au.get_best_patch_size(
             [512, 512, 512], [1.0, 1.0, 1.0], batch_size_per_gpu=2
@@ -818,6 +786,7 @@ class TestGetBestPatchSize:
 # build_base_config
 # ---------------------------------------------------------------------------
 
+
 class TestBuildBaseConfig:
     """Tests for analyzer_utils.build_base_config."""
 
@@ -825,8 +794,13 @@ class TestBuildBaseConfig:
         """build_base_config returns a dict with all required top-level keys."""
         cfg = au.build_base_config()
         for key in (
-            "mist_version", "dataset_info", "spatial_config",
-            "preprocessing", "model", "training", "inference",
+            "mist_version",
+            "dataset_info",
+            "spatial_config",
+            "preprocessing",
+            "model",
+            "training",
+            "inference",
         ):
             assert key in cfg
 
@@ -874,6 +848,7 @@ class TestBuildBaseConfig:
 # build_evaluation_config
 # ---------------------------------------------------------------------------
 
+
 class TestBuildEvaluationConfig:
     """Tests for analyzer_utils.build_evaluation_config."""
 
@@ -904,14 +879,15 @@ class TestBuildEvaluationConfig:
 # _largest_multiple_of_32_leq
 # ---------------------------------------------------------------------------
 
+
 class TestLargestMultipleOf32Leq:
     """Tests for analyzer_utils._largest_multiple_of_32_leq."""
 
     @pytest.mark.parametrize(
         "value, expected",
         [
-            pytest.param(32,  32,  id="exact_32"),
-            pytest.param(64,  64,  id="exact_64"),
+            pytest.param(32, 32, id="exact_32"),
+            pytest.param(64, 64, id="exact_64"),
             pytest.param(128, 128, id="exact_128"),
             pytest.param(256, 256, id="exact_256"),
             pytest.param(512, 512, id="exact_512"),
@@ -924,12 +900,12 @@ class TestLargestMultipleOf32Leq:
     @pytest.mark.parametrize(
         "value, expected",
         [
-            pytest.param(33,  32,  id="33_to_32"),
-            pytest.param(63,  32,  id="63_to_32"),
-            pytest.param(65,  64,  id="65_to_64"),
-            pytest.param(96,  96,  id="96_exact"),
-            pytest.param(100, 96,  id="100_to_96"),
-            pytest.param(127, 96,  id="127_to_96"),
+            pytest.param(33, 32, id="33_to_32"),
+            pytest.param(63, 32, id="63_to_32"),
+            pytest.param(65, 64, id="65_to_64"),
+            pytest.param(96, 96, id="96_exact"),
+            pytest.param(100, 96, id="100_to_96"),
+            pytest.param(127, 96, id="127_to_96"),
             pytest.param(480, 480, id="480_exact"),
             pytest.param(491, 480, id="491_to_480"),  # the bug scenario
             pytest.param(511, 480, id="511_to_480"),
@@ -942,8 +918,8 @@ class TestLargestMultipleOf32Leq:
     @pytest.mark.parametrize(
         "value",
         [
-            pytest.param(0,  id="zero"),
-            pytest.param(1,  id="one"),
+            pytest.param(0, id="zero"),
+            pytest.param(1, id="one"),
             pytest.param(20, id="twenty"),
             pytest.param(31, id="thirty_one"),
         ],
@@ -972,6 +948,7 @@ class TestLargestMultipleOf32Leq:
 # _get_voxel_budget
 # ---------------------------------------------------------------------------
 
+
 class TestGetVoxelBudget:
     """Tests for analyzer_utils._get_voxel_budget."""
 
@@ -982,6 +959,7 @@ class TestGetVoxelBudget:
 
     def test_scales_inversely_with_batch_size(self, monkeypatch):
         """Doubling batch_size halves the per-patch voxel budget (CUDA path)."""
+
         class _FakeProps:
             total_memory = _C.PATCH_BUDGET_REFERENCE_GPU_MEMORY_BYTES  # 16 GB
 
@@ -997,6 +975,7 @@ class TestGetVoxelBudget:
 
     def test_scales_with_gpu_memory(self, monkeypatch):
         """Budget scales linearly with GPU memory relative to the 16 GB reference."""
+
         class _FakeProps:
             def __init__(self, mem):
                 self.total_memory = mem
@@ -1022,11 +1001,12 @@ class TestGetVoxelBudget:
 
     def test_uses_minimum_gpu_memory_across_devices(self, monkeypatch):
         """When multiple GPUs are present the smallest memory device is used."""
+
         class _FakeProps:
             def __init__(self, mem):
                 self.total_memory = mem
 
-        mems = [32 * (1024 ** 3), 16 * (1024 ** 3)]  # 32 GB and 16 GB
+        mems = [32 * (1024**3), 16 * (1024**3)]  # 32 GB and 16 GB
         monkeypatch.setattr("torch.cuda.is_available", lambda: True)
         monkeypatch.setattr("torch.cuda.device_count", lambda: 2)
         monkeypatch.setattr(
@@ -1046,6 +1026,7 @@ class TestGetVoxelBudget:
 # ---------------------------------------------------------------------------
 # get_best_patch_size — shared helpers
 # ---------------------------------------------------------------------------
+
 
 def _patch_budget(budget: int):
     """Context manager: pin the voxel budget to a fixed value."""
@@ -1067,6 +1048,7 @@ def _patch_snap_identity():
 # get_best_patch_size — invariants
 # ---------------------------------------------------------------------------
 
+
 def _is_quasi2d(spacing: list) -> bool:
     """Return True if spacing triggers quasi-2D mode."""
     return max(spacing) / min(spacing) > _C.MAX_DIVIDED_BY_MIN_SPACING_THRESHOLD
@@ -1084,17 +1066,17 @@ class TestGetBestPatchSizeInvariants:
     # both quasi-2D and isotropic branches across a range of GPU sizes.
     _CASES = [
         # Quasi-2D cases (anisotropy > 3)
-        ([491, 404, 52],  [0.81, 0.81, 3.98],  _REF_BUDGET),   # reported bug
-        ([256, 256, 10],  [0.5,  0.5,  3.0],   _REF_BUDGET),   # thin-slice CT (ratio=6)
-        ([128, 128, 20],  [1.0,  1.0,  5.0],   _REF_BUDGET * 4),
-        ([300, 300, 8],   [0.6,  0.6,  4.0],   _REF_BUDGET // 2),
-        ([200, 180, 15],  [0.8,  0.8,  4.0],   _REF_BUDGET),
+        ([491, 404, 52], [0.81, 0.81, 3.98], _REF_BUDGET),  # reported bug
+        ([256, 256, 10], [0.5, 0.5, 3.0], _REF_BUDGET),  # thin-slice CT (ratio=6)
+        ([128, 128, 20], [1.0, 1.0, 5.0], _REF_BUDGET * 4),
+        ([300, 300, 8], [0.6, 0.6, 4.0], _REF_BUDGET // 2),
+        ([200, 180, 15], [0.8, 0.8, 4.0], _REF_BUDGET),
         # Isotropic cases (anisotropy ≤ 3)
-        ([128, 128, 128], [1.0,  1.0,  1.0],   _REF_BUDGET),
-        ([64,  64,  64],  [1.5,  1.5,  1.5],   _REF_BUDGET),
-        ([200, 180, 160], [0.8,  0.9,  1.0],   _REF_BUDGET),
-        ([512, 512, 400], [0.5,  0.5,  0.5],   _REF_BUDGET * 2),
-        ([96,  80,  72],  [1.2,  1.2,  2.0],   _REF_BUDGET),   # mild anisotropy
+        ([128, 128, 128], [1.0, 1.0, 1.0], _REF_BUDGET),
+        ([64, 64, 64], [1.5, 1.5, 1.5], _REF_BUDGET),
+        ([200, 180, 160], [0.8, 0.9, 1.0], _REF_BUDGET),
+        ([512, 512, 400], [0.5, 0.5, 0.5], _REF_BUDGET * 2),
+        ([96, 80, 72], [1.2, 1.2, 2.0], _REF_BUDGET),  # mild anisotropy
     ]
 
     @pytest.mark.parametrize(
@@ -1169,6 +1151,7 @@ class TestGetBestPatchSizeInvariants:
 # get_best_patch_size — quasi-2D mode
 # ---------------------------------------------------------------------------
 
+
 class TestGetBestPatchSizeQuasi2D:
     """Tests for the quasi-2D branch (anisotropy ratio > MAX threshold)."""
 
@@ -1180,9 +1163,7 @@ class TestGetBestPatchSizeQuasi2D:
         """Regression: ip_patch must be a multiple of 32 even when clamped
         to median_ip.  Before the fix min(512, 491) = 491 was returned raw."""
         with _patch_budget(_REF_BUDGET), _patch_snap_identity():
-            patch_size = au.get_best_patch_size(
-                self._ANISO_MEDIAN, self._ANISO_SPACING
-            )
+            patch_size = au.get_best_patch_size(self._ANISO_MEDIAN, self._ANISO_SPACING)
         assert patch_size[0] % 32 == 0
         assert patch_size[1] % 32 == 0
         assert patch_size[0] != 491, "491 is not a multiple of 32 — snap-order bug"
@@ -1194,9 +1175,7 @@ class TestGetBestPatchSizeQuasi2D:
         (Before the max→min fix ip_patch was 480, which exceeded axis-1 size 404.)
         """
         with _patch_budget(_REF_BUDGET), _patch_snap_identity():
-            patch_size = au.get_best_patch_size(
-                self._ANISO_MEDIAN, self._ANISO_SPACING
-            )
+            patch_size = au.get_best_patch_size(self._ANISO_MEDIAN, self._ANISO_SPACING)
         assert patch_size[0] == 384
         assert patch_size[1] == 384
 
@@ -1204,9 +1183,7 @@ class TestGetBestPatchSizeQuasi2D:
         """The axis with the largest spacing gets the small (lr) patch size."""
         # z has the largest spacing → index 2 should be the small dimension.
         with _patch_budget(_REF_BUDGET), _patch_snap_identity():
-            patch_size = au.get_best_patch_size(
-                [200, 200, 30], [0.8, 0.8, 4.0]
-            )
+            patch_size = au.get_best_patch_size([200, 200, 30], [0.8, 0.8, 4.0])
         # In quasi-2D mode in-plane ≥ low-res is not guaranteed by maths, but
         # the low-res patch should be smaller than the in-plane patches.
         assert patch_size[2] <= patch_size[0]
@@ -1215,10 +1192,8 @@ class TestGetBestPatchSizeQuasi2D:
     def test_lr_patch_respects_min_low_res_size(self):
         """lr_patch never drops below MIN_LOW_RES_AXIS_PATCH_SIZE."""
         # Tiny image depth + tiny budget → lr_patch could underflow without the clip.
-        with _patch_budget(32 ** 3), _patch_snap_identity():
-            patch_size = au.get_best_patch_size(
-                [64, 64, 6], [0.5, 0.5, 4.0]
-            )
+        with _patch_budget(32**3), _patch_snap_identity():
+            patch_size = au.get_best_patch_size([64, 64, 6], [0.5, 0.5, 4.0])
         # low-res axis is index 2; must be ≥ min(MIN_LOW_RES_AXIS_PATCH_SIZE, 6)
         min_lr = min(_C.MIN_LOW_RES_AXIS_PATCH_SIZE, 6)
         assert patch_size[2] >= min_lr
@@ -1234,18 +1209,14 @@ class TestGetBestPatchSizeQuasi2D:
     def test_in_plane_both_axes_equal(self):
         """Both in-plane axes always receive the same patch size."""
         with _patch_budget(_REF_BUDGET), _patch_snap_identity():
-            patch_size = au.get_best_patch_size(
-                self._ANISO_MEDIAN, self._ANISO_SPACING
-            )
+            patch_size = au.get_best_patch_size(self._ANISO_MEDIAN, self._ANISO_SPACING)
         assert patch_size[0] == patch_size[1]
 
     def test_quasi2d_triggered_just_above_threshold(self):
         """Anisotropy ratio just above threshold enters quasi-2D mode."""
         # ratio = 3.1 / 1.0 = 3.1 > 3.0 → quasi-2D
         with _patch_budget(_REF_BUDGET), _patch_snap_identity():
-            patch_size = au.get_best_patch_size(
-                [200, 200, 40], [1.0, 1.0, 3.1]
-            )
+            patch_size = au.get_best_patch_size([200, 200, 40], [1.0, 1.0, 3.1])
         # Low-res axis (z) should be the smallest.
         assert patch_size[2] <= patch_size[0]
 
@@ -1253,9 +1224,7 @@ class TestGetBestPatchSizeQuasi2D:
         """Quasi-2D correctly handles x as the low-resolution axis."""
         # x spacing is largest → axis 0 is low-res
         with _patch_budget(_REF_BUDGET), _patch_snap_identity():
-            patch_size = au.get_best_patch_size(
-                [15, 256, 256], [5.0, 0.8, 0.8]
-            )
+            patch_size = au.get_best_patch_size([15, 256, 256], [5.0, 0.8, 0.8])
         # axis 0 should be the small dimension
         assert patch_size[0] <= patch_size[1]
         assert patch_size[0] <= patch_size[2]
@@ -1263,7 +1232,7 @@ class TestGetBestPatchSizeQuasi2D:
     @pytest.mark.parametrize(
         "batch_size, expected_ordering",
         [
-            pytest.param(1, "larger",  id="batch1_larger_patch"),
+            pytest.param(1, "larger", id="batch1_larger_patch"),
             pytest.param(4, "smaller", id="batch4_smaller_patch"),
         ],
     )
@@ -1288,24 +1257,21 @@ class TestGetBestPatchSizeQuasi2D:
 # get_best_patch_size — 3D isotropic mode
 # ---------------------------------------------------------------------------
 
+
 class TestGetBestPatchSizeIsotropic:
     """Tests for the 3D isotropic branch (anisotropy ratio ≤ MAX threshold)."""
 
     def test_isotropic_spacing_yields_roughly_cubic_patch(self):
         """Isotropic spacing → all three patch dims should be equal."""
         with _patch_budget(_REF_BUDGET), _patch_snap_identity():
-            patch_size = au.get_best_patch_size(
-                [256, 256, 256], [1.0, 1.0, 1.0]
-            )
+            patch_size = au.get_best_patch_size([256, 256, 256], [1.0, 1.0, 1.0])
         assert patch_size[0] == patch_size[1] == patch_size[2]
 
     def test_budget_constrains_patch_volume(self):
         """Patch voxel count should not exceed the budget by more than 32³."""
         budget = _REF_BUDGET
         with _patch_budget(budget), _patch_snap_identity():
-            patch_size = au.get_best_patch_size(
-                [256, 256, 256], [1.0, 1.0, 1.0]
-            )
+            patch_size = au.get_best_patch_size([256, 256, 256], [1.0, 1.0, 1.0])
         volume = int(np.prod(patch_size))
         # Allow one 32-voxel snap-up per axis beyond the theoretical budget.
         assert volume <= budget + 3 * 32 * (budget ** (2 / 3))
@@ -1314,9 +1280,7 @@ class TestGetBestPatchSizeIsotropic:
         """When the image is smaller than the budget allows, patch ≤ image size."""
         # Tiny image: budget would suggest larger than image → clamp.
         with _patch_budget(_REF_BUDGET * 10), _patch_snap_identity():
-            patch_size = au.get_best_patch_size(
-                [64, 64, 64], [1.0, 1.0, 1.0]
-            )
+            patch_size = au.get_best_patch_size([64, 64, 64], [1.0, 1.0, 1.0])
         assert patch_size[0] <= 64
         assert patch_size[1] <= 64
         assert patch_size[2] <= 64
@@ -1325,9 +1289,7 @@ class TestGetBestPatchSizeIsotropic:
         """Anisotropic image (but below threshold) is handled in isotropic mode."""
         # ratio = 2.0/1.0 = 2.0 ≤ 3.0 → isotropic mode
         with _patch_budget(_REF_BUDGET), _patch_snap_identity():
-            patch_size = au.get_best_patch_size(
-                [200, 180, 100], [1.0, 1.0, 2.0]
-            )
+            patch_size = au.get_best_patch_size([200, 180, 100], [1.0, 1.0, 2.0])
         # All invariants should still hold.
         assert all(d % 32 == 0 for d in patch_size)
         assert all(d >= 32 for d in patch_size)
@@ -1336,9 +1298,7 @@ class TestGetBestPatchSizeIsotropic:
         """Anisotropy ratio just below threshold stays in isotropic mode."""
         # ratio = 3.0 / 1.0 = 3.0, which is NOT > threshold → isotropic
         with _patch_budget(_REF_BUDGET), _patch_snap_identity():
-            patch_size = au.get_best_patch_size(
-                [128, 128, 128], [1.0, 1.0, 3.0]
-            )
+            patch_size = au.get_best_patch_size([128, 128, 128], [1.0, 1.0, 3.0])
         assert all(d % 32 == 0 for d in patch_size)
         assert all(d >= 32 for d in patch_size)
 

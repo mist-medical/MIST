@@ -1,4 +1,5 @@
 """Tests for the transform registry in MIST postprocessing module."""
+
 import pytest
 import numpy as np
 
@@ -31,9 +32,7 @@ def test_describe_transforms_required_keys():
     for entry in registry.describe_transforms():
         assert "name" in entry, f"Missing 'name' in {entry}"
         assert "description" in entry, f"Missing 'description' in {entry}"
-        assert "per_label" in entry, (
-            f"Missing 'per_label' in {entry}"
-        )
+        assert "per_label" in entry, f"Missing 'per_label' in {entry}"
         assert "kwargs" in entry, f"Missing 'kwargs' in {entry}"
 
 
@@ -42,8 +41,7 @@ def test_describe_transforms_per_label_values():
     valid = {"both", "per_label_only"}
     for entry in registry.describe_transforms():
         assert entry["per_label"] in valid, (
-            f"Unexpected per_label value in {entry['name']}: "
-            f"{entry['per_label']}"
+            f"Unexpected per_label value in {entry['name']}: {entry['per_label']}"
         )
 
 
@@ -64,8 +62,7 @@ def test_describe_transforms_kwargs_have_required_keys():
                 f"Missing 'type' for kwarg '{kwarg_name}' in {entry['name']}"
             )
             assert "description" in kwarg_meta, (
-                f"Missing 'description' for kwarg '{kwarg_name}' "
-                f"in {entry['name']}"
+                f"Missing 'description' for kwarg '{kwarg_name}' in {entry['name']}"
             )
             assert "default" in kwarg_meta, (
                 f"Missing 'default' for kwarg '{kwarg_name}' in {entry['name']}"
@@ -80,9 +77,17 @@ def test_describe_transforms_defaults_match_constants():
     assert rso["small_object_threshold"]["default"] == pc.SMALL_OBJECT_THRESHOLD
 
     topk = descriptions["get_top_k_connected_components"]["kwargs"]
-    assert topk["top_k_connected_components"]["default"] == pc.TOP_K_CONNECTED_COMPONENTS
-    assert topk["apply_morphological_cleaning"]["default"] == pc.APPLY_MORPHOLOGICAL_CLEANING
-    assert topk["morphological_cleaning_iterations"]["default"] == pc.MORPHOLOGICAL_CLEANING_ITERATIONS
+    assert (
+        topk["top_k_connected_components"]["default"] == pc.TOP_K_CONNECTED_COMPONENTS
+    )
+    assert (
+        topk["apply_morphological_cleaning"]["default"]
+        == pc.APPLY_MORPHOLOGICAL_CLEANING
+    )
+    assert (
+        topk["morphological_cleaning_iterations"]["default"]
+        == pc.MORPHOLOGICAL_CLEANING_ITERATIONS
+    )
 
     fh = descriptions["fill_holes_with_label"]["kwargs"]
     assert fh["fill_holes_label"]["default"] == pc.FILL_HOLES_LABEL
@@ -96,44 +101,38 @@ def test_describe_transforms_defaults_match_constants():
 # Registry tests (existing)
 # ---------------------------------------------------------------------------
 
+
 # Test that the transform registry contains all expected transforms.
 def test_transform_registry_contains_all_expected():
     """Ensure all expected transforms are registered."""
     assert "remove_small_objects" in registry.POSTPROCESSING_TRANSFORMS
-    assert (
-        "get_top_k_connected_components" in registry.POSTPROCESSING_TRANSFORMS
-    )
+    assert "get_top_k_connected_components" in registry.POSTPROCESSING_TRANSFORMS
     assert "fill_holes_with_label" in registry.POSTPROCESSING_TRANSFORMS
-    assert (
-        "replace_small_objects_with_label" in registry.POSTPROCESSING_TRANSFORMS
-    )
+    assert "replace_small_objects_with_label" in registry.POSTPROCESSING_TRANSFORMS
 
 
 def test_get_transform_returns_correct_function():
     """Check get_transform returns correct functions."""
     assert (
-        registry.get_transform("remove_small_objects") is
-        registry.remove_small_objects
+        registry.get_transform("remove_small_objects") is registry.remove_small_objects
     )
     assert (
-        registry.get_transform("get_top_k_connected_components") is
-        registry.get_top_k_connected_components
+        registry.get_transform("get_top_k_connected_components")
+        is registry.get_top_k_connected_components
     )
     assert (
         registry.get_transform("fill_holes_with_label")
         is registry.fill_holes_with_label
     )
     assert (
-        registry.get_transform("replace_small_objects_with_label") is
-        registry.replace_small_objects_with_label
+        registry.get_transform("replace_small_objects_with_label")
+        is registry.replace_small_objects_with_label
     )
 
 
 def test_get_transform_raises_on_invalid_name():
     """Verify error raised when requesting unregistered transform."""
-    with pytest.raises(
-        ValueError, match="Transform 'non_existent' is not registered."
-    ):
+    with pytest.raises(ValueError, match="Transform 'non_existent' is not registered."):
         registry.get_transform("non_existent")
 
 
@@ -141,9 +140,7 @@ def test_get_transform_raises_on_invalid_name():
 def test_remove_small_objects_returns_unchanged_if_empty():
     """Should return original mask if all entries are zero."""
     mask = np.zeros((10, 10), dtype=np.uint8)
-    result = registry.remove_small_objects(
-        mask, labels_list=[1], per_label=False
-    )
+    result = registry.remove_small_objects(mask, labels_list=[1], per_label=False)
     np.testing.assert_array_equal(result, mask)
 
 
@@ -159,7 +156,7 @@ def test_remove_small_objects_removes_small_components(per_label):
             [0, 0, 0, 0, 1, 0, 0, 1],
             [2, 2, 2, 0, 0, 0, 0, 1],
             [2, 2, 2, 0, 3, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 3, 3]
+            [0, 0, 0, 0, 0, 0, 3, 3],
         ]
     )
 
@@ -176,18 +173,17 @@ def test_remove_small_objects_removes_small_components(per_label):
 
 
 @pytest.mark.parametrize(
-    "threshold,label_size",
-    [(5, 16), (10, 16)],
-    ids=["small_thresh", "larger_thresh"]
+    "threshold,label_size", [(5, 16), (10, 16)], ids=["small_thresh", "larger_thresh"]
 )
 def test_remove_small_objects_preserves_large_regions(threshold, label_size):
     """Should not remove large components if above threshold."""
     mask = np.zeros((10, 10), dtype=np.uint8)
-    mask[2:2 + int(label_size ** 0.5), 2:2 + int(label_size ** 0.5)] = 4
+    mask[2 : 2 + int(label_size**0.5), 2 : 2 + int(label_size**0.5)] = 4
     mask[1, 1] = 1  # Small component.
 
     result = registry.remove_small_objects(
-        mask, labels_list=[4],
+        mask,
+        labels_list=[4],
         per_label=True,
         small_object_threshold=threshold,
     )
@@ -218,7 +214,7 @@ def test_top_k_connected_components_keeps_largest(sequential):
         per_label=sequential,
         top_k_connected_components=1,
         apply_morphological_cleaning=False,
-        morphological_cleaning_iterations=1
+        morphological_cleaning_iterations=1,
     )
 
     assert result.dtype == np.uint8
@@ -230,10 +226,7 @@ def test_top_k_connected_components_empty_input():
     """If the input is empty, return unchanged."""
     mask = np.zeros((5, 5), dtype=np.uint8)
     result = registry.get_top_k_connected_components(
-        mask=mask,
-        labels_list=[1],
-        per_label=False,
-        top_k_connected_components=1
+        mask=mask, labels_list=[1], per_label=False, top_k_connected_components=1
     )
     np.testing.assert_array_equal(result, mask)
 
@@ -306,12 +299,10 @@ def create_mask_with_hole(label=1):
     "per_label, expected_value",
     [
         (False, 9),  # Grouped mode.
-        (True, 9),   # Sequential mode.
-    ]
+        (True, 9),  # Sequential mode.
+    ],
 )
-def test_fill_holes_with_label_fills_expected_voxels(
-    per_label, expected_value
-):
+def test_fill_holes_with_label_fills_expected_voxels(per_label, expected_value):
     """Test function fills interior holes with the specified label."""
     mask = create_mask_with_hole(label=1)
     result = registry.fill_holes_with_label(
@@ -340,7 +331,7 @@ def test_fill_holes_with_label_returns_original_if_empty():
 def test_replace_small_objects_one_large_one_small_component():
     """Test that one large and one small component are handled correctly."""
     mask = np.zeros((6, 6), dtype=np.uint8)
-    mask[1, 1] = 1      # Small component.
+    mask[1, 1] = 1  # Small component.
     mask[4:6, 4:6] = 2  # Large component.
 
     result = registry.replace_small_objects_with_label(

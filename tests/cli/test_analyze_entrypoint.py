@@ -1,4 +1,5 @@
 """Tests for the analyze command entrypoint."""
+
 import argparse
 import pytest
 
@@ -49,9 +50,7 @@ def _patch_argparse(min_args: list[str], monkeypatch) -> None:
 # ============================================================================
 
 
-def test_prepare_analyze_dirs_defaults_to_results_in_cwd(
-    tmp_path, monkeypatch
-):
+def test_prepare_analyze_dirs_defaults_to_results_in_cwd(tmp_path, monkeypatch):
     """Without --results, it should create ./results under the CWD."""
     monkeypatch.chdir(tmp_path)
 
@@ -62,9 +61,7 @@ def test_prepare_analyze_dirs_defaults_to_results_in_cwd(
     assert out.exists() and out.is_dir()
 
 
-def test_prepare_analyze_dirs_respects_custom_and_expands(
-    tmp_path, monkeypatch
-):
+def test_prepare_analyze_dirs_respects_custom_and_expands(tmp_path, monkeypatch):
     """With --results and ~, it should expand and create the directory."""
     # Point HOME to tmp_path so "~" expands inside the sandbox.
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -109,9 +106,7 @@ def test_analyze_entry_invokes_analyzer_run(tmp_path, monkeypatch):
     assert a.run_called is True
 
 
-def test_analyze_entry_blocks_overwrite_if_config_exists(
-    tmp_path, monkeypatch
-):
+def test_analyze_entry_blocks_overwrite_if_config_exists(tmp_path, monkeypatch):
     """If config.json exists and --overwrite not set, raise FileExistsError."""
     _patch_argparse(["--data", "x"], monkeypatch)
 
@@ -189,9 +184,12 @@ def test_num_workers_analyze_flows_through_to_namespace(tmp_path, monkeypatch):
     results_dir = tmp_path / "out"
 
     argv = [
-        "--data", str(data_path),
-        "--results", str(results_dir),
-        "--num-workers-analyze", "8",
+        "--data",
+        str(data_path),
+        "--results",
+        str(results_dir),
+        "--num-workers-analyze",
+        "8",
         "--overwrite",
     ]
     entry.analyze_entry(argv)
@@ -215,8 +213,10 @@ def test_num_workers_analyze_defaults_to_one(tmp_path, monkeypatch):
     results_dir = tmp_path / "out"
 
     argv = [
-        "--data", str(data_path),
-        "--results", str(results_dir),
+        "--data",
+        str(data_path),
+        "--results",
+        str(results_dir),
         "--overwrite",
     ]
     entry.analyze_entry(argv)
@@ -224,9 +224,7 @@ def test_num_workers_analyze_defaults_to_one(tmp_path, monkeypatch):
     assert created["analyzer"].cli.num_workers_analyze == 1
 
 
-def test_analyze_entry_uses_default_results_when_not_provided(
-    tmp_path, monkeypatch
-):
+def test_analyze_entry_uses_default_results_when_not_provided(tmp_path, monkeypatch):
     """Without --results, should create ./results (under CWD) and still run."""
     _patch_argparse(["--data", "x"], monkeypatch)
     monkeypatch.chdir(tmp_path)

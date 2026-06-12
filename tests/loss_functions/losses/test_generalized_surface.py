@@ -1,6 +1,5 @@
 """Unit tests for the Generalized Surface Loss (GSL)."""
 
-
 import torch
 import pytest
 
@@ -19,9 +18,7 @@ def _make_mock_data(
         y_pred: (B, C, H, W, D)
         dtm:    (B, C, H, W, D)
     """
-    y_true = torch.randint(
-        0, n_classes, size=(batch_size, 1, size, size, size)
-    )
+    y_true = torch.randint(0, n_classes, size=(batch_size, 1, size, size, size))
     y_pred = torch.randn((batch_size, n_classes, size, size, size))
     dtm = torch.abs(torch.randn((batch_size, n_classes, size, size, size)))
     return y_true, y_pred, dtm
@@ -81,7 +78,7 @@ class TestGenSurfLoss:
         diff = 1.0 - (y_true_fg + y_pred_fg)
 
         numerator = torch.sum((dtm_fg * diff) ** 2, dim=dims)
-        denominator = torch.sum(dtm_fg ** 2, dim=dims) + eps
+        denominator = torch.sum(dtm_fg**2, dim=dims) + eps
 
         expected_surf_loss = torch.mean(1.0 - numerator / denominator)
 
@@ -91,7 +88,7 @@ class TestGenSurfLoss:
         """Test surface math works correctly when exclude_background=True.
 
         In this case, preprocess() removes the background from predictions
-        automatically, so the manual slice for predictions is skipped, 
+        automatically, so the manual slice for predictions is skipped,
         but DTM must still be sliced.
         """
         # 1. Setup: exclude_background=True.
@@ -117,7 +114,7 @@ class TestGenSurfLoss:
         diff = 1.0 - (y_true_oh + y_pred_soft)
 
         numerator = torch.sum((dtm_fg * diff) ** 2, dim=dims)
-        denominator = torch.sum(dtm_fg ** 2, dim=dims) + eps
+        denominator = torch.sum(dtm_fg**2, dim=dims) + eps
 
         expected_surf_loss = torch.mean(1.0 - numerator / denominator)
 

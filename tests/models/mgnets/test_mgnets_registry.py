@@ -42,9 +42,15 @@ class TestCreateMgnet:
         with pytest.raises(ValueError, match="Unknown MGNet variant"):
             create_mgnet("unknown_variant", **base_kwargs)
 
-    @pytest.mark.parametrize("missing_key", [
-        "in_channels", "out_channels", "patch_size", "target_spacing",
-    ])
+    @pytest.mark.parametrize(
+        "missing_key",
+        [
+            "in_channels",
+            "out_channels",
+            "patch_size",
+            "target_spacing",
+        ],
+    )
     def test_missing_required_key_raises(self, base_kwargs, missing_key):
         del base_kwargs[missing_key]
         with pytest.raises(ValueError, match=f"Missing required key '{missing_key}'"):

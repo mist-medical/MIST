@@ -1,4 +1,5 @@
 """Converts data from csv files to MIST format."""
+
 import concurrent.futures
 from pathlib import Path
 from typing import Any
@@ -43,13 +44,10 @@ def _validate_csv_columns(df: pd.DataFrame, mode: str) -> None:
     else:
         if len(columns) < 2:
             raise ValueError(
-                "Test CSV must have at least 2 columns: id, image1. "
-                f"Got: {columns}."
+                f"Test CSV must have at least 2 columns: id, image1. Got: {columns}."
             )
         if columns[0] != "id":
-            raise ValueError(
-                f"Test CSV first column must be 'id', got '{columns[0]}'."
-            )
+            raise ValueError(f"Test CSV first column must be 'id', got '{columns[0]}'.")
 
 
 def _copy_single_patient_csv(
@@ -217,8 +215,7 @@ def convert_csv(
         "test-data": "raw/test" if test_df is not None else None,
         "mask": ["mask.nii.gz"],
         "images": {
-            modality: [f"{modality}.nii.gz"]
-            for modality in list(train_df.columns)[2:]
+            modality: [f"{modality}.nii.gz"] for modality in list(train_df.columns)[2:]
         },
         "labels": None,
         "final_classes": None,
@@ -231,8 +228,6 @@ def convert_csv(
     dataset_json_path = dest / "dataset.json"
     print_info(f"MIST dataset parameters written to {dataset_json_path}")
     console.print(dataset_json)
-    print_info(
-        "Please add task, modality, labels, and final classes to parameters."
-    )
+    print_info("Please add task, modality, labels, and final classes to parameters.")
 
     io.write_json_file(dataset_json_path, dataset_json)

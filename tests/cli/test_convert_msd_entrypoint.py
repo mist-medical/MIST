@@ -1,4 +1,5 @@
 """Tests for mist.cli.convert_msd_entrypoint."""
+
 import argparse
 from types import SimpleNamespace
 
@@ -11,33 +12,47 @@ from mist.cli import convert_msd_entrypoint as entry
 # _parse_convert_msd_args
 # ---------------------------------------------------------------------------
 
+
 class TestParseConvertMsdArgs:
     """Tests for convert_msd_entrypoint._parse_convert_msd_args."""
 
     def test_required_args_are_parsed(self, tmp_path):
         """--source and --output are captured correctly."""
-        ns = entry._parse_convert_msd_args([
-            "--source", str(tmp_path / "msd"),
-            "--output", str(tmp_path / "out"),
-        ])
+        ns = entry._parse_convert_msd_args(
+            [
+                "--source",
+                str(tmp_path / "msd"),
+                "--output",
+                str(tmp_path / "out"),
+            ]
+        )
         assert ns.source == str(tmp_path / "msd")
         assert ns.output == str(tmp_path / "out")
 
     def test_num_workers_defaults_to_one(self, tmp_path):
         """--num-workers-conversion is optional and defaults to 1."""
-        ns = entry._parse_convert_msd_args([
-            "--source", str(tmp_path / "msd"),
-            "--output", str(tmp_path / "out"),
-        ])
+        ns = entry._parse_convert_msd_args(
+            [
+                "--source",
+                str(tmp_path / "msd"),
+                "--output",
+                str(tmp_path / "out"),
+            ]
+        )
         assert ns.num_workers_conversion == 1
 
     def test_num_workers_is_parsed(self, tmp_path):
         """--num-workers-conversion is captured as an integer."""
-        ns = entry._parse_convert_msd_args([
-            "--source", str(tmp_path / "msd"),
-            "--output", str(tmp_path / "out"),
-            "--num-workers-conversion", "4",
-        ])
+        ns = entry._parse_convert_msd_args(
+            [
+                "--source",
+                str(tmp_path / "msd"),
+                "--output",
+                str(tmp_path / "out"),
+                "--num-workers-conversion",
+                "4",
+            ]
+        )
         assert ns.num_workers_conversion == 4
 
     def test_missing_source_exits(self, tmp_path):
@@ -54,6 +69,7 @@ class TestParseConvertMsdArgs:
 # ---------------------------------------------------------------------------
 # run_convert_msd
 # ---------------------------------------------------------------------------
+
 
 class TestRunConvertMsd:
     """Tests for convert_msd_entrypoint.run_convert_msd."""
@@ -109,6 +125,7 @@ class TestRunConvertMsd:
 # convert_msd_entry (integration)
 # ---------------------------------------------------------------------------
 
+
 class TestConvertMsdEntry:
     """Tests for convert_msd_entrypoint.convert_msd_entry."""
 
@@ -120,9 +137,7 @@ class TestConvertMsdEntry:
         monkeypatch.setattr(
             entry,
             "_parse_convert_msd_args",
-            lambda argv=None: (
-                called.__setitem__("parsed", True) or ns
-            ),
+            lambda argv=None: called.__setitem__("parsed", True) or ns,
             raising=True,
         )
         monkeypatch.setattr(

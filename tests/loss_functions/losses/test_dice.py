@@ -1,6 +1,5 @@
 """Unit tests for DiceLoss in MIST."""
 
-
 import torch
 
 from mist.loss_functions.losses.dice import DiceLoss
@@ -24,9 +23,7 @@ def _make_mock_data(
             - y_pred: Logits (B, C, H, W, D).
     """
     # Ground truth: Integer labels with channel dim (B, 1, H, W, D).
-    y_true = torch.randint(
-        0, n_classes, size=(batch_size, 1, size, size, size)
-    )
+    y_true = torch.randint(0, n_classes, size=(batch_size, 1, size, size, size))
     # Predictions: Logits (B, C, H, W, D).
     y_pred = torch.randn((batch_size, n_classes, size, size, size))
     return y_true, y_pred

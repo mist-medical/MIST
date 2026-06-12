@@ -1,4 +1,5 @@
 """Factory method to create MedNeXt model variants."""
+
 # MIST imports.
 from mist.models.mednext.mist_mednext import MedNeXt
 from mist.models.model_registry import register_model
@@ -22,9 +23,7 @@ def create_mednext(variant: str, **kwargs) -> MedNeXt:
     required_keys = ["in_channels", "out_channels"]
     for key in required_keys:
         if key not in kwargs:
-            raise ValueError(
-                f"Missing required key '{key}' in model configuration."
-            )
+            raise ValueError(f"Missing required key '{key}' in model configuration.")
 
     common_args = {
         "in_channels": kwargs["in_channels"],

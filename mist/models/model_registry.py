@@ -1,4 +1,5 @@
 """Model registry for managing architecture creation in MIST."""
+
 from collections.abc import Callable
 
 # Dictionary mapping model names to builder functions.
@@ -15,11 +16,13 @@ def register_model(name: str) -> Callable:
     Returns:
         The original function, unmodified.
     """
+
     def decorator(fn: Callable) -> Callable:
         if name in MODEL_REGISTRY:
             raise ValueError(f"Model '{name}' is already registered.")
         MODEL_REGISTRY[name] = fn
         return fn
+
     return decorator
 
 

@@ -1,4 +1,5 @@
 """Postprocessor class for applying transforms to prediction masks."""
+
 import concurrent.futures
 import shutil
 from pathlib import Path
@@ -63,13 +64,12 @@ def _postprocess_single_file(
                 mask.numpy().astype(np.uint8),
                 labels_list=label_group,
                 per_label=per_label_flag,
-                **kwargs
+                **kwargs,
             ).astype(np.uint8)
             mask = mask.new_image_like(updated_npy)  # type: ignore
         except ValueError as e:
             messages.append(
-                f"[red]Error applying {transform_name} to {patient_id}: "
-                f"{e}[/red]"
+                f"[red]Error applying {transform_name} to {patient_id}: {e}[/red]"
             )
 
     ants.image_write(mask, str(output_path))
@@ -125,9 +125,7 @@ class Postprocessor:
 
         # Ensure the loaded data is a list of dicts.
         if not isinstance(raw_strategy, list):
-            raise ValueError(
-                "Strategy file must contain a list of strategy steps."
-            )
+            raise ValueError("Strategy file must contain a list of strategy steps.")
 
         # Cast the raw strategy to a list of StrategyStep.
         # This is a type hinting step and does not perform any validation.
@@ -140,20 +138,15 @@ class Postprocessor:
             if "apply_to_labels" not in step:
                 raise ValueError(f"Missing 'apply_to_labels' key in step {i}.")
             if "per_label" not in step:
-                raise ValueError(
-                    f"Missing 'per_label' key in step {i}."
-                )
-            if (
-                not isinstance(step["apply_to_labels"], list) or
-                not all(isinstance(lbl, int) for lbl in step["apply_to_labels"])
+                raise ValueError(f"Missing 'per_label' key in step {i}.")
+            if not isinstance(step["apply_to_labels"], list) or not all(
+                isinstance(lbl, int) for lbl in step["apply_to_labels"]
             ):
                 raise ValueError(
                     f"'apply_to_labels' in step {i} must be a list of integers."
                 )
             if not isinstance(step["per_label"], bool):
-                raise ValueError(
-                    f"'per_label' in step {i} must be a boolean."
-                )
+                raise ValueError(f"'per_label' in step {i} must be a boolean.")
             if step["transform"] not in POSTPROCESSING_TRANSFORMS:
                 raise ValueError(
                     f"Unknown transform '{step['transform']}' in step {i}. "
@@ -183,9 +176,7 @@ class Postprocessor:
         Returns:
             List of valid .nii.gz file paths.
         """
-        all_candidates = [
-            p for p in base_dir.iterdir() if p.name.endswith(".nii.gz")
-        ]
+        all_candidates = [p for p in base_dir.iterdir() if p.name.endswith(".nii.gz")]
 
         valid_files = []
         skipped_files = []
@@ -216,14 +207,12 @@ class Postprocessor:
         for name, per_label_flag, label_group in zip(
             self.transforms, self.per_label, self.apply_to_labels
         ):
-            labels = ', '.join(map(str, label_group))
+            labels = ", ".join(map(str, label_group))
             table.add_row(name, str(per_label_flag), labels)
         console.print(table)
 
     def apply_strategy_to_single_example(
-            self,
-            patient_id: str,
-            mask: ants.core.ants_image.ANTsImage
+        self, patient_id: str, mask: ants.core.ants_image.ANTsImage
     ) -> tuple[ants.core.ants_image.ANTsImage, list[str]]:
         """Apply all transforms in the strategy to a single ANTsImage mask.
 
@@ -237,10 +226,7 @@ class Postprocessor:
         messages: list[str] = []
 
         for transform_name, per_label_flag, label_group, kwargs in zip(
-            self.transforms,
-            self.per_label,
-            self.apply_to_labels,
-            self.transform_kwargs
+            self.transforms, self.per_label, self.apply_to_labels, self.transform_kwargs
         ):
             try:
                 transform_fn = get_transform(transform_name)
@@ -248,12 +234,11 @@ class Postprocessor:
                     mask.numpy().astype(np.uint8),
                     labels_list=label_group,
                     per_label=per_label_flag,
-                    **kwargs
+                    **kwargs,
                 ).astype(np.uint8)
             except ValueError as e:
                 messages.append(
-                    f"[red]Error applying {transform_name} to {patient_id}: "
-                    f"{e}[/red]"
+                    f"[red]Error applying {transform_name} to {patient_id}: {e}[/red]"
                 )
             else:
                 mask = mask.new_image_like(updated_npy)  # type: ignore
@@ -279,8 +264,7 @@ class Postprocessor:
         base_filepaths = self._gather_base_filepaths(base_dir)
         if not base_filepaths:
             print_warning(
-                "No .nii.gz files found in base directory. "
-                "Nothing to postprocess."
+                "No .nii.gz files found in base directory. Nothing to postprocess."
             )
             return
         self._print_strategy()
@@ -301,9 +285,7 @@ class Postprocessor:
                 ): fp
                 for fp in base_filepaths
             }
-            with progress_bar.get_progress_bar(
-                "Applying strategy to examples"
-            ) as pb:
+            with progress_bar.get_progress_bar("Applying strategy to examples") as pb:
                 for future in pb.track(
                     concurrent.futures.as_completed(future_to_path),
                     total=len(base_filepaths),
@@ -313,8 +295,7 @@ class Postprocessor:
                     except Exception as e:  # pylint: disable=broad-except
                         fp = future_to_path[future]
                         messages.append(
-                            f"[red]Unexpected error processing "
-                            f"{fp.name}: {e}[/red]"
+                            f"[red]Unexpected error processing {fp.name}: {e}[/red]"
                         )
 
         if messages:

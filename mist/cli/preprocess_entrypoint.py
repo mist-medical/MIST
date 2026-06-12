@@ -1,4 +1,5 @@
 """Entrypoint for the preprocessing pipeline."""
+
 from argparse import ArgumentDefaultsHelpFormatter
 from pathlib import Path
 import argparse
@@ -9,9 +10,7 @@ from mist.preprocessing import preprocess
 from mist.utils.console import print_warning
 
 
-def _parse_preprocess_args(
-    argv: list[str] | None = None
-) -> argparse.Namespace:
+def _parse_preprocess_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse CLI for the preprocessing pipeline."""
     parser = argmod.ArgParser(
         formatter_class=ArgumentDefaultsHelpFormatter,
@@ -40,9 +39,7 @@ def _ensure_analyze_artifacts(ns: argparse.Namespace) -> Path:
     """Verify the results dir exists and has analyzer outputs."""
     results_dir = Path(ns.results).expanduser().resolve()
     if not results_dir.is_dir():
-        raise FileNotFoundError(
-            f"Results directory does not exist: {results_dir}"
-        )
+        raise FileNotFoundError(f"Results directory does not exist: {results_dir}")
 
     required = ["config.json", "train_paths.csv", "fg_bboxes.csv"]
     missing = [f for f in required if not (results_dir / f).is_file()]
@@ -69,9 +66,7 @@ def _prepare_preprocess_dirs(ns: argparse.Namespace) -> None:
                 "Use --overwrite or choose a different --numpy directory."
             )
         if non_empty and getattr(ns, "overwrite", False):
-            print_warning(
-                f"Overwriting existing preprocessed data in {numpy_dir}"
-            )
+            print_warning(f"Overwriting existing preprocessed data in {numpy_dir}")
 
     numpy_dir.mkdir(parents=True, exist_ok=True)
 

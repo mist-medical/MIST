@@ -3,6 +3,7 @@
 
 class LesionWiseMetricsConstants:
     """Constants for lesion-wise metric computation."""
+
     # Minimum GT lesion volume in mm³ to include in analysis. Lesions smaller
     # than this are excluded from both GT counting and FP detection.
     MIN_LESION_VOLUME = 10.0

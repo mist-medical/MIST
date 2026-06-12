@@ -1,4 +1,5 @@
 """Tests for MIST training entrypoint CLI."""
+
 import argparse
 import json
 from pathlib import Path
@@ -13,6 +14,7 @@ from mist.utils import console as console_mod
 # =============================================================================
 # Helpers and minimal patching for ArgParser.
 # =============================================================================
+
 
 # pylint: disable=protected-access
 class _DummyTrainer:
@@ -43,9 +45,7 @@ def _patch_minimal_cli(monkeypatch) -> None:
         parser.add_argument("--resume", action="store_true")
 
     monkeypatch.setattr(entry.argmod, "ArgParser", _mk_parser, raising=True)
-    monkeypatch.setattr(
-        entry.argmod, "add_train_args", _add_train_args, raising=True
-    )
+    monkeypatch.setattr(entry.argmod, "add_train_args", _add_train_args, raising=True)
 
 
 class _NoGrad:
@@ -80,9 +80,7 @@ def test_parse_train_args_explicit(tmp_path, monkeypatch):
     _patch_minimal_cli(monkeypatch)
     res = tmp_path / "out"
     npy = tmp_path / "np"
-    ns = entry._parse_train_args(
-        argv=["--results", str(res), "--numpy", str(npy)]
-    )
+    ns = entry._parse_train_args(argv=["--results", str(res), "--numpy", str(npy)])
     assert ns.results == str(res)
     assert ns.numpy == str(npy)
 
@@ -117,9 +115,7 @@ def test_ensure_required_artifacts_happy_and_test_flag(tmp_path):
     _ensure_numpy_dirs(numpy_dir)
 
     ns = argparse.Namespace(results=str(results_dir), numpy=str(numpy_dir))
-    got_results, has_test = entry._ensure_required_artifacts(
-        ns
-    )
+    got_results, has_test = entry._ensure_required_artifacts(ns)
     assert got_results == results_dir.resolve()
     assert has_test is True
 
@@ -128,9 +124,7 @@ def test_ensure_required_artifacts_missing_results_dir(tmp_path):
     """It raises when results directory does not exist."""
     numpy_dir = tmp_path / "numpy"
     numpy_dir.mkdir()
-    ns = argparse.Namespace(
-        results=str(tmp_path / "missing"), numpy=str(numpy_dir)
-    )
+    ns = argparse.Namespace(results=str(tmp_path / "missing"), numpy=str(numpy_dir))
     with pytest.raises(FileNotFoundError):
         entry._ensure_required_artifacts(ns)
 
@@ -148,9 +142,7 @@ def test_ensure_required_artifacts_missing_results_files(tmp_path):
     ns = argparse.Namespace(results=str(results_dir), numpy=str(numpy_dir))
     with pytest.raises(FileNotFoundError) as e:
         entry._ensure_required_artifacts(ns)
-    assert "train_paths.csv" in str(e.value) and "fg_bboxes.csv" in str(
-        e.value
-    )
+    assert "train_paths.csv" in str(e.value) and "fg_bboxes.csv" in str(e.value)
 
 
 def test_ensure_required_artifacts_missing_numpy_dirs(tmp_path):
@@ -221,9 +213,7 @@ def test_create_train_dirs_makes_structure(tmp_path, has_test_paths):
 # =============================================================================
 
 
-def test_train_entry_resume_and_overwrite_are_mutually_exclusive(
-    tmp_path, monkeypatch
-):
+def test_train_entry_resume_and_overwrite_are_mutually_exclusive(tmp_path, monkeypatch):
     """It raises ValueError when both --resume and --overwrite are passed."""
     _patch_minimal_cli(monkeypatch)
 
@@ -235,8 +225,10 @@ def test_train_entry_resume_and_overwrite_are_mutually_exclusive(
     _ensure_numpy_dirs(numpy_dir)
 
     argv = [
-        "--results", str(results_dir),
-        "--numpy", str(numpy_dir),
+        "--results",
+        str(results_dir),
+        "--numpy",
+        str(numpy_dir),
         "--resume",
         "--overwrite",
     ]
@@ -260,9 +252,7 @@ def test_train_entry_blocks_existing_results_csv_without_overwrite(
     (results_dir / "results.csv").write_text("already here")
 
     # Ensure no GPU-driven crash by mocking device_count.
-    monkeypatch.setattr(
-        entry.torch.cuda, "device_count", lambda: 1, raising=True
-    )
+    monkeypatch.setattr(entry.torch.cuda, "device_count", lambda: 1, raising=True)
 
     # If trainer is constructed, fail—we should block earlier.
     monkeypatch.setattr(
@@ -300,17 +290,11 @@ def test_train_entry_happy_path_no_test_empty_eval(tmp_path, monkeypatch):
             "params": {"surf_dice_tol": 1.0},
         },
     }
-    monkeypatch.setattr(
-        entry.io, "read_json_file", lambda p: config, raising=True
-    )
+    monkeypatch.setattr(entry.io, "read_json_file", lambda p: config, raising=True)
 
     # GPU availability
-    monkeypatch.setattr(
-        entry.torch.cuda, "device_count", lambda: 1, raising=True
-    )
-    monkeypatch.setattr(
-        entry.torch, "no_grad", lambda: _NoGrad(), raising=True
-    )
+    monkeypatch.setattr(entry.torch.cuda, "device_count", lambda: 1, raising=True)
+    monkeypatch.setattr(entry.torch, "no_grad", lambda: _NoGrad(), raising=True)
 
     # Trainer stub.
     created = {}
@@ -341,7 +325,8 @@ def test_train_entry_happy_path_no_test_empty_eval(tmp_path, monkeypatch):
     # Capture console prints.
     logs = []
     monkeypatch.setattr(
-        console_mod.console, "print",
+        console_mod.console,
+        "print",
         lambda msg, **k: logs.append(str(msg)),
     )
 
@@ -356,8 +341,10 @@ def test_train_entry_happy_path_no_test_empty_eval(tmp_path, monkeypatch):
     )
 
     argv = [
-        "--results", str(results_dir),
-        "--numpy", str(numpy_dir),
+        "--results",
+        str(results_dir),
+        "--numpy",
+        str(numpy_dir),
         "--overwrite",
     ]
     entry.train_entry(argv)
@@ -375,9 +362,7 @@ def test_train_entry_happy_path_no_test_empty_eval(tmp_path, monkeypatch):
     assert not (results_dir / "evaluation_paths.csv").exists()
 
 
-def test_train_entry_happy_path_with_eval_and_test_infer(
-    tmp_path, monkeypatch
-):
+def test_train_entry_happy_path_with_eval_and_test_infer(tmp_path, monkeypatch):
     """Run eval and test inference when pairs exist and test set present."""
     _patch_minimal_cli(monkeypatch)
 
@@ -401,23 +386,15 @@ def test_train_entry_happy_path_with_eval_and_test_infer(
         },
     }
     (results_dir / "config.json").write_text(json.dumps(config))
-    monkeypatch.setattr(
-        entry.io, "read_json_file", lambda p: config, raising=True
-    )
+    monkeypatch.setattr(entry.io, "read_json_file", lambda p: config, raising=True)
 
     # GPU availability.
-    monkeypatch.setattr(
-        entry.torch.cuda, "device_count", lambda: 2, raising=True
-    )
-    monkeypatch.setattr(
-        entry.torch, "no_grad", lambda: _NoGrad(), raising=True
-    )
+    monkeypatch.setattr(entry.torch.cuda, "device_count", lambda: 2, raising=True)
+    monkeypatch.setattr(entry.torch, "no_grad", lambda: _NoGrad(), raising=True)
 
     # Trainer stub.
     trainer = _DummyTrainer(argparse.Namespace())
-    monkeypatch.setattr(
-        entry, "Patch3DTrainer", lambda ns: trainer, raising=True
-    )
+    monkeypatch.setattr(entry, "Patch3DTrainer", lambda ns: trainer, raising=True)
 
     # Fold test tracker.
     folds_called: list[int] = []
@@ -478,8 +455,10 @@ def test_train_entry_happy_path_with_eval_and_test_infer(
     )
 
     argv = [
-        "--results", str(results_dir),
-        "--numpy", str(numpy_dir),
+        "--results",
+        str(results_dir),
+        "--numpy",
+        str(numpy_dir),
         "--overwrite",
     ]
     entry.train_entry(argv)

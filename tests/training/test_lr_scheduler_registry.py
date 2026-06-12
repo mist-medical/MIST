@@ -1,4 +1,5 @@
 """Tests for the learning rate scheduler registry in MIST."""
+
 import pytest
 import torch
 

@@ -4,6 +4,7 @@ This module defines the TTA strategies used in MIST. Each strategy is
 a list of TTA transforms that are applied to the input image. The predictions
 then undergo an inverse transformation to obtain the final prediction.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -20,6 +21,7 @@ TTA_STRATEGY_REGISTRY: dict[str, type[TTAStrategy]] = {}
 
 def register_strategy(name: str) -> Callable[[type[T]], type[T]]:
     """Decorator to register a TTA strategy class by name."""
+
     def decorator(cls: type[T]) -> type[T]:
         if not issubclass(cls, TTAStrategy):
             raise TypeError(f"{cls.__name__} must inherit from TTAStrategy.")
@@ -27,6 +29,7 @@ def register_strategy(name: str) -> Callable[[type[T]], type[T]]:
             raise KeyError(f"Strategy '{name}' is already registered.")
         TTA_STRATEGY_REGISTRY[name] = cls  # Register class, not an instance
         return cls
+
     return decorator
 
 

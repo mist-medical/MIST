@@ -1,4 +1,5 @@
 """Constants for the Analyzer class."""
+
 import dataclasses
 from pathlib import Path
 
@@ -8,6 +9,7 @@ import numpy as np
 @dataclasses.dataclass(frozen=True)
 class AnalyzeConstants:
     """Dataclass for constants used in the analyze_data module."""
+
     # RAI orientation direction for ANTs.
     RAI_ANTS_DIRECTION = np.eye(3)
 
@@ -88,7 +90,7 @@ class AnalyzeConstants:
     # Reference GPU memory (bytes) used to scale the patch voxel budget.
     # At this memory level the reference voxel budget is used as-is; smaller
     # GPUs get a proportionally smaller budget and larger GPUs a larger one.
-    PATCH_BUDGET_REFERENCE_GPU_MEMORY_BYTES = 16 * (1024 ** 3)  # 16 GB
+    PATCH_BUDGET_REFERENCE_GPU_MEMORY_BYTES = 16 * (1024**3)  # 16 GB
 
     # Per-patch voxel budget at the reference GPU memory and reference batch
     # size. This is a conservative heuristic chosen to leave headroom for
@@ -96,7 +98,7 @@ class AnalyzeConstants:
     # a specific architecture — heavier models (e.g. MedNeXt-large, SwinUNETR)
     # may require a smaller patch size, which can be set manually in config.json
     # or via --patch-size.
-    PATCH_BUDGET_REFERENCE_VOXELS = 128 ** 3
+    PATCH_BUDGET_REFERENCE_VOXELS = 128**3
 
     # The batch size per GPU assumed when the reference voxel budget was set.
     # Matches the MIST default (training.batch_size_per_gpu = 2). The budget
@@ -105,7 +107,7 @@ class AnalyzeConstants:
     PATCH_BUDGET_REFERENCE_BATCH_SIZE = 2
 
     # Fallback voxel budget used when no CUDA device is available.
-    PATCH_BUDGET_DEFAULT_VOXELS = 128 ** 3
+    PATCH_BUDGET_DEFAULT_VOXELS = 128**3
 
     # Create the base_config.json path.
     BASE_CONFIG_JSON_PATH = Path(__file__).parent / "base_config.json"

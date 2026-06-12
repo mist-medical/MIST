@@ -55,16 +55,27 @@ class TestTrainPipelineInit:
         self, base_pipeline_args
     ):
         """All augmentation flags are forced off when use_augmentation=False."""
-        pipeline = dali_loader.TrainPipeline(**{**base_pipeline_args, "use_augmentation": False})
-        for flag in ("use_flips", "use_zoom", "use_noise", "use_blur",
-                     "use_brightness", "use_contrast"):
+        pipeline = dali_loader.TrainPipeline(
+            **{**base_pipeline_args, "use_augmentation": False}
+        )
+        for flag in (
+            "use_flips",
+            "use_zoom",
+            "use_noise",
+            "use_blur",
+            "use_brightness",
+            "use_contrast",
+        ):
             assert not getattr(pipeline, flag)
 
-    @pytest.mark.parametrize("bad_arg,expected_message", [
-        ("image", "Input images are not valid"),
-        ("label", "Input labels are not valid"),
-        ("dtm", "Input DTMs are not valid"),
-    ])
+    @pytest.mark.parametrize(
+        "bad_arg,expected_message",
+        [
+            ("image", "Input images are not valid"),
+            ("label", "Input labels are not valid"),
+            ("dtm", "Input DTMs are not valid"),
+        ],
+    )
     def test_invalid_inputs_raise(
         self, monkeypatch, bad_arg, expected_message, base_pipeline_args
     ):
@@ -115,7 +126,13 @@ class TestBiasedCropFn:
     @mock.patch("mist.data_loading.dali_loader.fn.segmentation.random_object_bbox")
     @mock.patch("mist.data_loading.dali_loader.fn.pad")
     def test_crops_with_and_without_dtm(
-        self, mock_pad, mock_bbox, mock_crop, mock_slice, base_pipeline_args, use_dtm,
+        self,
+        mock_pad,
+        mock_bbox,
+        mock_crop,
+        mock_slice,
+        base_pipeline_args,
+        use_dtm,
     ):
         """Biased crop returns GPU tensors for each input (image, label[, dtm])."""
         args = {**base_pipeline_args, "dtm_paths": ["dtm.npy"] if use_dtm else None}
@@ -130,7 +147,8 @@ class TestBiasedCropFn:
 
         out = pipeline.biased_crop_fn("image", "label", "dtm" if use_dtm else None)
         expected = (
-            ("gpu_output", "gpu_output", "gpu_output") if use_dtm
+            ("gpu_output", "gpu_output", "gpu_output")
+            if use_dtm
             else ("gpu_output", "gpu_output")
         )
         assert out == expected
@@ -143,7 +161,11 @@ class TestFlipsFn:
     @mock.patch("mist.data_loading.dali_loader.fn.flip")
     @mock.patch("mist.data_loading.dali_loader.fn.random.coin_flip")
     def test_flips_all_inputs(
-        self, mock_coin_flip, mock_flip, base_pipeline_args, use_dtm,
+        self,
+        mock_coin_flip,
+        mock_flip,
+        base_pipeline_args,
+        use_dtm,
     ):
         """Flips are applied to every input tensor (image, label[, dtm])."""
         mock_coin_flip.side_effect = ["flip_h", "flip_v", "flip_d"]
@@ -151,8 +173,11 @@ class TestFlipsFn:
         args = {
             **base_pipeline_args,
             "dtm_paths": ["dtm.npy"] if use_dtm else None,
-            "use_zoom": False, "use_noise": False,
-            "use_blur": False, "use_brightness": False, "use_contrast": False,
+            "use_zoom": False,
+            "use_noise": False,
+            "use_blur": False,
+            "use_brightness": False,
+            "use_contrast": False,
         }
         pipeline = dali_loader.TrainPipeline(**args)
 
@@ -169,7 +194,12 @@ class TestZoomFn:
     @mock.patch("mist.data_loading.dali_loader.fn.random.uniform")
     @mock.patch("mist.data_loading.data_loading_utils.random_augmentation")
     def test_crops_and_resizes_to_roi(
-        self, mock_aug, mock_uniform, mock_crop, mock_resize, base_pipeline_args,
+        self,
+        mock_aug,
+        mock_uniform,
+        mock_crop,
+        mock_resize,
+        base_pipeline_args,
     ):
         """Zoom scales down, crops to scaled dimensions, then resizes back to roi_size."""
         mock_aug.return_value = 0.8
@@ -177,9 +207,13 @@ class TestZoomFn:
         mock_resize.side_effect = lambda x, **kwargs: f"resized_{x}"
         args = {
             **base_pipeline_args,
-            "dtm_paths": None, "labels": [1],
-            "use_flips": False, "use_noise": False,
-            "use_blur": False, "use_brightness": False, "use_contrast": False,
+            "dtm_paths": None,
+            "labels": [1],
+            "use_flips": False,
+            "use_noise": False,
+            "use_blur": False,
+            "use_brightness": False,
+            "use_contrast": False,
         }
         pipeline = dali_loader.TrainPipeline(**args)
 
@@ -195,28 +229,60 @@ class TestDefineGraph:
     """Tests for TrainPipeline.define_graph."""
 
     @pytest.mark.parametrize("use_dtm", [False, True])
-    @mock.patch("mist.data_loading.dali_loader.fn.transpose", side_effect=lambda x, perm: f"transposed_{x}")
+    @mock.patch(
+        "mist.data_loading.dali_loader.fn.transpose",
+        side_effect=lambda x, perm: f"transposed_{x}",
+    )
     @mock.patch.object(dali_loader.TrainPipeline, "flips_fn")
-    @mock.patch.object(dali_loader.TrainPipeline, "zoom_fn", return_value=("zoomed_image", "zoomed_label"))
+    @mock.patch.object(
+        dali_loader.TrainPipeline,
+        "zoom_fn",
+        return_value=("zoomed_image", "zoomed_label"),
+    )
     @mock.patch.object(dali_loader.TrainPipeline, "biased_crop_fn")
     @mock.patch.object(dali_loader.TrainPipeline, "load_data")
-    @mock.patch("mist.data_loading.data_loading_utils.contrast_fn", return_value="contrast_image")
-    @mock.patch("mist.data_loading.data_loading_utils.brightness_fn", return_value="bright_image")
-    @mock.patch("mist.data_loading.data_loading_utils.blur_fn", return_value="blurred_image")
-    @mock.patch("mist.data_loading.data_loading_utils.noise_fn", return_value="noisy_image")
+    @mock.patch(
+        "mist.data_loading.data_loading_utils.contrast_fn",
+        return_value="contrast_image",
+    )
+    @mock.patch(
+        "mist.data_loading.data_loading_utils.brightness_fn",
+        return_value="bright_image",
+    )
+    @mock.patch(
+        "mist.data_loading.data_loading_utils.blur_fn", return_value="blurred_image"
+    )
+    @mock.patch(
+        "mist.data_loading.data_loading_utils.noise_fn", return_value="noisy_image"
+    )
     def test_pipeline_output_with_and_without_dtm(
         self,
-        mock_noise, mock_blur, mock_brightness, mock_contrast,
-        mock_load_data, mock_biased_crop_fn, mock_zoom_fn, mock_flips_fn,
+        mock_noise,
+        mock_blur,
+        mock_brightness,
+        mock_contrast,
+        mock_load_data,
+        mock_biased_crop_fn,
+        mock_zoom_fn,
+        mock_flips_fn,
         mock_transpose,
-        base_pipeline_args, use_dtm,
+        base_pipeline_args,
+        use_dtm,
     ):
         """define_graph returns the correct output tuple with and without DTM."""
         args = {**base_pipeline_args, "dtm_paths": ["dtm.npy"] if use_dtm else None}
         if use_dtm:
             mock_load_data.return_value = ("image_raw", "label_raw", "dtm_raw")
-            mock_biased_crop_fn.return_value = ("cropped_image", "cropped_label", "cropped_dtm")
-            mock_flips_fn.return_value = ("flipped_image", "flipped_label", "flipped_dtm")
+            mock_biased_crop_fn.return_value = (
+                "cropped_image",
+                "cropped_label",
+                "cropped_dtm",
+            )
+            mock_flips_fn.return_value = (
+                "flipped_image",
+                "flipped_label",
+                "flipped_dtm",
+            )
         else:
             mock_load_data.return_value = ("image_raw", "label_raw")
             mock_biased_crop_fn.return_value = ("cropped_image", "cropped_label")
@@ -241,14 +307,22 @@ class TestDefineGraph:
 class TestTestPipelineDefineGraph:
     """Tests for TestPipeline.define_graph."""
 
-    @mock.patch("mist.data_loading.dali_loader.fn.transpose", return_value="transposed_image")
-    @mock.patch("mist.data_loading.dali_loader.fn.reshape", return_value="reshaped_image")
+    @mock.patch(
+        "mist.data_loading.dali_loader.fn.transpose", return_value="transposed_image"
+    )
+    @mock.patch(
+        "mist.data_loading.dali_loader.fn.reshape", return_value="reshaped_image"
+    )
     def test_returns_transposed_image(self, mock_reshape, mock_transpose):
         """Loads, reshapes, and transposes the image tensor."""
         pipeline = dali_loader.TestPipeline(
             image_paths=["test_image.npy"],
-            batch_size=1, num_threads=1, device_id=0,
-            shard_id=0, seed=42, num_gpus=1,
+            batch_size=1,
+            num_threads=1,
+            device_id=0,
+            shard_id=0,
+            seed=42,
+            num_gpus=1,
         )
         mock_gpu = mock.MagicMock()
         mock_gpu.gpu.return_value = "gpu_image"
@@ -264,14 +338,25 @@ class TestTestPipelineDefineGraph:
 class TestEvalPipelineDefineGraph:
     """Tests for EvalPipeline.define_graph."""
 
-    @mock.patch("mist.data_loading.dali_loader.fn.transpose", side_effect=["transposed_image", "transposed_label"])
-    @mock.patch("mist.data_loading.dali_loader.fn.reshape", side_effect=["reshaped_image", "reshaped_label"])
+    @mock.patch(
+        "mist.data_loading.dali_loader.fn.transpose",
+        side_effect=["transposed_image", "transposed_label"],
+    )
+    @mock.patch(
+        "mist.data_loading.dali_loader.fn.reshape",
+        side_effect=["reshaped_image", "reshaped_label"],
+    )
     def test_returns_transposed_image_and_label(self, mock_reshape, mock_transpose):
         """Loads, reshapes, and transposes both image and label tensors."""
         pipeline = dali_loader.EvalPipeline(
-            image_paths=["image1.npy"], label_paths=["label1.npy"],
-            batch_size=1, num_threads=1, device_id=0,
-            shard_id=0, seed=42, num_gpus=1,
+            image_paths=["image1.npy"],
+            label_paths=["label1.npy"],
+            batch_size=1,
+            num_threads=1,
+            device_id=0,
+            shard_id=0,
+            seed=42,
+            num_gpus=1,
         )
         mock_image_tensor = mock.MagicMock()
         mock_image_tensor.gpu.return_value = "gpu_image"
@@ -285,29 +370,40 @@ class TestEvalPipelineDefineGraph:
 
         assert image == "transposed_image"
         assert label == "transposed_label"
-        mock_reshape.assert_has_calls([
-            mock.call("gpu_image", layout="DHWC"),
-            mock.call("gpu_label", layout="DHWC"),
-        ])
-        mock_transpose.assert_has_calls([
-            mock.call("reshaped_image", perm=[3, 0, 1, 2]),
-            mock.call("reshaped_label", perm=[3, 0, 1, 2]),
-        ])
+        mock_reshape.assert_has_calls(
+            [
+                mock.call("gpu_image", layout="DHWC"),
+                mock.call("gpu_label", layout="DHWC"),
+            ]
+        )
+        mock_transpose.assert_has_calls(
+            [
+                mock.call("reshaped_image", perm=[3, 0, 1, 2]),
+                mock.call("reshaped_label", perm=[3, 0, 1, 2]),
+            ]
+        )
 
 
 class TestGetTrainingDataset:
     """Tests for dali_loader.get_training_dataset."""
 
-    @pytest.mark.parametrize("dtm_paths,expected_keys", [
-        (["dtm.npy"], ["image", "label", "dtm"]),
-        (None, ["image", "label"]),
-    ])
+    @pytest.mark.parametrize(
+        "dtm_paths,expected_keys",
+        [
+            (["dtm.npy"], ["image", "label", "dtm"]),
+            (None, ["image", "label"]),
+        ],
+    )
     @mock.patch("mist.data_loading.dali_loader.DALIGenericIterator")
     @mock.patch("mist.data_loading.dali_loader.TrainPipeline")
     @mock.patch("mist.data_loading.data_loading_utils.validate_train_and_eval_inputs")
     def test_returns_dali_iterator(
-        self, mock_validate, mock_train_pipeline, mock_dali_iter,
-        dtm_paths, expected_keys,
+        self,
+        mock_validate,
+        mock_train_pipeline,
+        mock_dali_iter,
+        dtm_paths,
+        expected_keys,
     ):
         """Returns a DALIGenericIterator with correct output keys."""
         result = dali_loader.get_training_dataset(
@@ -329,7 +425,9 @@ class TestGetTrainingDataset:
         assert "dimension" not in call_kwargs, (
             "dimension was removed from TrainPipeline; must not be passed at call site"
         )
-        mock_dali_iter.assert_called_once_with(mock_train_pipeline.return_value, expected_keys)
+        mock_dali_iter.assert_called_once_with(
+            mock_train_pipeline.return_value, expected_keys
+        )
         assert result == mock_dali_iter.return_value
 
 
@@ -351,7 +449,9 @@ class TestGetValidationDataset:
         )
         mock_validate.assert_called_once_with(["image.npy"], ["label.npy"])
         mock_pipeline.assert_called_once()
-        mock_dali_iter.assert_called_once_with(mock_pipeline.return_value, ["image", "label"])
+        mock_dali_iter.assert_called_once_with(
+            mock_pipeline.return_value, ["image", "label"]
+        )
         assert result == mock_dali_iter.return_value
 
 
@@ -364,7 +464,10 @@ class TestGetTestDataset:
         """Returns a DALIGenericIterator with image key."""
         result = dali_loader.get_test_dataset(
             image_paths=["image.npy"],
-            seed=42, num_workers=1, rank=0, world_size=1,
+            seed=42,
+            num_workers=1,
+            rank=0,
+            world_size=1,
         )
         mock_pipeline.assert_called_once()
         mock_dali_iter.assert_called_once_with(mock_pipeline.return_value, ["image"])
@@ -374,5 +477,9 @@ class TestGetTestDataset:
         """Raises ValueError when no images are provided."""
         with pytest.raises(ValueError, match="No images found!"):
             dali_loader.get_test_dataset(
-                image_paths=[], seed=42, num_workers=1, rank=0, world_size=1,
+                image_paths=[],
+                seed=42,
+                num_workers=1,
+                rank=0,
+                world_size=1,
             )

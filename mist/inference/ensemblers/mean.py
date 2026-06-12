@@ -23,8 +23,10 @@ class MeanEnsembler(AbstractEnsembler):
         if not predictions:
             raise ValueError("MeanEnsembler requires at least one prediction.")
 
-        stacked = torch.stack(predictions, dim=0)  # Shape: (N, 1, C, D, H, W)
-        mean_prediction = torch.mean(stacked, dim=0)  # Shape: (1, C, D, H, W)
+        mean_prediction = torch.zeros_like(predictions[0])
+        for p in predictions:
+            mean_prediction += p
+        mean_prediction /= len(predictions)
         return mean_prediction
 
     def __repr__(self):

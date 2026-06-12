@@ -1,4 +1,5 @@
 """Tests for MIST ensemblers."""
+
 import torch
 import pytest
 
@@ -8,7 +9,7 @@ from mist.inference.ensemblers.mean import MeanEnsembler
 from mist.inference.ensemblers.ensembler_registry import (
     get_ensembler,
     list_ensemblers,
-    register_ensembler
+    register_ensembler,
 )
 
 
@@ -74,10 +75,12 @@ def test_registry_get_ensembler_invalid_name():
 
 def test_registry_rejects_invalid_class():
     """Test that registering a non-Ensembler class raises TypeError."""
+
     class NotAnEnsembler:
         pass
 
     with pytest.raises(TypeError, match="must inherit from AbstractEnsembler"):
+
         @register_ensembler("invalid_class")
         class Invalid(NotAnEnsembler):
             pass
@@ -86,6 +89,7 @@ def test_registry_rejects_invalid_class():
 def test_registry_rejects_duplicate_name():
     """Test that duplicate registration raises KeyError."""
     with pytest.raises(KeyError, match="already registered"):
+
         @register_ensembler("mean")
         class DuplicateMean(AbstractEnsembler):
             def combine(self, predictions):

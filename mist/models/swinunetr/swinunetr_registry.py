@@ -28,9 +28,7 @@ def create_swinunetr(variant: str, **kwargs) -> MistSwinUNETR:
     required_keys = ["in_channels", "out_channels"]
     for key in required_keys:
         if key not in kwargs:
-            raise ValueError(
-                f"Missing required key '{key}' in model configuration."
-            )
+            raise ValueError(f"Missing required key '{key}' in model configuration.")
 
     feature_size_map = {"small": 24, "base": 48, "large": 96}
     variant = variant.lower()

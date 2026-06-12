@@ -203,8 +203,7 @@ def get_default_scheduler_config(name: str) -> dict[str, Any]:
     params = {
         k: v.default
         for k, v in inspect.signature(cls.__init__).parameters.items()
-        if k not in ("self", "num_epochs")
-        and v.default is not inspect.Parameter.empty
+        if k not in ("self", "num_epochs") and v.default is not inspect.Parameter.empty
     }
     return {"name": name, "params": params}
 

@@ -1,4 +1,5 @@
 """Postprocessing utilities for MIST predictions."""
+
 from typing import Any, TypedDict, cast
 import numpy as np
 import numpy.typing as npt
@@ -8,6 +9,7 @@ from scipy import ndimage
 
 class StrategyStep(TypedDict):
     """TypedDict for a single step in the postprocessing strategy."""
+
     transform: str
     apply_to_labels: list[int]
     per_label: bool
@@ -15,8 +17,7 @@ class StrategyStep(TypedDict):
 
 
 def group_labels_in_mask(
-    mask_npy: npt.NDArray[Any],
-    labels_list: list[int]
+    mask_npy: npt.NDArray[Any], labels_list: list[int]
 ) -> npt.NDArray[Any]:
     """Extract a group of labels from a multi-label mask.
 
@@ -35,9 +36,7 @@ def group_labels_in_mask(
 
     if not use_all_labels:
         if any(label <= 0 for label in labels_list):
-            raise ValueError(
-                "All labels in labels_list must be strictly positive."
-            )
+            raise ValueError("All labels in labels_list must be strictly positive.")
         mask = np.isin(mask_npy, labels_list)
     else:
         mask = mask_npy > 0
@@ -67,9 +66,7 @@ def remove_small_objects_binary(
     # Explicitly cast to ndarray because skimage.measure.label has multiple
     # return types, and we are using it with return_num=False, which always
     # returns an ndarray.
-    labeled = cast(
-        np.ndarray, skimage.measure.label(binary_mask, return_num=False)
-    )
+    labeled = cast(np.ndarray, skimage.measure.label(binary_mask, return_num=False))
 
     # If there is only one non-zero label, pass a boolean array to
     # remove_small_objects. This helps avoid a warning from remove_small_objects
@@ -77,9 +74,7 @@ def remove_small_objects_binary(
     if labeled.max() == 1:
         labeled = labeled.astype(bool)
 
-    cleaned = skimage.morphology.remove_small_objects(
-        labeled, min_size=threshold
-    )
+    cleaned = skimage.morphology.remove_small_objects(labeled, min_size=threshold)
     return cleaned.astype(bool)
 
 
@@ -112,18 +107,14 @@ def get_top_k_connected_components_binary(
     # Optionally apply binary erosion to clean up small connections before
     # labeling.
     if morph_cleanup:
-        binary_mask = ndimage.binary_erosion(
-            binary_mask, iterations=morph_iterations
-        )
+        binary_mask = ndimage.binary_erosion(binary_mask, iterations=morph_iterations)
 
     # Label connected components in the mask.
     # Each connected component gets a unique integer label.
     # Explicitly cast to ndarray because skimage.measure.label has multiple
     # return types, and we are using it with return_num=False, which always
     # returns an ndarray.
-    labeled = cast(
-        np.ndarray, skimage.measure.label(binary_mask, return_num=False)
-    )
+    labeled = cast(np.ndarray, skimage.measure.label(binary_mask, return_num=False))
 
     # Compute the size of each connected component.
     # We exclude the background (label 0) using [1:].
@@ -143,9 +134,7 @@ def get_top_k_connected_components_binary(
 
     # Optionally apply binary dilation to restore component size after erosion.
     if morph_cleanup:
-        top_k_mask = ndimage.binary_dilation(
-            top_k_mask, iterations=morph_iterations
-        )
+        top_k_mask = ndimage.binary_dilation(top_k_mask, iterations=morph_iterations)
 
     # Return the final binary mask containing only the top K components.
     return top_k_mask.astype(bool)
@@ -180,9 +169,7 @@ def replace_small_objects_binary(
     # Explicitly cast to ndarray because skimage.measure.label has multiple
     # return types, and we are using it with return_num=False, which always
     # returns an ndarray.
-    labeled = cast(
-        np.ndarray, skimage.measure.label(binary_mask, return_num=False)
-    )
+    labeled = cast(np.ndarray, skimage.measure.label(binary_mask, return_num=False))
 
     # regionprops extracts stats for each component, including pixel
     # coordinates.

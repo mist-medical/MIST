@@ -1,4 +1,5 @@
 """Converts medical segmentation decathlon dataset to MIST dataset."""
+
 import concurrent.futures
 from pathlib import Path
 from typing import Any
@@ -69,9 +70,7 @@ def _copy_single_patient_msd(
             img_j.SetDirection(direction)
             img_j.SetSpacing(spacing)
             img_j.SetOrigin(origin)
-            sitk.WriteImage(
-                img_j, str(patient_directory / f"{modality}.nii.gz")
-            )
+            sitk.WriteImage(img_j, str(patient_directory / f"{modality}.nii.gz"))
     else:
         conversion_utils.copy_image_from_source_to_dest(
             image_path, patient_directory / f"{modalities[0]}.nii.gz"
@@ -122,8 +121,13 @@ def copy_msd_data(
         future_to_patient = {
             executor.submit(
                 _copy_single_patient_msd,
-                p, source, dest, modalities, is_training,
-                image_source_dir, dest_mode_dir,
+                p,
+                source,
+                dest,
+                modalities,
+                is_training,
+                image_source_dir,
+                dest_mode_dir,
             ): p
             for p in patients
         }
@@ -214,20 +218,21 @@ def convert_msd(
     dataset_json = {
         "task": msd_json["name"],
         "modality": (
-            "ct" if "ct" in modalities_lower
-            else "mr" if "mri" in modalities_lower
+            "ct"
+            if "ct" in modalities_lower
+            else "mr"
+            if "mri" in modalities_lower
             else "other"
         ),
         "train-data": "raw/train",
         "test-data": "raw/test" if test_data_exists else None,
         "mask": ["mask.nii.gz"],
-        "images": {
-            mod: [f"{mod}.nii.gz"] for mod in modalities.values()
-        },
+        "images": {mod: [f"{mod}.nii.gz"] for mod in modalities.values()},
         "labels": labels_list,
         "final_classes": {
             msd_json["labels"][str(label)].replace(" ", "_"): [label]
-            for label in labels_list if label != 0
+            for label in labels_list
+            if label != 0
         },
     }
 
@@ -238,8 +243,6 @@ def convert_msd(
     output_json_path = dest / "dataset.json"
     print_info(f"MIST dataset parameters written to {output_json_path}")
     console.print(dataset_json)
-    print_info(
-        "Please add task, modality, labels, and final classes to parameters."
-    )
+    print_info("Please add task, modality, labels, and final classes to parameters.")
 
     io.write_json_file(output_json_path, dataset_json)

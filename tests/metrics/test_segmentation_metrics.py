@@ -1,4 +1,5 @@
 """Unit tests for MIST metrics module."""
+
 import numpy as np
 import pytest
 
@@ -116,9 +117,7 @@ def test_assert_is_bool_numpy_array_wrong_type():
 def test_assert_is_bool_numpy_array_wrong_dtype():
     """Should raise ValueError when numpy array is not of type bool."""
     arr = np.zeros((3, 3), dtype=np.uint8)  # Wrong dtype.
-    with pytest.raises(
-        ValueError, match="should be a numpy array of type bool"
-    ):
+    with pytest.raises(ValueError, match="should be a numpy array of type bool"):
         metrics._assert_is_bool_numpy_array("arr", arr)
 
 
@@ -196,9 +195,7 @@ def test_surface_distance_metrics(create_synthetic_masks):
     assert isinstance(hd95, float)
     assert hd95 > 0.0
 
-    overlap = metrics.compute_surface_overlap_at_tolerance(
-        distances, tolerance_mm=2.0
-    )
+    overlap = metrics.compute_surface_overlap_at_tolerance(distances, tolerance_mm=2.0)
     assert isinstance(overlap, tuple)
     assert len(overlap) == 2
     assert all(0.0 <= val <= 1.0 for val in overlap)
@@ -243,9 +240,7 @@ def test_compute_robust_hausdorff_empty_distances():
         "surfel_areas_gt": np.array([], dtype=np.float64),
         "surfel_areas_pred": np.array([], dtype=np.float64),
     }
-    hausdorff = metrics.compute_robust_hausdorff(
-        surface_distances, percent=95.0
-    )
+    hausdorff = metrics.compute_robust_hausdorff(surface_distances, percent=95.0)
     # Both inputs are empty, so result should be inf.
     assert np.isinf(hausdorff)
 
@@ -286,8 +281,10 @@ def test_compute_surface_distances_empty_gt_borders():
     mask_pred[2:6, 2:6, 2:6] = True
     distances = metrics.compute_surface_distances(mask_gt, mask_pred, (1.0, 1.0, 1.0))
     assert set(distances.keys()) == {
-        "distances_gt_to_pred", "distances_pred_to_gt",
-        "surfel_areas_gt", "surfel_areas_pred",
+        "distances_gt_to_pred",
+        "distances_pred_to_gt",
+        "surfel_areas_gt",
+        "surfel_areas_pred",
     }
 
 
@@ -298,6 +295,8 @@ def test_compute_surface_distances_empty_pred_borders():
     mask_pred = np.zeros((8, 8, 8), dtype=bool)
     distances = metrics.compute_surface_distances(mask_gt, mask_pred, (1.0, 1.0, 1.0))
     assert set(distances.keys()) == {
-        "distances_gt_to_pred", "distances_pred_to_gt",
-        "surfel_areas_gt", "surfel_areas_pred",
+        "distances_gt_to_pred",
+        "distances_pred_to_gt",
+        "surfel_areas_gt",
+        "surfel_areas_pred",
     }

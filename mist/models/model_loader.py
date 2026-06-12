@@ -1,4 +1,5 @@
 """Unified interface for validating, building, and loading MIST models."""
+
 from collections import OrderedDict
 import warnings
 import torch
@@ -39,8 +40,7 @@ def average_fold_weights(
     for sd in state_dicts:
         if any(k.startswith("module.") for k in sd):
             sd = OrderedDict(
-                {(k[7:] if k.startswith("module.") else k): v
-                 for k, v in sd.items()}
+                {(k[7:] if k.startswith("module.") else k): v for k, v in sd.items()}
             )
         cleaned.append(sd)
 
@@ -84,6 +84,7 @@ def validate_encoder_compatibility(
     Raises:
         ValueError: If architectures are incompatible and force=False.
     """
+
     def _fail(msg: str) -> None:
         if force:
             warnings.warn(msg, stacklevel=3)
@@ -115,9 +116,8 @@ def validate_encoder_compatibility(
                 "patch_size."
             )
 
-        if (
-            list(source_spatial["target_spacing"])
-            != list(target_spatial["target_spacing"])
+        if list(source_spatial["target_spacing"]) != list(
+            target_spatial["target_spacing"]
         ):
             _fail(
                 "target_spacing mismatch: source "
@@ -178,8 +178,7 @@ def load_pretrained_encoder(
     source_sd = torch.load(weights_path, weights_only=True, map_location="cpu")
     if any(k.startswith("module.") for k in source_sd):
         source_sd = OrderedDict(
-            {(k[7:] if k.startswith("module.") else k): v
-             for k, v in source_sd.items()}
+            {(k[7:] if k.startswith("module.") else k): v for k, v in source_sd.items()}
         )
 
     target_encoder_sd = model.get_encoder_state_dict()
@@ -255,18 +254,14 @@ def validate_mist_config_for_model_loading(config: dict) -> None:
     required_params_keys = ["in_channels", "out_channels"]
     for key in required_params_keys:
         if key not in config["model"]["params"]:
-            raise ValueError(
-                f"Missing required key '{key}' in model parameters."
-            )
+            raise ValueError(f"Missing required key '{key}' in model parameters.")
 
     if "spatial_config" not in config:
         raise ValueError("Missing required key 'spatial_config' in configuration.")
     required_spatial_keys = ["patch_size", "target_spacing"]
     for key in required_spatial_keys:
         if key not in config["spatial_config"]:
-            raise ValueError(
-                f"Missing required key '{key}' in spatial_config."
-            )
+            raise ValueError(f"Missing required key '{key}' in spatial_config.")
 
 
 def load_model_from_config(
@@ -293,9 +288,7 @@ def load_model_from_config(
     # Build model from registry. Merge spatial_config so adaptive architectures
     # receive patch_size and target_spacing alongside model-specific params.
     model_kwargs = {**config["model"]["params"], **config["spatial_config"]}
-    model = get_model_from_registry(
-        config["model"]["architecture"], **model_kwargs
-    )
+    model = get_model_from_registry(config["model"]["architecture"], **model_kwargs)
 
     # Load checkpoint weights.
     state_dict = torch.load(weights_path, weights_only=True, map_location="cpu")

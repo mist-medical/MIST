@@ -165,7 +165,7 @@ class TrainPipeline(GenericPipeline):
             input_label_files=label_paths,
             input_dtm_files=dtm_paths,
             shuffle_input=True,
-            **kwargs
+            **kwargs,
         )
         self.has_dtms = dtm_paths is not None
 
@@ -185,12 +185,10 @@ class TrainPipeline(GenericPipeline):
             if labels:
                 self.labels = labels
                 self.label_weights = [
-                    1./len(self.labels) for _ in range(len(self.labels))
+                    1.0 / len(self.labels) for _ in range(len(self.labels))
                 ]
             self.oversampling = oversampling
-            self.crop_shape = types.Constant(
-                np.array(self.roi_size), dtype=types.INT64
-            )
+            self.crop_shape = types.Constant(np.array(self.roi_size), dtype=types.INT64)
             self.crop_shape_float = types.Constant(
                 np.array(self.roi_size), dtype=types.FLOAT
             )
@@ -231,10 +229,10 @@ class TrainPipeline(GenericPipeline):
         return image, label
 
     def biased_crop_fn(
-            self,
-            image: TensorCPU,
-            label: TensorCPU,
-            dtm: TensorCPU | None = None,
+        self,
+        image: TensorCPU,
+        label: TensorCPU,
+        dtm: TensorCPU | None = None,
     ) -> Sequence[TensorGPU]:
         """Extract a random patch from the image, label, and DTM.
 
@@ -266,11 +264,11 @@ class TrainPipeline(GenericPipeline):
         roi_start, roi_end = fn.segmentation.random_object_bbox(
             label,
             format="start_end",  # ROI format as (start, end) coordinates.
-            background=0,        # Background pixel value to ignore.
+            background=0,  # Background pixel value to ignore.
             classes=self.labels,  # List of labels in the dataset.
             class_weights=self.label_weights,  # Class weights.
             foreground_prob=self.oversampling,  # Probability of foreground.
-            device="cpu",        # Perform the operation on the CPU.
+            device="cpu",  # Perform the operation on the CPU.
             cache_objects=True,  # Cache object locations for efficiency.
         )
 
@@ -342,19 +340,13 @@ class TrainPipeline(GenericPipeline):
         # Define the flip options for horizontal, vertical, and depthwise flips.
         kwargs = {
             "horizontal": (
-                fn.random.coin_flip(
-                    probability=constants.HORIZONTAL_FLIP_PROBABILITY
-                )
+                fn.random.coin_flip(probability=constants.HORIZONTAL_FLIP_PROBABILITY)
             ),
             "vertical": (
-                fn.random.coin_flip(
-                    probability=constants.VERTICAL_FLIP_PROBABILITY
-                )
+                fn.random.coin_flip(probability=constants.VERTICAL_FLIP_PROBABILITY)
             ),
             "depthwise": (
-                fn.random.coin_flip(
-                    probability=constants.DEPTH_FLIP_PROBABILITY
-                )
+                fn.random.coin_flip(probability=constants.DEPTH_FLIP_PROBABILITY)
             ),
         }
 
@@ -500,7 +492,7 @@ class TestPipeline(GenericPipeline):
             input_image_files=image_paths,
             input_label_files=None,
             shuffle_input=False,  # Do not shuffle the input data.
-            **kwargs
+            **kwargs,
         )
 
     def define_graph(self):
@@ -536,7 +528,7 @@ class EvalPipeline(GenericPipeline):
             input_image_files=image_paths,
             input_label_files=label_paths,
             shuffle_input=False,
-            **kwargs
+            **kwargs,
         )
 
     def define_graph(self):
@@ -650,7 +642,7 @@ def get_training_dataset(
         use_blur=use_blur if use_augmentation else False,
         use_brightness=use_brightness if use_augmentation else False,
         use_contrast=use_contrast if use_augmentation else False,
-        **pipe_kwargs
+        **pipe_kwargs,
     )
 
     # Return a DALI iterator for the training data. If DTM data is provided,
@@ -698,7 +690,7 @@ def get_validation_dataset(
         "batch_size": 1,
         "num_threads": num_workers,
         "device_id": rank,
-        "shard_id": rank
+        "shard_id": rank,
     }
 
     pipeline = EvalPipeline(image_paths, label_paths, **pipe_kwargs)
@@ -713,7 +705,7 @@ def get_test_dataset(
     rank: int = 0,
     world_size: int = 1,
 ) -> DALIGenericIterator:
-    """"Build a DALI test pipeline for loading images.
+    """ "Build a DALI test pipeline for loading images.
 
     This function returns a DALI test pipeline for loading images during
     testing. The pipeline does not include patch extraction or augmentation. It
@@ -746,7 +738,7 @@ def get_test_dataset(
         "batch_size": 1,
         "num_threads": num_workers,
         "device_id": rank,
-        "shard_id": rank
+        "shard_id": rank,
     }
 
     pipeline = TestPipeline(image_paths, **pipe_kwargs)

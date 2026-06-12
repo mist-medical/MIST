@@ -1,4 +1,5 @@
 """Utility functions for MIST inference modules."""
+
 from typing import Any
 from collections.abc import Callable
 from pathlib import Path
@@ -40,16 +41,16 @@ def decrop_from_fg(
     padding = [
         (
             np.max([0, fg_bbox["x_start"]]),
-            np.max([0, fg_bbox["x_og_size"] - fg_bbox["x_end"]]) - 1
+            np.max([0, fg_bbox["x_og_size"] - fg_bbox["x_end"]]) - 1,
         ),
         (
             np.max([0, fg_bbox["y_start"]]),
-            np.max([0, fg_bbox["y_og_size"] - fg_bbox["y_end"]]) - 1
+            np.max([0, fg_bbox["y_og_size"] - fg_bbox["y_end"]]) - 1,
         ),
         (
             np.max([0, fg_bbox["z_start"]]),
-            np.max([0, fg_bbox["z_og_size"] - fg_bbox["z_end"]]) - 1
-        )
+            np.max([0, fg_bbox["z_og_size"] - fg_bbox["z_end"]]) - 1,
+        ),
     ]
     return ants.pad_image(ants_image, pad_width=padding, return_padvals=False)
 
@@ -214,7 +215,7 @@ def remap_mask_labels(
 
 
 def validate_inference_images(
-    patient_dict: dict[str, str]
+    patient_dict: dict[str, str],
 ) -> tuple[ants.core.ants_image.ANTsImage, list[str]]:
     """Validate all images listed in the patient dictionary.
 
@@ -239,21 +240,16 @@ def validate_inference_images(
         raise ValueError("Patient dictionary must contain an 'id' field.")
 
     image_paths = [
-        v for k, v in patient_dict.items()
-        if k not in ic.PATIENT_DF_IGNORED_COLUMNS
+        v for k, v in patient_dict.items() if k not in ic.PATIENT_DF_IGNORED_COLUMNS
     ]
 
     if len(image_paths) == 0:
-        raise ValueError(
-            f"No image paths found for patient {patient_dict['id']}."
-        )
+        raise ValueError(f"No image paths found for patient {patient_dict['id']}.")
 
     # Check all files exist.
     for image_path in image_paths:
         if not Path(image_path).is_file():
-            raise FileNotFoundError(
-                f"Image file not found: {Path(image_path).name}"
-            )
+            raise FileNotFoundError(f"Image file not found: {Path(image_path).name}")
 
     # Load anchor image. Check if it is 3D before proceeding.
     anchor_filename = Path(image_paths[0]).name
@@ -271,8 +267,7 @@ def validate_inference_images(
 
         if not analyzer_utils.compare_headers(anchor_header, current_header):
             raise ValueError(
-                f"Image headers do not match: {anchor_filename} and "
-                f"{current_filename}"
+                f"Image headers do not match: {anchor_filename} and {current_filename}"
             )
     return anchor_image, image_paths
 
@@ -298,9 +293,7 @@ def validate_paths_dataframe(dataframe: pd.DataFrame) -> None:
         if col == "id":
             continue
         series = dataframe[col].astype(str)
-        if series.apply(
-            lambda x: x.endswith(".nii") or x.endswith(".nii.gz")
-        ).all():
+        if series.apply(lambda x: x.endswith(".nii") or x.endswith(".nii.gz")).all():
             nifti_columns.append(col)
 
     if not nifti_columns:

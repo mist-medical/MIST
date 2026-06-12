@@ -61,7 +61,7 @@ class MGNet(MISTModel):
         mg_net: str = "fmgnet",
         use_residual_blocks: bool = False,
         use_deep_supervision: bool = True,
-        **kwargs: Any
+        **kwargs: Any,
     ):
         """
         Initializes the MGNet architecture by simulating the grid traversal to
@@ -111,13 +111,9 @@ class MGNet(MISTModel):
         # MGNet always uses the pocket paradigm: constant filters at all depths.
         # Representational capacity comes from the multigrid topology, not width.
         base_filters = constants.INITIAL_FILTERS
-        self.filters_per_layer = [
-            base_filters for _ in range(self.num_layers)
-        ]
+        self.filters_per_layer = [base_filters for _ in range(self.num_layers)]
 
-        self.block_class = (
-            UnetResBlock if use_residual_blocks else UnetBasicBlock
-        )
+        self.block_class = UnetResBlock if use_residual_blocks else UnetBasicBlock
 
         # --- 4. SPIKE SCHEDULE GENERATION ---
         max_spike_height = self.bottleneck_layer_idx
@@ -128,7 +124,8 @@ class MGNet(MISTModel):
         elif mg_net.lower() == "wnet":
             # Sparse W-Pattern: [1, 2, 1, 3, 1, 4 ...].
             self.spike_height_schedule = self._generate_sparse_w_sequence(
-                max_spike_height)
+                max_spike_height
+            )
         else:
             # Standard U-Net behavior (Single spike at max height, effectively).
             self.spike_height_schedule = [max_spike_height]
@@ -146,7 +143,7 @@ class MGNet(MISTModel):
                 in_channels=current_input_channels,
                 out_channels=self.filters_per_layer[depth_idx],
                 kernel_size=self.kernels[depth_idx],
-                stride=self.strides[depth_idx]
+                stride=self.strides[depth_idx],
             )
             self.main_encoder.append(block)
             current_input_channels = self.filters_per_layer[depth_idx]
@@ -175,16 +172,20 @@ class MGNet(MISTModel):
                     expected_in_channels += self.filters_per_layer[depth_idx]
                     simulation_peak_registry[depth_idx] = False
 
-                up_blocks.append(self._make_block(
-                    in_channels=expected_in_channels,
-                    out_channels=self.filters_per_layer[depth_idx],
-                    kernel_size=self.kernels[depth_idx + 1],
-                    stride=[1, 1, 1],
-                ))
-                up_samples.append(self._make_upsample(
-                    in_channels=self.filters_per_layer[depth_idx + 1],
-                    scale_factor=self.strides[depth_idx + 1]
-                ))
+                up_blocks.append(
+                    self._make_block(
+                        in_channels=expected_in_channels,
+                        out_channels=self.filters_per_layer[depth_idx],
+                        kernel_size=self.kernels[depth_idx + 1],
+                        stride=[1, 1, 1],
+                    )
+                )
+                up_samples.append(
+                    self._make_upsample(
+                        in_channels=self.filters_per_layer[depth_idx + 1],
+                        scale_factor=self.strides[depth_idx + 1],
+                    )
+                )
 
             spike_module["up_blocks"] = up_blocks
             spike_module["up_samples"] = up_samples
@@ -195,15 +196,15 @@ class MGNet(MISTModel):
             down_blocks = nn.ModuleList()
             previous_channels = self.filters_per_layer[peak_depth_idx]
 
-            for depth_idx in range(
-                peak_depth_idx + 1, self.bottleneck_layer_idx + 1
-            ):
-                down_blocks.append(self._make_block(
-                    in_channels=previous_channels,
-                    out_channels=self.filters_per_layer[depth_idx],
-                    kernel_size=self.kernels[depth_idx],
-                    stride=self.strides[depth_idx]
-                ))
+            for depth_idx in range(peak_depth_idx + 1, self.bottleneck_layer_idx + 1):
+                down_blocks.append(
+                    self._make_block(
+                        in_channels=previous_channels,
+                        out_channels=self.filters_per_layer[depth_idx],
+                        kernel_size=self.kernels[depth_idx],
+                        stride=self.strides[depth_idx],
+                    )
+                )
                 previous_channels = self.filters_per_layer[depth_idx]
                 simulation_peak_registry[depth_idx] = False
 
@@ -221,16 +222,20 @@ class MGNet(MISTModel):
                 expected_in_channels += self.filters_per_layer[depth_idx]
                 simulation_peak_registry[depth_idx] = False
 
-            self.main_decoder_blocks.append(self._make_block(
-                in_channels=expected_in_channels,
-                out_channels=self.filters_per_layer[depth_idx],
-                kernel_size=self.kernels[depth_idx + 1],
-                stride=[1, 1, 1],
-            ))
-            self.main_decoder_upsamples.append(self._make_upsample(
-                in_channels=self.filters_per_layer[depth_idx + 1],
-                scale_factor=self.strides[depth_idx + 1]
-            ))
+            self.main_decoder_blocks.append(
+                self._make_block(
+                    in_channels=expected_in_channels,
+                    out_channels=self.filters_per_layer[depth_idx],
+                    kernel_size=self.kernels[depth_idx + 1],
+                    stride=[1, 1, 1],
+                )
+            )
+            self.main_decoder_upsamples.append(
+                self._make_upsample(
+                    in_channels=self.filters_per_layer[depth_idx + 1],
+                    scale_factor=self.strides[depth_idx + 1],
+                )
+            )
 
         # --- D. OUTPUT HEADS ---
         self.final_output_conv = nn.Conv3d(
@@ -262,8 +267,11 @@ class MGNet(MISTModel):
         multigrid structure and do not transfer cleanly across architectures.
         """
         return OrderedDict(
-            {k: v for k, v in self.state_dict().items()
-             if k.startswith("main_encoder.")}
+            {
+                k: v
+                for k, v in self.state_dict().items()
+                if k.startswith("main_encoder.")
+            }
         )
 
     def _generate_sparse_w_sequence(self, max_height: int) -> list[int]:
@@ -285,8 +293,8 @@ class MGNet(MISTModel):
         if max_height <= 1:
             return [1]
 
-        core_sequence = (
-            list(range(2, max_height + 1)) + list(range(max_height - 1, 1, -1))
+        core_sequence = list(range(2, max_height + 1)) + list(
+            range(max_height - 1, 1, -1)
         )
         full_sequence = [1]
         for val in core_sequence:
@@ -298,7 +306,7 @@ class MGNet(MISTModel):
         in_channels: int,
         out_channels: int,
         kernel_size: Sequence[int],
-        stride: Sequence[int]
+        stride: Sequence[int],
     ) -> nn.Module:
         """
         Creates a computation block (Basic or Residual).
@@ -426,7 +434,6 @@ class MGNet(MISTModel):
 
         # --- PHASE 2: INTERMEDIATE SPIKES ---
         for spike_module in self.spikes:
-
             # A. UPWARD PATH.
             for i, (block, upsample) in enumerate(
                 zip(spike_module["up_blocks"], spike_module["up_samples"])
@@ -434,24 +441,20 @@ class MGNet(MISTModel):
                 target_depth_idx = self.bottleneck_layer_idx - 1 - i
 
                 vertical_features = upsample(current_features)
-                nearest_encoder_features = (
-                    encoder_feature_registry[target_depth_idx][-1]
-                )
+                nearest_encoder_features = encoder_feature_registry[target_depth_idx][
+                    -1
+                ]
 
-                inputs_to_concat = [
-                    vertical_features, nearest_encoder_features]
+                inputs_to_concat = [vertical_features, nearest_encoder_features]
 
                 if neighbor_peak_registry[target_depth_idx] is not None:
-                    inputs_to_concat.append(
-                        neighbor_peak_registry[target_depth_idx])
+                    inputs_to_concat.append(neighbor_peak_registry[target_depth_idx])
                     neighbor_peak_registry[target_depth_idx] = None
 
                 current_features = block(torch.cat(inputs_to_concat, dim=1))
 
             # Peak reached.
-            peak_depth_idx = (
-                self.bottleneck_layer_idx - len(spike_module["up_blocks"])
-            )
+            peak_depth_idx = self.bottleneck_layer_idx - len(spike_module["up_blocks"])
             neighbor_peak_registry[peak_depth_idx] = current_features
             encoder_feature_registry[peak_depth_idx].append(current_features)
 
@@ -459,8 +462,7 @@ class MGNet(MISTModel):
             for i, block in enumerate(spike_module["down_blocks"]):
                 target_depth_idx = peak_depth_idx + 1 + i
                 current_features = block(current_features)
-                encoder_feature_registry[target_depth_idx].append(
-                    current_features)
+                encoder_feature_registry[target_depth_idx].append(current_features)
                 neighbor_peak_registry[target_depth_idx] = None
 
         # --- PHASE 3: MAIN DECODER ---
@@ -472,22 +474,16 @@ class MGNet(MISTModel):
             target_depth_idx = self.bottleneck_layer_idx - 1 - i
 
             vertical_features = upsample(current_features)
-            nearest_encoder_features = (
-                encoder_feature_registry[target_depth_idx][-1]
-            )
+            nearest_encoder_features = encoder_feature_registry[target_depth_idx][-1]
             inputs_to_concat = [vertical_features, nearest_encoder_features]
 
             if neighbor_peak_registry[target_depth_idx] is not None:
-                inputs_to_concat.append(
-                    neighbor_peak_registry[target_depth_idx])
+                inputs_to_concat.append(neighbor_peak_registry[target_depth_idx])
                 neighbor_peak_registry[target_depth_idx] = None
 
             current_features = block(torch.cat(inputs_to_concat, dim=1))
 
-            if (
-                self.use_deep_supervision
-                and 0 < target_depth_idx <= self.num_aux_heads
-            ):
+            if self.use_deep_supervision and 0 < target_depth_idx <= self.num_aux_heads:
                 decoder_features_for_deep_supervision.append(current_features)
 
         # --- OUTPUT ---

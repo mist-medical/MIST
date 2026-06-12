@@ -1,4 +1,5 @@
 """Tests for mist.scripts.inference_entrypoint."""
+
 from pathlib import Path
 from types import SimpleNamespace
 import argparse
@@ -17,13 +18,20 @@ def test_parse_inference_args_ok(tmp_path, monkeypatch):
     paths = tmp_path / "paths.csv"
     out = tmp_path / "out"
 
-    ns = entry._parse_inference_args([
-        "--models-dir", str(models),
-        "--config", str(cfg),
-        "--paths-csv", str(paths),
-        "--output", str(out),
-        "--device", "cpu",
-    ])
+    ns = entry._parse_inference_args(
+        [
+            "--models-dir",
+            str(models),
+            "--config",
+            str(cfg),
+            "--paths-csv",
+            str(paths),
+            "--output",
+            str(out),
+            "--device",
+            "cpu",
+        ]
+    )
 
     assert ns.models_dir == str(models)
     assert ns.config == str(cfg)
@@ -37,18 +45,23 @@ def test_parse_inference_args_missing_required_raises(tmp_path):
     """Test _parse_inference_args raises on missing required arguments."""
     # Missing --models-dir.
     with pytest.raises(SystemExit):
-        entry._parse_inference_args([
-            "--config", str(tmp_path / "config.json"),
-            "--paths-csv", str(tmp_path / "paths.csv"),
-            "--output", str(tmp_path / "out"),
-        ])
+        entry._parse_inference_args(
+            [
+                "--config",
+                str(tmp_path / "config.json"),
+                "--paths-csv",
+                str(tmp_path / "paths.csv"),
+                "--output",
+                str(tmp_path / "out"),
+            ]
+        )
 
 
 @pytest.mark.parametrize(
     "is_avail, dev_in, expected_type",
     [
         (False, "cpu", "cpu"),
-        (False, "cuda", "cpu"),   # fall back when unavailable
+        (False, "cuda", "cpu"),  # fall back when unavailable
         (True, "cuda", "cuda"),
     ],
 )
@@ -64,21 +77,15 @@ def test_resolve_device_cpu_cuda(monkeypatch, is_avail, dev_in, expected_type):
 
 def test_resolve_device_numeric_available(monkeypatch):
     """Test _resolve_device with numeric CUDA index when available."""
-    monkeypatch.setattr(
-        entry.torch.cuda, "is_available", lambda: True, raising=True
-    )
-    monkeypatch.setattr(
-        entry.torch.cuda, "device_count", lambda: 2, raising=True
-    )
+    monkeypatch.setattr(entry.torch.cuda, "is_available", lambda: True, raising=True)
+    monkeypatch.setattr(entry.torch.cuda, "device_count", lambda: 2, raising=True)
     dev = entry._resolve_device("1")
     assert dev.type == "cuda" and dev.index == 1
 
 
 def test_resolve_device_numeric_unavailable_warns_and_cpu(monkeypatch):
     """Test _resolve_device with numeric CUDA index when unavailable."""
-    monkeypatch.setattr(
-        entry.torch.cuda, "is_available", lambda: False, raising=True
-    )
+    monkeypatch.setattr(entry.torch.cuda, "is_available", lambda: False, raising=True)
     with pytest.warns(UserWarning, match="falling back to CPU"):
         dev = entry._resolve_device("0")
     assert dev.type == "cpu"
@@ -136,8 +143,7 @@ def test_prepare_io_success_with_optional_postprocess(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "missing_field",
-    ["models_dir", "config", "paths_csv", "postprocess_strategy"]
+    "missing_field", ["models_dir", "config", "paths_csv", "postprocess_strategy"]
 )
 def test_prepare_io_missing_raises(tmp_path, missing_field):
     """Test _prepare_io raises on missing required fields."""
@@ -207,9 +213,7 @@ def test_run_inference_calls_infer_with_expected_args(tmp_path, monkeypatch):
     )
 
     # Ensure device resolution yields a stable device (CPU).
-    monkeypatch.setattr(
-        entry.torch.cuda, "is_available", lambda: False, raising=True
-    )
+    monkeypatch.setattr(entry.torch.cuda, "is_available", lambda: False, raising=True)
 
     ns = argparse.Namespace(
         models_dir=str(models),
@@ -238,28 +242,29 @@ def test_run_inference_calls_infer_with_expected_args(tmp_path, monkeypatch):
 def test_run_inference_with_postprocess_strategy(tmp_path, monkeypatch):
     """Test run_inference with postprocess strategy."""
     # Files and dirs.
-    models = tmp_path / "models"; models.mkdir(parents=True, exist_ok=True)
-    cfg = tmp_path / "config.json"; _touch_json(cfg, {})
-    paths = tmp_path / "paths.csv"; _touch_csv(paths)
+    models = tmp_path / "models"
+    models.mkdir(parents=True, exist_ok=True)
+    cfg = tmp_path / "config.json"
+    _touch_json(cfg, {})
+    paths = tmp_path / "paths.csv"
+    _touch_csv(paths)
     out = tmp_path / "out"
-    pps = tmp_path / "pps.json"; _touch_json(pps, {"post": True})
+    pps = tmp_path / "pps.json"
+    _touch_json(pps, {"post": True})
 
     # Stubs.
     monkeypatch.setattr(
-        entry.inference_utils,
-        "validate_paths_dataframe",
-        lambda df: None,
-        raising=True
+        entry.inference_utils, "validate_paths_dataframe", lambda df: None, raising=True
     )
 
     got = {}
     monkeypatch.setattr(
-        entry.inference_runners, "infer_from_dataframe",
-        lambda **kwargs: got.update(kwargs), raising=True
+        entry.inference_runners,
+        "infer_from_dataframe",
+        lambda **kwargs: got.update(kwargs),
+        raising=True,
     )
-    monkeypatch.setattr(
-        entry.torch.cuda, "is_available", lambda: False, raising=True
-    )
+    monkeypatch.setattr(entry.torch.cuda, "is_available", lambda: False, raising=True)
 
     ns = argparse.Namespace(
         models_dir=str(models),
@@ -297,11 +302,17 @@ def test_inference_entry_integration(monkeypatch):
     monkeypatch.setattr(entry, "_parse_inference_args", _parse, raising=True)
     monkeypatch.setattr(entry, "run_inference", _run, raising=True)
 
-    entry.inference_entry([
-        "--models-dir", "/m",
-        "--config", "/c.json",
-        "--paths-csv", "/p.csv",
-        "--output", "/o",
-    ])
+    entry.inference_entry(
+        [
+            "--models-dir",
+            "/m",
+            "--config",
+            "/c.json",
+            "--paths-csv",
+            "/p.csv",
+            "--output",
+            "/o",
+        ]
+    )
     assert observed["parsed"] is True
     assert observed["ran"] is True

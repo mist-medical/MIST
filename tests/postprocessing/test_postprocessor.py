@@ -1,4 +1,5 @@
 """Tests for the MIST Postprocessor class."""
+
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -22,28 +23,14 @@ VALID_STRATEGY = [
         "transform": "remove_small_objects",
         "apply_to_labels": [1, 2],
         "per_label": False,
-        "kwargs": {"small_object_threshold": 64}
+        "kwargs": {"small_object_threshold": 64},
     },
-    {
-        "transform": "fill_holes_with_label",
-        "apply_to_labels": [4],
-        "per_label": True
-    }
+    {"transform": "fill_holes_with_label", "apply_to_labels": [4], "per_label": True},
 ]
 
-MISSING_KEY_STRATEGY = [
-    {
-        "apply_to_labels": [1, 2],
-        "per_label": False
-    }
-]
+MISSING_KEY_STRATEGY = [{"apply_to_labels": [1, 2], "per_label": False}]
 
-MISSING_LABELS_STRATEGY = [
-    {
-        "transform": "remove_small_objects",
-        "per_label": True
-    }
-]
+MISSING_LABELS_STRATEGY = [{"transform": "remove_small_objects", "per_label": True}]
 
 MISSING_PER_LABEL_STRATEGY = [
     {
@@ -56,30 +43,22 @@ INVALID_LABELS_STRATEGY = [
     {
         "transform": "remove_small_objects",
         "apply_to_labels": "not_a_list",
-        "per_label": True
+        "per_label": True,
     }
 ]
 
 INVALID_PER_LABEL_STRATEGY = [
-    {
-        "transform": "remove_small_objects",
-        "apply_to_labels": [1],
-        "per_label": "yes"
-    }
+    {"transform": "remove_small_objects", "apply_to_labels": [1], "per_label": "yes"}
 ]
 
 INVALID_TOP_LEVEL_TYPE = {
     "transform": "remove_small_objects",
     "apply_to_labels": [1],
-    "per_label": True
+    "per_label": True,
 }
 
 INVALID_TRANSFORM = [
-    {
-        "transform": "non_existent_transform",
-        "apply_to_labels": [1],
-        "per_label": True
-    }
+    {"transform": "non_existent_transform", "apply_to_labels": [1], "per_label": True}
 ]
 
 REPLACE_SMALL_OBJECTS_GROUPED = [
@@ -95,6 +74,7 @@ REPLACE_SMALL_OBJECTS_GROUPED = [
 # _load_strategy
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "strategy_data, should_raise",
     [
@@ -107,7 +87,7 @@ REPLACE_SMALL_OBJECTS_GROUPED = [
         (INVALID_TOP_LEVEL_TYPE, True),
         (INVALID_TRANSFORM, True),
         (REPLACE_SMALL_OBJECTS_GROUPED, True),
-    ]
+    ],
 )
 def test_load_strategy_validation(strategy_data, should_raise):
     """Test the _load_strategy method of the Postprocessor class."""
@@ -125,22 +105,25 @@ def test_load_strategy_validation(strategy_data, should_raise):
 # _gather_base_filepaths
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def minimal_strategy():
     """Minimal valid strategy for Postprocessor instantiation."""
-    return [{
-        "transform": "remove_small_objects",
-        "apply_to_labels": [1],
-        "per_label": True,
-        "kwargs": {}
-    }]
+    return [
+        {
+            "transform": "remove_small_objects",
+            "apply_to_labels": [1],
+            "per_label": True,
+            "kwargs": {},
+        }
+    ]
 
 
 def test_gather_base_filepaths_returns_valid_files(tmp_path, minimal_strategy):
     """Valid .nii.gz files are returned; non-files and other extensions skipped."""
     (tmp_path / "valid1.nii.gz").touch()
     (tmp_path / "valid2.nii.gz").touch()
-    (tmp_path / "notes.txt").touch()      # wrong extension — ignored
+    (tmp_path / "notes.txt").touch()  # wrong extension — ignored
 
     with patch("mist.utils.io.read_json_file", return_value=minimal_strategy):
         post = Postprocessor(strategy_path="fake/path/strategy.json")
@@ -152,13 +135,17 @@ def test_gather_base_filepaths_returns_valid_files(tmp_path, minimal_strategy):
 def test_gather_base_filepaths_skips_non_files(tmp_path, minimal_strategy):
     """Directories named .nii.gz are skipped with a warning."""
     (tmp_path / "real.nii.gz").touch()
-    (tmp_path / "dir.nii.gz").mkdir()     # directory, not a file
+    (tmp_path / "dir.nii.gz").mkdir()  # directory, not a file
 
     printed = []
     with patch("mist.utils.io.read_json_file", return_value=minimal_strategy):
         post = Postprocessor(strategy_path="fake/path/strategy.json")
 
-    with patch.object(console_mod.console, "print", side_effect=lambda *a, **k: printed.append(str(a[0]))):
+    with patch.object(
+        console_mod.console,
+        "print",
+        side_effect=lambda *a, **k: printed.append(str(a[0])),
+    ):
         valid = post._gather_base_filepaths(tmp_path)
 
     assert len(valid) == 1
@@ -177,6 +164,7 @@ def test_gather_base_filepaths_empty_dir(tmp_path, minimal_strategy):
 # ---------------------------------------------------------------------------
 # _print_strategy
 # ---------------------------------------------------------------------------
+
 
 @patch("mist.utils.io.read_json_file")
 @patch("mist.postprocessing.postprocessor.Table")
@@ -203,7 +191,9 @@ def test_print_strategy(mock_table_class, mock_read_json):
     postprocessor = Postprocessor(strategy_path="fake_path.json")
 
     printed = []
-    with patch.object(console_mod.console, "print", side_effect=lambda *a, **k: printed.append(a[0])):
+    with patch.object(
+        console_mod.console, "print", side_effect=lambda *a, **k: printed.append(a[0])
+    ):
         postprocessor._print_strategy()
 
     mock_table.add_column.assert_any_call("Transform", style="bold")
@@ -218,6 +208,7 @@ def test_print_strategy(mock_table_class, mock_read_json):
 # ---------------------------------------------------------------------------
 # apply_strategy_to_single_example
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def dummy_ants_image():
@@ -234,18 +225,24 @@ def test_apply_strategy_to_single_example(
     mock_read_json, mock_get_transform, simulate_error, dummy_ants_image
 ):
     """Test both successful and failing transform scenarios."""
-    transform_name = "remove_small_objects" if not simulate_error else "fill_holes_with_label"
-    mock_read_json.return_value = [{
-        "transform": transform_name,
-        "apply_to_labels": [1],
-        "per_label": True,
-        "kwargs": {}
-    }]
+    transform_name = (
+        "remove_small_objects" if not simulate_error else "fill_holes_with_label"
+    )
+    mock_read_json.return_value = [
+        {
+            "transform": transform_name,
+            "apply_to_labels": [1],
+            "per_label": True,
+            "kwargs": {},
+        }
+    ]
 
     if simulate_error:
+
         def transform_fn(*args, **kwargs):
             raise ValueError("Simulated failure")
     else:
+
         def transform_fn(arr, **kwargs):
             return arr + 1
 
@@ -269,6 +266,7 @@ def test_apply_strategy_to_single_example(
 # ---------------------------------------------------------------------------
 # _postprocess_single_file
 # ---------------------------------------------------------------------------
+
 
 def test_postprocess_single_file_happy_path(tmp_path, monkeypatch):
     """Worker copies file, applies transform, writes result, returns []."""
@@ -298,9 +296,7 @@ def test_postprocess_single_file_happy_path(tmp_path, monkeypatch):
     assert output_path.exists()
 
 
-def test_postprocess_single_file_transform_error_returns_message(
-    tmp_path, monkeypatch
-):
+def test_postprocess_single_file_transform_error_returns_message(tmp_path, monkeypatch):
     """Worker returns an error message when a transform raises ValueError."""
     arr = np.zeros((4, 4), dtype=np.uint8)
     img = ants.from_numpy(arr.astype(np.float32))
@@ -369,15 +365,18 @@ def test_postprocess_single_file_per_label_and_labels_not_swapped(tmp_path):
 # run
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def dummy_strategy():
     """Minimal strategy fixture for run tests."""
-    return [{
-        "transform": "remove_small_objects",
-        "apply_to_labels": [1],
-        "per_label": True,
-        "kwargs": {}
-    }]
+    return [
+        {
+            "transform": "remove_small_objects",
+            "apply_to_labels": [1],
+            "per_label": True,
+            "kwargs": {},
+        }
+    ]
 
 
 @pytest.fixture
@@ -399,7 +398,7 @@ def temp_dirs_with_nii():
     [
         ("success", False),
         ("fail", True),
-    ]
+    ],
 )
 @patch("mist.utils.io.read_json_file")
 @patch("mist.postprocessing.postprocessor.get_transform")
@@ -414,21 +413,29 @@ def test_run_postprocessor(
     temp_dirs_with_nii,
 ):
     """Test the run method of the Postprocessor class."""
+
     class _DummyPB:
-        def __enter__(self): return self
-        def __exit__(self, *args): return None
-        def track(self, items, total=None): return items
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def track(self, items, total=None):
+            return items
 
     base_dir, output_dir = temp_dirs_with_nii
     mock_get_progress_bar.return_value = _DummyPB()
     mock_read_json_file.return_value = dummy_strategy
 
     if transform_behavior == "success":
+
         def transform_fn(arr, **kwargs):
             result = arr.copy()
             result[arr == 1] += 1
             return result
     else:
+
         def transform_fn(*args, **kwargs):
             raise ValueError("test error")
 
@@ -437,10 +444,12 @@ def test_run_postprocessor(
     postprocessor = Postprocessor(strategy_path="fake_path.json")
 
     printed = []
-    with patch.object(console_mod.console, "print", side_effect=lambda *a, **k: printed.append(str(a[0]))):
-        with patch(
-            "concurrent.futures.ProcessPoolExecutor", ThreadPoolExecutor
-        ):
+    with patch.object(
+        console_mod.console,
+        "print",
+        side_effect=lambda *a, **k: printed.append(str(a[0])),
+    ):
+        with patch("concurrent.futures.ProcessPoolExecutor", ThreadPoolExecutor):
             postprocessor.run(base_dir, output_dir)
 
     if expect_error:
@@ -455,9 +464,7 @@ def test_run_postprocessor(
         result = ants.image_read(str(output_file)).numpy()
         assert np.all(result[2:4, 2:4] == 2)
         assert np.all(result[:2, :2] == 0)
-        assert any(
-            "Postprocessing completed successfully" in msg for msg in printed
-        )
+        assert any("Postprocessing completed successfully" in msg for msg in printed)
 
 
 @patch("mist.utils.io.read_json_file")
@@ -472,8 +479,9 @@ def test_run_empty_base_dir_warns_and_returns(
 
     printed = []
     with patch.object(
-        console_mod.console, "print",
-        side_effect=lambda *a, **k: printed.append(str(a[0]))
+        console_mod.console,
+        "print",
+        side_effect=lambda *a, **k: printed.append(str(a[0])),
     ):
         postprocessor.run(tmp_path, output_dir)
 
@@ -494,10 +502,16 @@ def test_run_unexpected_worker_exception_is_caught(
     temp_dirs_with_nii,
 ):
     """Non-ValueError exceptions from workers produce a graceful error message."""
+
     class _DummyPB:
-        def __enter__(self): return self
-        def __exit__(self, *args): return None
-        def track(self, items, total=None): return items
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def track(self, items, total=None):
+            return items
 
     base_dir, output_dir = temp_dirs_with_nii
     mock_get_progress_bar.return_value = _DummyPB()
@@ -508,8 +522,9 @@ def test_run_unexpected_worker_exception_is_caught(
 
     printed = []
     with patch.object(
-        console_mod.console, "print",
-        side_effect=lambda *a, **k: printed.append(str(a[0]))
+        console_mod.console,
+        "print",
+        side_effect=lambda *a, **k: printed.append(str(a[0])),
     ):
         with patch("concurrent.futures.ProcessPoolExecutor", ThreadPoolExecutor):
             postprocessor.run(base_dir, output_dir)
@@ -532,10 +547,16 @@ def test_run_patient_id_preserves_dots(
     tmp_path,
 ):
     """patient_id extracted from filename strips .nii.gz, preserving inner dots."""
+
     class _DummyPB:
-        def __enter__(self): return self
-        def __exit__(self, *args): return None
-        def track(self, items, total=None): return items
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def track(self, items, total=None):
+            return items
 
     arr = np.zeros((4, 4), dtype=np.uint8)
     input_path = tmp_path / "patient.001.nii.gz"
@@ -548,18 +569,24 @@ def test_run_patient_id_preserves_dots(
 
     def _failing(*args, **kwargs):
         raise ValueError("boom")
+
     mock_get_transform.return_value = _failing
 
     postprocessor = Postprocessor(strategy_path="fake_path.json")
 
     printed = []
     with patch.object(
-        console_mod.console, "print",
-        side_effect=lambda *a, **k: printed.append(str(a[0]))
+        console_mod.console,
+        "print",
+        side_effect=lambda *a, **k: printed.append(str(a[0])),
     ):
         with patch("concurrent.futures.ProcessPoolExecutor", ThreadPoolExecutor):
             postprocessor.run(tmp_path, output_dir)
 
     # patient_id should be "patient.001", not "patient".
     assert any("patient.001" in msg for msg in printed)
-    assert not any(msg for msg in printed if "patient" in msg and "001" not in msg and "Error" in msg)
+    assert not any(
+        msg
+        for msg in printed
+        if "patient" in msg and "001" not in msg and "Error" in msg
+    )

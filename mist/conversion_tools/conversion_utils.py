@@ -1,4 +1,5 @@
 """Utilities for converting datasets to MIST format."""
+
 import shutil
 from pathlib import Path
 

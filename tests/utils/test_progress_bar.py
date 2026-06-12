@@ -1,4 +1,5 @@
 """Unit tests for MIST training/validation progress bars."""
+
 from typing import Any
 from unittest.mock import patch
 import numpy as np
@@ -15,7 +16,9 @@ from rich.progress import (
 
 # MIST imports.
 from mist.utils.progress_bar import (
-    TrainProgressBar, ValidationProgressBar, get_progress_bar
+    TrainProgressBar,
+    ValidationProgressBar,
+    get_progress_bar,
 )
 
 
@@ -126,9 +129,7 @@ def test_train_progressbar_multiple_updates():
     for (loss, lr), update in zip(values, pb.progress.update_calls):
         assert update["advance"] == 1
         assert update["loss"] == f"loss: {loss:.4f}"
-        assert (
-            update["lr"] == f"lr: {np.format_float_scientific(lr, precision=3)}"
-        )
+        assert update["lr"] == f"lr: {np.format_float_scientific(lr, precision=3)}"
 
 
 @patch("mist.utils.progress_bar.Progress", new=SpyProgress)

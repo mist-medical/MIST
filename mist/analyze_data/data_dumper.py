@@ -9,6 +9,7 @@ Two output files are saved to the results directory:
     - data_dump.json: Full structured statistics (machine-readable).
     - data_dump.md: Narrativized summary optimized for LLM consumption.
 """
+
 from pathlib import Path
 from typing import Any
 
@@ -57,9 +58,7 @@ class DataDumper:
             "num_labels": len(self.dataset_info["labels"]),
             "labels": self.dataset_info["labels"],
             "final_classes": dict(self.dataset_info["final_classes"]),
-            "dataset_size_gb": data_dump_utils.get_dataset_size_gb(
-                self.paths_df
-            ),
+            "dataset_size_gb": data_dump_utils.get_dataset_size_gb(self.paths_df),
         }
 
     def build_data_dump(self) -> dict[str, Any]:
@@ -92,9 +91,7 @@ class DataDumper:
             self.paths_df, self.dataset_info, effective_dims=effective_dims
         )
 
-        image_stats = data_dump_utils.build_image_statistics(
-            raw_stats, self.config
-        )
+        image_stats = data_dump_utils.build_image_statistics(raw_stats, self.config)
         label_stats = data_dump_utils.build_label_statistics(
             raw_stats, self.dataset_info
         )
@@ -171,8 +168,7 @@ class DataDumper:
             (
                 "- **Final classes:** "
                 + ", ".join(
-                    f"{name} {labels}"
-                    for name, labels in ds["final_classes"].items()
+                    f"{name} {labels}" for name, labels in ds["final_classes"].items()
                 )
             ),
             f"- **Dataset size:** {ds['dataset_size_gb']:.3f} GB",
@@ -192,11 +188,7 @@ class DataDumper:
             )
 
         aniso = img["spacing"]["anisotropy_ratio"]
-        aniso_label = (
-            "anisotropic"
-            if img["spacing"]["is_anisotropic"]
-            else "isotropic"
-        )
+        aniso_label = "anisotropic" if img["spacing"]["is_anisotropic"] else "isotropic"
         lines += [
             "",
             f"**Anisotropy ratio:** {aniso:.2f} ({aniso_label})",
@@ -228,10 +220,7 @@ class DataDumper:
             lines += [
                 "",
                 f"**Channel: {ch}**",
-                (
-                    f"- Mean \u00b1 Std: "
-                    f"{stats['mean']:.2f} \u00b1 {stats['std']:.2f}"
-                ),
+                (f"- Mean \u00b1 Std: {stats['mean']:.2f} \u00b1 {stats['std']:.2f}"),
                 (
                     f"- Percentiles: p01={stats['p01']:.2f}, "
                     f"p05={stats['p05']:.2f}, p25={stats['p25']:.2f}, "
@@ -267,20 +256,10 @@ class DataDumper:
         for lbl_str, lbl_data in lbl["per_label"].items():
             vc = lbl_data["voxel_count"]
             sh = lbl_data["shape"]
-            lin = (
-                f"{sh['linearity']:.2f}"
-                if sh["linearity"] is not None
-                else "\u2014"
-            )
-            plan = (
-                f"{sh['planarity']:.2f}"
-                if sh["planarity"] is not None
-                else "\u2014"
-            )
+            lin = f"{sh['linearity']:.2f}" if sh["linearity"] is not None else "\u2014"
+            plan = f"{sh['planarity']:.2f}" if sh["planarity"] is not None else "\u2014"
             sph = (
-                f"{sh['sphericity']:.2f}"
-                if sh["sphericity"] is not None
-                else "\u2014"
+                f"{sh['sphericity']:.2f}" if sh["sphericity"] is not None else "\u2014"
             )
             iq = (
                 f"{sh['compactness']:.3f}"
@@ -292,12 +271,8 @@ class DataDumper:
                 if sh.get("skeleton_ratio") is not None
                 else "\u2014"
             )
-            vol_frac_fg = (
-                lbl_data['mean_volume_fraction_of_foreground_pct']
-            )
-            vol_frac_img = (
-                lbl_data['mean_volume_fraction_of_image_pct']
-            )
+            vol_frac_fg = lbl_data["mean_volume_fraction_of_foreground_pct"]
+            vol_frac_img = lbl_data["mean_volume_fraction_of_image_pct"]
             lines.append(
                 f"| {lbl_str} | {vc['mean']:.0f} \u00b1 {vc['std']:.0f} "
                 f"| {lbl_data['presence_rate_pct']:.1f}% | "
@@ -315,9 +290,7 @@ class DataDumper:
         ]
 
         for class_name, class_data in lbl["final_classes"].items():
-            vol_frac_fc = (
-                class_data['mean_volume_fraction_of_foreground_pct']
-            )
+            vol_frac_fc = class_data["mean_volume_fraction_of_foreground_pct"]
             lines.append(
                 f"| {class_name} | "
                 f"{class_data['constituent_labels']} | "

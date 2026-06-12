@@ -1,4 +1,5 @@
 """Tests for mist.scripts.preprocess_entrypoint."""
+
 from pathlib import Path
 import argparse
 import pytest
@@ -19,10 +20,7 @@ def _mk_results_with_required_artifacts(base: Path) -> Path:
     results.mkdir(parents=True, exist_ok=True)
     _touch(results / "config.json", "{}")
     _touch(results / "train_paths.csv", "id\n0\n")
-    _touch(
-        results / "fg_bboxes.csv",
-        "id,x_start,x_end,y_start,y_end,z_start,z_end\n"
-    )
+    _touch(results / "fg_bboxes.csv", "id,x_start,x_end,y_start,y_end,z_start,z_end\n")
     return results
 
 
@@ -95,22 +93,10 @@ def test_ensure_analyze_artifacts_success(tmp_path):
 @pytest.mark.parametrize(
     "mutator, expected",
     [
-        (
-            lambda r: r.rename(r.parent / "gone"),
-            "Results directory does not exist"
-        ),
-        (
-            lambda r: (r / "config.json").unlink(),
-            "Missing required file(s)"
-        ),
-        (
-            lambda r: (r / "train_paths.csv").unlink(),
-            "Missing required file(s)"
-        ),
-        (
-            lambda r: (r / "fg_bboxes.csv").unlink(),
-            "Missing required file(s)"
-        ),
+        (lambda r: r.rename(r.parent / "gone"), "Results directory does not exist"),
+        (lambda r: (r / "config.json").unlink(), "Missing required file(s)"),
+        (lambda r: (r / "train_paths.csv").unlink(), "Missing required file(s)"),
+        (lambda r: (r / "fg_bboxes.csv").unlink(), "Missing required file(s)"),
     ],
 )
 def test_ensure_analyze_artifacts_raises(tmp_path, mutator, expected):
@@ -128,14 +114,13 @@ def test_preprocess_entry_integration_parsing_and_run(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     results = _mk_results_with_required_artifacts(tmp_path)
     argv = [
-        "--results", str(results),
+        "--results",
+        str(results),
         "--no-preprocess",
         "--compute-dtms",
     ]
 
-    observed = {
-        "called": False, "ns": None, "prep_dir": False
-    }
+    observed = {"called": False, "ns": None, "prep_dir": False}
 
     def _fake_preprocess_dataset(ns):
         observed["called"] = True
@@ -189,7 +174,7 @@ def test_preprocess_entry_blocks_when_numpy_nonempty_without_overwrite(
 
     # Keep preprocess from actually running if our guard failed.
     monkeypatch.setattr(
-        entry.preprocess, "preprocess_dataset", lambda *_: (_), raising=True
+        entry.preprocess, "preprocess_dataset", lambda *_: _, raising=True
     )
 
     argv = ["--results", str(results)]
@@ -197,16 +182,14 @@ def test_preprocess_entry_blocks_when_numpy_nonempty_without_overwrite(
         entry.preprocess_entry(argv)
 
 
-def test_preprocess_entry_raises_when_analyze_artifacts_missing(
-    tmp_path, monkeypatch
-):
+def test_preprocess_entry_raises_when_analyze_artifacts_missing(tmp_path, monkeypatch):
     """Raises FileNotFoundError if required analyze artifacts are missing."""
     monkeypatch.chdir(tmp_path)
     results = tmp_path / "results"
     results.mkdir(parents=True, exist_ok=True)  # Missing the required files.
 
     monkeypatch.setattr(
-        entry.preprocess, "preprocess_dataset", lambda *_: (_), raising=True
+        entry.preprocess, "preprocess_dataset", lambda *_: _, raising=True
     )
 
     argv = ["--results", str(results)]

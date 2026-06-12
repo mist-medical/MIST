@@ -117,6 +117,7 @@ weighted by a scheduled alpha. Schedules: `constant`, `linear`, `cosine`.
 | `mist_preprocess` | Preprocess images into NumPy arrays |
 | `mist_train` | Train models |
 | `mist_predict` | Run inference on new data |
+| `mist_ensemble` | Combine predictions from multiple models via STAPLE or majority vote |
 | `mist_evaluate` | Evaluate predictions against ground truth |
 | `mist_postprocess` | Apply postprocessing strategies |
 | `mist_rank` | Rank multiple evaluation result CSVs BraTS-style |
@@ -131,9 +132,20 @@ Full documentation, including configuration reference and advanced topics, is at
 
 ## What's New
 
+* June 2026 — **2.0.1 release candidate** — BF16 automatic mixed precision
+  replaces FP16 throughout training and inference, reducing memory use and
+  eliminating gradient loss scaling. Sliding-window inference gains a tunable
+  `sw_batch_size` parameter. `mist_rank` adds pairwise Wilcoxon significance
+  testing via `--significance-csv`. Several targeted memory-reduction fixes
+  land across the inference stack.
+* June 2026 — **Multi-model ensembling** — `mist_ensemble` combines discrete
+  NIfTI predictions from two or more separately trained models into a single
+  consensus segmentation via STAPLE (`--ensemble-backend staple`, default) or
+  majority vote (`--ensemble-backend majority_vote`). Works for single-class and
+  multi-class label maps.
 * May 2026 — **2.0.0 release candidate** — BraTS-style multi-strategy ranking
   (`mist_rank`), a structured postprocessing transform registry with LLM-readable
-  metadata (`describe_transforms`), and full pathlib + PEP 585/604 modernisation
+  metadata (`describe_transforms`), and full pathlib + PEP 585/604 modernization
   across the codebase.
 * April 2026 — **CPU inference support** — `mist_predict` now runs on any
   machine, including Macs and laptops without an NVIDIA GPU. Install with

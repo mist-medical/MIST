@@ -1,4 +1,5 @@
 """Unit tests for MedNeXt model factory and registry."""
+
 import pytest
 
 # MIST imports.
@@ -39,9 +40,7 @@ def test_create_mednext_missing_keys(base_config, missing_key):
     """Test that missing required config keys raise ValueError."""
     config = base_config.copy()
     config.pop(missing_key)
-    with pytest.raises(
-        ValueError, match=f"Missing required key '{missing_key}'"
-    ):
+    with pytest.raises(ValueError, match=f"Missing required key '{missing_key}'"):
         create_mednext("S", **config)
 
 

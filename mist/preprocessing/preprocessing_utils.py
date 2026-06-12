@@ -1,13 +1,12 @@
 """Preprocessing utilities for MIST."""
+
 import numpy as np
 import skimage
 import ants
 import SimpleITK as sitk
 
 # MIST imports.
-from mist.preprocessing.preprocessing_constants import (
-    PreprocessingConstants as pc
-)
+from mist.preprocessing.preprocessing_constants import PreprocessingConstants as pc
 
 
 def ants_to_sitk(img_ants: ants.core.ants_image.ANTsImage) -> sitk.Image:
@@ -83,7 +82,7 @@ def get_fg_mask_bbox(
     # Clip image to remove outliers and improve foreground detection.
     lower, upper = np.percentile(
         image_npy,
-        [pc.FOREGROUND_BBOX_PERCENTILE_LOW, pc.FOREGROUND_BBOX_PERCENTILE_HIGH]
+        [pc.FOREGROUND_BBOX_PERCENTILE_LOW, pc.FOREGROUND_BBOX_PERCENTILE_HIGH],
     )
     image_npy = np.clip(image_npy, lower, upper)
 
@@ -167,7 +166,7 @@ def aniso_intermediate_resample(
         outputSpacing=temp_spacing,
         outputDirection=img_sitk.GetDirection(),
         defaultPixelValue=0,
-        outputPixelType=img_sitk.GetPixelID()
+        outputPixelType=img_sitk.GetPixelID(),
     )
     return img_sitk
 
@@ -194,13 +193,12 @@ def check_anisotropic(img_sitk: sitk.Image) -> dict:
 
     return {
         "is_anisotropic": is_anisotropic,
-        "low_resolution_axis": low_resolution_axis
+        "low_resolution_axis": low_resolution_axis,
     }
 
 
 def make_onehot(
-    mask_ants: ants.core.ants_image.ANTsImage,
-    labels_list: list[int]
+    mask_ants: ants.core.ants_image.ANTsImage, labels_list: list[int]
 ) -> list[sitk.Image]:
     """Convert a multi-class ANTs image into a list of binary sitk images.
 
@@ -275,7 +273,5 @@ def crop_to_fg(
     return ants.crop_indices(
         img_ants,
         lowerind=[fg_bbox["x_start"], fg_bbox["y_start"], fg_bbox["z_start"]],
-        upperind=[
-            fg_bbox["x_end"] + 1, fg_bbox["y_end"] + 1, fg_bbox["z_end"] + 1
-        ]
+        upperind=[fg_bbox["x_end"] + 1, fg_bbox["y_end"] + 1, fg_bbox["z_end"] + 1],
     )

@@ -90,14 +90,11 @@ class GenSurfLoss(DiceCELoss):
         diff = 1.0 - (y_true_onehot + y_pred_softmax)
 
         # Numerator: Weighted variance of the difference.
-        numerator = torch.sum(
-            (dtm * diff) ** 2, dim=self.spatial_dims_3d
-        )
+        numerator = torch.sum((dtm * diff) ** 2, dim=self.spatial_dims_3d)
 
         # Denominator: Total weighted variance of the DTM.
         denominator = (
-            torch.sum(dtm ** 2, dim=self.spatial_dims_3d)
-            + self.avoid_division_by_zero
+            torch.sum(dtm**2, dim=self.spatial_dims_3d) + self.avoid_division_by_zero
         )
 
         # Surface loss: 1 - ratio.

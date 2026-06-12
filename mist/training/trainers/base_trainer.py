@@ -84,9 +84,8 @@ class BaseTrainer(ABC):
         self._update_num_gpus_in_config()
 
         # Set up batch size based on the number of GPUs.
-        self.batch_size = (
-            self.config["training"]["batch_size_per_gpu"] *
-            max(1, self.config["training"]["hardware"]["num_gpus"])
+        self.batch_size = self.config["training"]["batch_size_per_gpu"] * max(
+            1, self.config["training"]["hardware"]["num_gpus"]
         )
 
         # Prepare folds.
@@ -228,9 +227,7 @@ class BaseTrainer(ABC):
             self.config["training"]["optimizer"] = self.mist_args.optimizer
 
         if self.mist_args.l2_penalty is not None:
-            self.config["training"]["l2_penalty"] = float(
-                self.mist_args.l2_penalty
-            )
+            self.config["training"]["l2_penalty"] = float(self.mist_args.l2_penalty)
 
         # Overwrite the learning rate scheduler and its parameters if specified
         # in command line arguments.
@@ -240,20 +237,14 @@ class BaseTrainer(ABC):
             )
 
         if self.mist_args.lr_scheduler is not None:
-            self.config["training"]["lr_scheduler"] = (
-                self.mist_args.lr_scheduler
-            )
+            self.config["training"]["lr_scheduler"] = self.mist_args.lr_scheduler
 
         if getattr(self.mist_args, "warmup_epochs", None) is not None:
-            self.config["training"]["warmup_epochs"] = int(
-                self.mist_args.warmup_epochs
-            )
+            self.config["training"]["warmup_epochs"] = int(self.mist_args.warmup_epochs)
 
         # Overwrite the validation percentage if specified in command line.
         if self.mist_args.val_percent is not None:
-            self.config["training"]["val_percent"] = float(
-                self.mist_args.val_percent
-            )
+            self.config["training"]["val_percent"] = float(self.mist_args.val_percent)
 
         # Write the updated configuration to the config.json file.
         io.write_json_file(self.config_json, self.config)
@@ -307,21 +298,17 @@ class BaseTrainer(ABC):
 
         if tr_old["loss"]["name"] != tr_new["loss"]["name"]:
             warnings.append(
-                f"  --loss: '{tr_old['loss']['name']}' → "
-                f"'{tr_new['loss']['name']}'"
+                f"  --loss: '{tr_old['loss']['name']}' → '{tr_new['loss']['name']}'"
             )
 
         old_clw = tr_old["loss"]["composite_loss_weighting"]
         new_clw = tr_new["loss"]["composite_loss_weighting"]
         if old_clw != new_clw:
-            warnings.append(
-                f"  --composite-loss-weighting: {old_clw} → {new_clw}"
-            )
+            warnings.append(f"  --composite-loss-weighting: {old_clw} → {new_clw}")
 
         if tr_old["optimizer"] != tr_new["optimizer"]:
             warnings.append(
-                f"  --optimizer: '{tr_old['optimizer']}' → "
-                f"'{tr_new['optimizer']}'"
+                f"  --optimizer: '{tr_old['optimizer']}' → '{tr_new['optimizer']}'"
             )
 
         if tr_old["learning_rate"] != tr_new["learning_rate"]:
@@ -339,14 +326,11 @@ class BaseTrainer(ABC):
         old_warmup = tr_old.get("warmup_epochs", 0)
         new_warmup = tr_new.get("warmup_epochs", 0)
         if old_warmup != new_warmup:
-            warnings.append(
-                f"  --warmup-epochs: {old_warmup} → {new_warmup}"
-            )
+            warnings.append(f"  --warmup-epochs: {old_warmup} → {new_warmup}")
 
         if tr_old["l2_penalty"] != tr_new["l2_penalty"]:
             warnings.append(
-                f"  --l2-penalty: {tr_old['l2_penalty']} → "
-                f"{tr_new['l2_penalty']}"
+                f"  --l2-penalty: {tr_old['l2_penalty']} → {tr_new['l2_penalty']}"
             )
 
         if warnings:
@@ -389,9 +373,7 @@ class BaseTrainer(ABC):
         mismatches fail fast rather than inside a spawned worker.
         """
         pretrained_weights = getattr(self.mist_args, "pretrained_weights", None)
-        pretrained_config_path = getattr(
-            self.mist_args, "pretrained_config", None
-        )
+        pretrained_config_path = getattr(self.mist_args, "pretrained_config", None)
 
         if not pretrained_weights:
             return
@@ -409,8 +391,7 @@ class BaseTrainer(ABC):
     def _use_dtms(self) -> bool:
         """Return True when the selected loss requires distance transform maps."""
         return (
-            self.config["training"]["loss"]["name"]
-            in TrainerConstants.DTM_AWARE_LOSSES
+            self.config["training"]["loss"]["name"] in TrainerConstants.DTM_AWARE_LOSSES
         )
 
     def _setup_folds(self) -> None:
@@ -478,10 +459,9 @@ class BaseTrainer(ABC):
                 )
 
                 # Unpack while handling optional DTMs.
-                (
-                    train_images, val_images, train_labels,
-                    val_labels, *maybe_dtms
-                ) = splits
+                (train_images, val_images, train_labels, val_labels, *maybe_dtms) = (
+                    splits
+                )
                 if self._use_dtms():
                     train_dtms, _ = maybe_dtms
 
@@ -518,17 +498,14 @@ class BaseTrainer(ABC):
             **self.config["spatial_config"],
         }
         model = get_model_from_registry(
-            self.config["model"]["architecture"],
-            **model_kwargs
+            self.config["model"]["architecture"], **model_kwargs
         )
 
         # Load pretrained encoder weights if requested. This runs on every rank
         # so each process starts from the same initialization.
         pretrained_weights = getattr(self.mist_args, "pretrained_weights", None)
         if pretrained_weights:
-            strategy = getattr(
-                self.mist_args, "input_channel_strategy", "average"
-            )
+            strategy = getattr(self.mist_args, "input_channel_strategy", "average")
             model, transfer_summary = load_pretrained_encoder(
                 model, pretrained_weights, strategy
             )
@@ -542,8 +519,7 @@ class BaseTrainer(ABC):
                 )
                 model_sd = model.state_dict()
                 loaded_scalars = sum(
-                    model_sd[k].numel() for k in transferred_keys
-                    if k in model_sd
+                    model_sd[k].numel() for k in transferred_keys if k in model_sd
                 )
                 print_info(
                     f"Pretrained encoder loaded from {pretrained_weights}\n"
@@ -577,9 +553,9 @@ class BaseTrainer(ABC):
         loss_cls = get_loss(loss_name)
         loss_params = {}
         if loss_name in TrainerConstants.SPACING_AWARE_LOSSES:
-            loss_params["sddl_spacing_xyz"] = (
-                self.config["spatial_config"]["target_spacing"]
-            )
+            loss_params["sddl_spacing_xyz"] = self.config["spatial_config"][
+                "target_spacing"
+            ]
         loss_function = loss_cls(**loss_params)
         loss_function = DeepSupervisionLoss(loss_function)
 
@@ -596,16 +572,12 @@ class BaseTrainer(ABC):
             composite_loss_weighting = None
 
         # Get the optimizer.
-        eps = (
-            TrainerConstants.AMP_EPS if training["amp"]
-            else TrainerConstants.NO_AMP_EPS
-        )
         optimizer = get_optimizer(
             name=training["optimizer"],
             params=model.parameters(),
             learning_rate=training["learning_rate"],
             weight_decay=training["l2_penalty"],
-            eps=eps,
+            eps=TrainerConstants.OPTIMIZER_EPS,
         )
 
         # Get learning rate scheduler.
@@ -616,17 +588,12 @@ class BaseTrainer(ABC):
             warmup_epochs=training.get("warmup_epochs", 0),
         )
 
-        # Get gradient scaler if AMP is enabled.
-        scaler = torch.amp.GradScaler(
-            "cuda") if training["amp"] else None  # type: ignore
-
         return {
             "model": model,
             "loss_function": loss_function,
             "composite_loss_weighting": composite_loss_weighting,
             "optimizer": optimizer,
             "lr_scheduler": lr_scheduler,
-            "scaler": scaler,
             "epoch": 0,
             "global_step": 0,
             "best_val_loss": np.inf,
@@ -640,10 +607,9 @@ class BaseTrainer(ABC):
     def save_checkpoint(self, fold: int, state: dict[str, Any]) -> None:
         """Save a training checkpoint for the given fold (rank 0 only).
 
-        Saves the current model weights, optimizer, LR scheduler, and scaler
-        states alongside training bookkeeping (epoch, global step, best
-        validation loss) so that training can be resumed exactly from this
-        point.
+        Saves the current model weights, optimizer, and LR scheduler states
+        alongside training bookkeeping (epoch, global step, best validation
+        loss) so that training can be resumed exactly from this point.
 
         Args:
             fold: The fold index being trained.
@@ -651,7 +617,6 @@ class BaseTrainer(ABC):
         """
         model = state["model"]
         unwrapped = model.module if hasattr(model, "module") else model
-        scaler = state["scaler"]
         checkpoint = {
             "fold": fold,
             "epoch": state["epoch"],
@@ -660,7 +625,6 @@ class BaseTrainer(ABC):
             "model_state_dict": unwrapped.state_dict(),
             "optimizer_state_dict": state["optimizer"].state_dict(),
             "lr_scheduler_state_dict": state["lr_scheduler"].state_dict(),
-            "scaler_state_dict": scaler.state_dict() if scaler is not None else None,
         }
         # Write to a temp file then atomically rename so a mid-write SIGKILL
         # never leaves a corrupted checkpoint on disk.
@@ -672,9 +636,9 @@ class BaseTrainer(ABC):
     def load_checkpoint(self, fold: int, state: dict[str, Any]) -> bool:
         """Load a training checkpoint into state (all ranks).
 
-        Restores model weights, optimizer, LR scheduler, and scaler states
-        from the latest checkpoint for the given fold. If no checkpoint exists,
-        returns False and leaves state unchanged.
+        Restores model weights, optimizer, and LR scheduler states from the
+        latest checkpoint for the given fold. If no checkpoint exists, returns
+        False and leaves state unchanged.
 
         Args:
             fold: The fold index being trained.
@@ -697,10 +661,6 @@ class BaseTrainer(ABC):
         # Restore optimizer and scheduler states.
         state["optimizer"].load_state_dict(checkpoint["optimizer_state_dict"])
         state["lr_scheduler"].load_state_dict(checkpoint["lr_scheduler_state_dict"])
-
-        # Restore scaler state if AMP is enabled.
-        if state["scaler"] is not None and checkpoint["scaler_state_dict"] is not None:
-            state["scaler"].load_state_dict(checkpoint["scaler_state_dict"])
 
         # Restore bookkeeping — epoch is incremented so the loop starts on the
         # next unfinished epoch.
@@ -747,8 +707,7 @@ class BaseTrainer(ABC):
                 "Ensure that the validation set is large enough for the number "
                 "of GPUs being used or reduce the number of GPUs."
             )
-        val_steps = math.ceil(
-            len(fold_data["val_images"]) / max(1, world_size))
+        val_steps = math.ceil(len(fold_data["val_images"]) / max(1, world_size))
 
         # Build components for the fold.
         state = self.build_components(rank=rank, world_size=world_size)
@@ -758,18 +717,17 @@ class BaseTrainer(ABC):
             loaded = self.load_checkpoint(fold, state)
             if rank == 0:
                 if loaded:
-                    print_info(
-                        f"Resuming fold {fold} from epoch {state['epoch']}"
-                    )
+                    print_info(f"Resuming fold {fold} from epoch {state['epoch']}")
                 else:
                     print_warning(
-                        f"No checkpoint found for fold {fold}, "
-                        "starting from scratch."
+                        f"No checkpoint found for fold {fold}, starting from scratch."
                     )
 
         # Build data loaders for the fold.
         train_loader, val_loader = self.build_dataloaders(
-            fold_data=self.folds[fold], rank=rank, world_size=world_size,
+            fold_data=self.folds[fold],
+            rank=rank,
+            world_size=world_size,
         )
 
         # Only log metrics on first process (i.e., rank 0).
@@ -785,9 +743,7 @@ class BaseTrainer(ABC):
             model_name = str(self.models_dir / f"fold_{fold}.pt")
 
         # Stop training flag if we encounter nan or inf losses.
-        stop_training = torch.tensor(
-            [0], dtype=torch.int, device=f"cuda:{rank}"
-        )
+        stop_training = torch.tensor([0], dtype=torch.int, device=f"cuda:{rank}")
 
         # Start training for the specified number of epochs.
         for epoch in range(state["epoch"], self.config["training"]["epochs"]):
@@ -837,8 +793,7 @@ class BaseTrainer(ABC):
                     if not np.isfinite(mean_loss):
                         if rank == 0:
                             print_error(
-                                "Stopping training: Detected NaN or inf "
-                                "loss value!"
+                                "Stopping training: Detected NaN or inf loss value!"
                             )
                         stop_training[0] = 1
 
@@ -847,7 +802,7 @@ class BaseTrainer(ABC):
                         train_mean_loss = running_train_loss(mean_loss)
                         pb.update(
                             loss=train_mean_loss,
-                            lr=state["optimizer"].param_groups[0]["lr"]
+                            lr=state["optimizer"].param_groups[0]["lr"],
                         )
 
             # Broadcast stop flag so all ranks exit together if needed.
@@ -869,7 +824,7 @@ class BaseTrainer(ABC):
             # Run the validation steps for this epoch. Rank 0 shows a progress
             # bar and tracks best loss; other ranks run silently.
             state["model"].eval()
-            with torch.no_grad():
+            with torch.inference_mode():
                 pbv_ctx = (
                     progress_bar.ValidationProgressBar(val_steps)
                     if rank == 0
@@ -881,9 +836,7 @@ class BaseTrainer(ABC):
                         batch = val_loader.next()[0]
 
                         # Compute validation loss.
-                        val_loss = self.validation_step(
-                            state=state, data=batch
-                        )
+                        val_loss = self.validation_step(state=state, data=batch)
 
                         # Aggregate mean across ranks.
                         val_det = val_loss.detach()
@@ -943,9 +896,7 @@ class BaseTrainer(ABC):
                 # Log alpha only for composite losses (non-composite losses
                 # do not use alpha, so logging it would be meaningless).
                 if state["composite_loss_weighting"] is not None:
-                    logs_writer.add_scalar(
-                        "alpha", float(state["alpha"]), epoch + 1
-                    )
+                    logs_writer.add_scalar("alpha", float(state["alpha"]), epoch + 1)
 
                 logs_writer.flush()
 
@@ -982,9 +933,7 @@ class BaseTrainer(ABC):
                     checkpoint = torch.load(path, weights_only=False)
                     if checkpoint["epoch"] >= self.config["training"]["epochs"] - 1:
                         if rank == 0:
-                            print_info(
-                                f"Fold {fold} already complete, skipping."
-                            )
+                            print_info(f"Fold {fold} already complete, skipping.")
                         continue
 
             # Train the model for the current fold.
@@ -998,11 +947,11 @@ class BaseTrainer(ABC):
         instances of the training function, each on a separate GPU.
         """
         # Enable some performance optimizations.
-        torch.set_float32_matmul_precision('high')
+        torch.set_float32_matmul_precision("high")
         # torch.backends.cudnn.conv.fp32_precision was added in PyTorch 2.5;
         # fall back to allow_tf32 which achieves the same effect on older builds.
-        if hasattr(torch.backends.cudnn, 'conv'):
-            torch.backends.cudnn.conv.fp32_precision = 'tf32'
+        if hasattr(torch.backends.cudnn, "conv"):
+            torch.backends.cudnn.conv.fp32_precision = "tf32"
         else:
             torch.backends.cudnn.allow_tf32 = True
         torch.backends.cudnn.benchmark = True

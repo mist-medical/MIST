@@ -14,11 +14,11 @@ from mist.data_loading.data_loading_constants import DataLoadingConstants as con
 
 
 def get_numpy_reader(
-        files: list[str],
-        shard_id: int,
-        num_shards: int,
-        seed: int,
-        shuffle: bool,
+    files: list[str],
+    shard_id: int,
+    num_shards: int,
+    seed: int,
+    shuffle: bool,
 ) -> ops.readers.Numpy:
     """Creates and returns a DALI Numpy reader operator that reads numpy files.
 
@@ -42,14 +42,14 @@ def get_numpy_reader(
         pad_last_batch=True,  # Pad last batch to for consistent batch sizes.
         num_shards=num_shards,  # Number of shards to split the dataset.
         dont_use_mmap=True,  # Disable memory mapping for reading files.
-        shuffle_after_epoch=shuffle  # Shuffle the data after every epoch.
+        shuffle_after_epoch=shuffle,  # Shuffle the data after every epoch.
     )
 
 
 def random_augmentation(
-        probability: float,
-        augmented_data: TensorGPU,
-        original_data: TensorGPU,
+    probability: float,
+    augmented_data: TensorGPU,
+    original_data: TensorGPU,
 ) -> TensorGPU:
     """Apply random augmentation to the data based on a given probability.
 
@@ -67,8 +67,7 @@ def random_augmentation(
     """
     # Generate a condition using a coin flip based on the provided probability.
     condition = fn.cast(
-        fn.random.coin_flip(probability=probability),
-        dtype=types.DALIDataType.BOOL
+        fn.random.coin_flip(probability=probability), dtype=types.DALIDataType.BOOL
     )
 
     # Invert the condition (negation) for the alternative case.
@@ -94,20 +93,22 @@ def noise_fn(img: TensorGPU) -> TensorGPU:
     # Generate random noise with a standard deviation between 0.0 and 0.33,
     # then clamp to the original image range to avoid out-of-range values.
     img_noised = math.clamp(
-        img + fn.random.normal(img, stddev=fn.random.uniform(
-            range=(
-                constants.NOISE_FN_RANGE_MIN,
-                constants.NOISE_FN_RANGE_MAX,
-            )
-        )),
+        img
+        + fn.random.normal(
+            img,
+            stddev=fn.random.uniform(
+                range=(
+                    constants.NOISE_FN_RANGE_MIN,
+                    constants.NOISE_FN_RANGE_MAX,
+                )
+            ),
+        ),
         fn.reductions.min(img),
         fn.reductions.max(img),
     )
 
     # Return the augmented image data with a probability of 0.15.
-    return random_augmentation(
-        constants.NOISE_FN_PROBABILITY, img_noised, img
-    )
+    return random_augmentation(constants.NOISE_FN_PROBABILITY, img_noised, img)
 
 
 def blur_fn(img: TensorGPU) -> TensorGPU:
@@ -128,21 +129,20 @@ def blur_fn(img: TensorGPU) -> TensorGPU:
     # then clamp to the original image range to avoid out-of-range values.
     img_blurred = math.clamp(
         fn.gaussian_blur(
-            img, sigma=fn.random.uniform(
+            img,
+            sigma=fn.random.uniform(
                 range=(
                     constants.BLUR_FN_RANGE_MIN,
                     constants.BLUR_FN_RANGE_MAX,
                 )
-            )
+            ),
         ),
         fn.reductions.min(img),
         fn.reductions.max(img),
     )
 
     # Return the augmented image data with a probability of 0.15.
-    return random_augmentation(
-        constants.BLUR_FN_PROBABILITY, img_blurred, img
-    )
+    return random_augmentation(constants.BLUR_FN_PROBABILITY, img_blurred, img)
 
 
 def brightness_fn(img: TensorGPU) -> TensorGPU:
@@ -213,9 +213,9 @@ def contrast_fn(img: TensorGPU) -> TensorGPU:
 
 
 def validate_train_and_eval_inputs(
-        imgs: list[str],
-        lbls: list[str],
-        dtms: list[str] | None = None,
+    imgs: list[str],
+    lbls: list[str],
+    dtms: list[str] | None = None,
 ) -> None:
     """Validate that the input data is correct.
 
@@ -262,7 +262,6 @@ def is_valid_generic_pipeline_input(input_data: Any) -> bool:
         return False  # Empty lists are not valid.
 
     return all(
-        isinstance(item, str) and
-        item.endswith(".npy") and
-        Path(item).is_file() for item in input_data
+        isinstance(item, str) and item.endswith(".npy") and Path(item).is_file()
+        for item in input_data
     )

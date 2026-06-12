@@ -1,4 +1,5 @@
 """Utilities for the DataDumper module."""
+
 from pathlib import Path
 from typing import Any
 
@@ -151,7 +152,7 @@ def compute_compactness(
     sa_mm2 = _surface_area_mm2(mask, spacing)
     if sa_mm2 < 1e-8:
         return None
-    iq = 36.0 * np.pi * volume_mm3 ** 2 / sa_mm2 ** 3
+    iq = 36.0 * np.pi * volume_mm3**2 / sa_mm2**3
     return float(min(iq, 1.0))
 
 
@@ -232,17 +233,11 @@ def collect_per_patient_stats(
     total_fg_voxels: list[int] = []
 
     # Per-channel: sampled foreground intensities pooled across all patients.
-    channel_intensities: dict[str, list[float]] = {
-        col: [] for col in image_cols
-    }
+    channel_intensities: dict[str, list[float]] = {col: [] for col in image_cols}
 
     # Per-label: voxel count, presence, and shape descriptors per patient.
-    label_voxel_counts: dict[int, list[int]] = {
-        lbl: [] for lbl in non_bg_labels
-    }
-    label_presence: dict[int, list[int]] = {
-        lbl: [] for lbl in non_bg_labels
-    }
+    label_voxel_counts: dict[int, list[int]] = {lbl: [] for lbl in non_bg_labels}
+    label_presence: dict[int, list[int]] = {lbl: [] for lbl in non_bg_labels}
     label_shape_descriptors: dict[int, list[dict[str, Any]]] = {
         lbl: [] for lbl in non_bg_labels
     }
@@ -284,17 +279,13 @@ def collect_per_patient_stats(
                         shape["compactness"] = compute_compactness(
                             lbl_mask, spacing_arr
                         )
-                        shape["skeleton_ratio"] = compute_skeleton_ratio(
-                            lbl_mask
-                        )
+                        shape["skeleton_ratio"] = compute_skeleton_ratio(lbl_mask)
                         label_shape_descriptors[lbl].append(shape)
 
             # Per-channel intensity statistics sampled from foreground.
             if fg_count > 0:
                 for col in image_cols:
-                    if col not in patient or not isinstance(
-                        patient[col], str
-                    ):
+                    if col not in patient or not isinstance(patient[col], str):
                         continue
                     img = ants.image_read(patient[col])
                     fg_vals = img.numpy()[fg_mask]
@@ -356,18 +347,14 @@ def build_image_statistics(
     nz_fracs = raw_stats["foreground_fractions"]
     channel_intensities = raw_stats["channel_intensities"]
 
-    spacing_stats = {
-        f"axis_{ax}": _axis_stats(spacings[:, ax]) for ax in range(3)
-    }
+    spacing_stats = {f"axis_{ax}": _axis_stats(spacings[:, ax]) for ax in range(3)}
     median_spacing = [float(np.median(spacings[:, ax])) for ax in range(3)]
     anisotropy_ratio = round(
         max(median_spacing) / max(min(median_spacing), 1e-8),
         4,
     )
 
-    dim_stats = {
-        f"axis_{ax}": _axis_stats(dims[:, ax]) for ax in range(3)
-    }
+    dim_stats = {f"axis_{ax}": _axis_stats(dims[:, ax]) for ax in range(3)}
 
     intensity_stats: dict[str, Any] = {}
     for col, vals in channel_intensities.items():
@@ -442,9 +429,11 @@ def build_label_statistics(
     final_classes = dataset_info["final_classes"]
     total_fg = raw_stats["total_fg_voxels"]
     mean_total_fg = float(np.mean(total_fg)) if total_fg else 1.0
-    mean_total_image_voxels = float(
-        np.mean(np.prod(raw_stats["effective_dims"], axis=1))
-    ) if len(raw_stats["effective_dims"]) > 0 else 1.0
+    mean_total_image_voxels = (
+        float(np.mean(np.prod(raw_stats["effective_dims"], axis=1)))
+        if len(raw_stats["effective_dims"]) > 0
+        else 1.0
+    )
 
     per_label: dict[str, Any] = {}
     presence_rates: dict[int, float] = {}
@@ -470,15 +459,9 @@ def build_label_statistics(
         # Aggregate shape descriptors across patients where label is present.
         shape_descs = raw_stats["label_shape_descriptors"][lbl]
         if shape_descs:
-            mean_lin = float(
-                np.mean([d["linearity"] for d in shape_descs])
-            )
-            mean_plan = float(
-                np.mean([d["planarity"] for d in shape_descs])
-            )
-            mean_sph = float(
-                np.mean([d["sphericity"] for d in shape_descs])
-            )
+            mean_lin = float(np.mean([d["linearity"] for d in shape_descs]))
+            mean_plan = float(np.mean([d["planarity"] for d in shape_descs]))
+            mean_sph = float(np.mean([d["sphericity"] for d in shape_descs]))
             components = {
                 "tubular": mean_lin,
                 "planar": mean_plan,
@@ -487,20 +470,20 @@ def build_label_statistics(
             shape_class = max(components, key=lambda k: components[k])
 
             compactness_vals = [
-                d["compactness"] for d in shape_descs
+                d["compactness"]
+                for d in shape_descs
                 if d.get("compactness") is not None
             ]
             skeleton_ratio_vals = [
-                d["skeleton_ratio"] for d in shape_descs
+                d["skeleton_ratio"]
+                for d in shape_descs
                 if d.get("skeleton_ratio") is not None
             ]
             mean_compactness = (
-                float(np.mean(compactness_vals))
-                if compactness_vals else None
+                float(np.mean(compactness_vals)) if compactness_vals else None
             )
             mean_skeleton_ratio = (
-                float(np.mean(skeleton_ratio_vals))
-                if skeleton_ratio_vals else None
+                float(np.mean(skeleton_ratio_vals)) if skeleton_ratio_vals else None
             )
 
             shape_info: dict[str, Any] = {
@@ -509,12 +492,12 @@ def build_label_statistics(
                 "sphericity": round(mean_sph, 4),
                 "shape_class": shape_class,
                 "compactness": (
-                    round(mean_compactness, 4)
-                    if mean_compactness is not None else None
+                    round(mean_compactness, 4) if mean_compactness is not None else None
                 ),
                 "skeleton_ratio": (
                     round(mean_skeleton_ratio, 4)
-                    if mean_skeleton_ratio is not None else None
+                    if mean_skeleton_ratio is not None
+                    else None
                 ),
             }
         else:
@@ -549,22 +532,17 @@ def build_label_statistics(
         combined_presence = np.zeros(len(total_fg))
         for lbl in class_labels:
             if lbl != 0 and lbl in raw_stats["label_voxel_counts"]:
-                combined_counts += np.array(
-                    raw_stats["label_voxel_counts"][lbl])
+                combined_counts += np.array(raw_stats["label_voxel_counts"][lbl])
                 combined_presence = np.maximum(
                     combined_presence,
                     np.array(raw_stats["label_presence"][lbl]),
                 )
         mean_combined = float(np.mean(combined_counts))
-        vol_frac_pct = round(
-            mean_combined / max(mean_total_fg, 1e-8) * 100, 4
-        )
+        vol_frac_pct = round(mean_combined / max(mean_total_fg, 1e-8) * 100, 4)
         final_class_stats[class_name] = {
             "constituent_labels": class_labels,
             "mean_volume_fraction_of_foreground_pct": vol_frac_pct,
-            "presence_rate_pct": round(
-                float(np.mean(combined_presence)) * 100, 2
-            ),
+            "presence_rate_pct": round(float(np.mean(combined_presence)) * 100, 2),
             "size_category": _size_category(vol_frac_pct),
         }
 
@@ -575,15 +553,10 @@ def build_label_statistics(
         if presence_rates[lbl] > 0 and mean_vol_fractions[lbl] > 0
     }
     if len(active_fractions) >= 2:
-        dominant = max(
-            active_fractions, key=lambda lbl: active_fractions[lbl]
-        )
-        minority = min(
-            active_fractions, key=lambda lbl: active_fractions[lbl]
-        )
+        dominant = max(active_fractions, key=lambda lbl: active_fractions[lbl])
+        minority = min(active_fractions, key=lambda lbl: active_fractions[lbl])
         imbalance_ratio = round(
-            active_fractions[dominant]
-            / max(active_fractions[minority], 1e-8),
+            active_fractions[dominant] / max(active_fractions[minority], 1e-8),
             2,
         )
     else:
@@ -627,13 +600,9 @@ def generate_observations(
 
     # Dataset size.
     if n_patients < 50:
-        observations.append(
-            f"Small dataset: {n_patients} patients."
-        )
+        observations.append(f"Small dataset: {n_patients} patients.")
     elif n_patients > 500:
-        observations.append(
-            f"Large dataset: {n_patients} patients."
-        )
+        observations.append(f"Large dataset: {n_patients} patients.")
 
     # Multi-channel input.
     if n_channels > 1:
@@ -701,8 +670,7 @@ def generate_observations(
             )
         elif presence < 50:
             observations.append(
-                f"Label {lbl_str} is absent in "
-                f"{100 - presence:.1f}% of patients."
+                f"Label {lbl_str} is absent in {100 - presence:.1f}% of patients."
             )
 
     # Image fraction: two-tier observation.
@@ -732,14 +700,9 @@ def generate_observations(
         skel = shape.get("skeleton_ratio")
         iq = shape.get("compactness")
 
-        pca_str = (
-            f"linearity={lin:.2f}, planarity={plan:.2f}, "
-            f"sphericity={sph:.2f}"
-        )
+        pca_str = f"linearity={lin:.2f}, planarity={plan:.2f}, sphericity={sph:.2f}"
         iq_str = f", compactness={iq:.3f}" if iq is not None else ""
-        skel_str = (
-            f", skeleton ratio={skel:.3f}" if skel is not None else ""
-        )
+        skel_str = f", skeleton ratio={skel:.3f}" if skel is not None else ""
 
         if skel is not None and skel > constants.TUBULAR_SKELETON_RATIO_THRESHOLD:
             observations.append(
@@ -748,8 +711,7 @@ def generate_observations(
             )
         elif shape["shape_class"] == "tubular":
             observations.append(
-                f"Label {lbl_str} appears elongated: "
-                f"{pca_str}{skel_str}."
+                f"Label {lbl_str} appears elongated: {pca_str}{skel_str}."
             )
         elif shape["shape_class"] == "planar":
             observations.append(
@@ -766,20 +728,15 @@ def generate_observations(
     # structural detail when resampled to a heuristic target spacing derived
     # from whole-image statistics.
     for lbl_str, lbl_data in label_stats["per_label"].items():
-        if lbl_data["size_category"] not in (
-            constants.SMALL_STRUCTURE_SIZE_CATEGORIES
-        ):
+        if lbl_data["size_category"] not in (constants.SMALL_STRUCTURE_SIZE_CATEGORIES):
             continue
         shape = lbl_data["shape"]
         skel = shape.get("skeleton_ratio")
         is_thin = (
-            (skel is not None and skel > constants.TUBULAR_SKELETON_RATIO_THRESHOLD)
-            or (skel is None and shape["shape_class"] in ("tubular", "planar"))
-        )
+            skel is not None and skel > constants.TUBULAR_SKELETON_RATIO_THRESHOLD
+        ) or (skel is None and shape["shape_class"] in ("tubular", "planar"))
         if is_thin:
-            skel_str = (
-                f", skeleton ratio={skel:.3f}" if skel is not None else ""
-            )
+            skel_str = f", skeleton ratio={skel:.3f}" if skel is not None else ""
             observations.append(
                 f"Label {lbl_str} is a small, geometrically thin structure "
                 f"(size: {lbl_data['size_category']}"

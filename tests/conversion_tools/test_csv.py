@@ -1,4 +1,5 @@
 """Tests for converting CSV files to MIST format."""
+
 import json
 import shutil
 import pandas as pd
@@ -25,18 +26,22 @@ def temp_csv_data(tmp_path):
 
     # Training CSV format: id, mask, image.
     train_csv = tmp_path / "train.csv"
-    pd.DataFrame({
-        "id": [0],
-        "mask": [str(mask_path)],
-        "ct": [str(img_path)],
-    }).to_csv(train_csv, index=False)
+    pd.DataFrame(
+        {
+            "id": [0],
+            "mask": [str(mask_path)],
+            "ct": [str(img_path)],
+        }
+    ).to_csv(train_csv, index=False)
 
     # Testing CSV format: id, image.
     test_csv = tmp_path / "test.csv"
-    pd.DataFrame({
-        "id": [1],
-        "ct": [str(img_path)],
-    }).to_csv(test_csv, index=False)
+    pd.DataFrame(
+        {
+            "id": [1],
+            "ct": [str(img_path)],
+        }
+    ).to_csv(test_csv, index=False)
 
     return train_csv, test_csv, tmp_path
 
@@ -123,6 +128,7 @@ def test_convert_csv_raises_if_test_missing(tmp_path, temp_csv_data):
 # _validate_csv_columns
 # ---------------------------------------------------------------------------
 
+
 class TestValidateCsvColumns:
     """Tests for csv._validate_csv_columns."""
 
@@ -186,20 +192,22 @@ class TestValidateCsvColumns:
     def test_convert_csv_raises_on_bad_column_order(self, tmp_path):
         """convert_csv raises ValueError if training CSV columns are wrong."""
         bad_csv = tmp_path / "bad.csv"
-        pd.DataFrame({
-            "id": [0], "ct": ["/img.nii.gz"], "mask": ["/mask.nii.gz"]
-        }).to_csv(bad_csv, index=False)
+        pd.DataFrame(
+            {"id": [0], "ct": ["/img.nii.gz"], "mask": ["/mask.nii.gz"]}
+        ).to_csv(bad_csv, index=False)
         with pytest.raises(ValueError, match="second column must be 'mask'"):
             convert_csv(bad_csv, tmp_path / "out")
 
 
 def test_copy_csv_data_skips_missing_files(tmp_path):
     """Tests copy_csv_data skips patients where files are missing."""
-    df = pd.DataFrame({
-        "id": [0],
-        "mask": [str(tmp_path / "missing_mask.nii.gz")],
-        "ct": [str(tmp_path / "missing_img.nii.gz")],
-    })
+    df = pd.DataFrame(
+        {
+            "id": [0],
+            "mask": [str(tmp_path / "missing_mask.nii.gz")],
+            "ct": [str(tmp_path / "missing_img.nii.gz")],
+        }
+    )
     out_dir = tmp_path / "mist"
     copy_csv_data(df, out_dir, "training", "Testing copy logic")
 
@@ -210,17 +218,19 @@ def test_copy_csv_data_skips_missing_files(tmp_path):
 
 def test_copy_csv_data_prints_error_summary_on_failures(tmp_path, monkeypatch):
     """copy_csv_data prints a 'N of M patients had errors' summary."""
-    df = pd.DataFrame({
-        "id": [0, 1],
-        "mask": [
-            str(tmp_path / "missing_mask_0.nii.gz"),
-            str(tmp_path / "missing_mask_1.nii.gz"),
-        ],
-        "ct": [
-            str(tmp_path / "missing_img_0.nii.gz"),
-            str(tmp_path / "missing_img_1.nii.gz"),
-        ],
-    })
+    df = pd.DataFrame(
+        {
+            "id": [0, 1],
+            "mask": [
+                str(tmp_path / "missing_mask_0.nii.gz"),
+                str(tmp_path / "missing_mask_1.nii.gz"),
+            ],
+            "ct": [
+                str(tmp_path / "missing_img_0.nii.gz"),
+                str(tmp_path / "missing_img_1.nii.gz"),
+            ],
+        }
+    )
     printed = []
     monkeypatch.setattr(
         "mist.conversion_tools.csv.console.print",
@@ -246,11 +256,13 @@ def test_copy_csv_data_test_mode_skips_mask(tmp_path):
 
 def test_copy_csv_data_skips_missing_images(tmp_path):
     """Test that copy_csv_data skips missing image files but copies the mask."""
-    df = pd.DataFrame({
-        "id": [0],
-        "mask": [str(tmp_path / "existing_mask.nii.gz")],
-        "ct": [str(tmp_path / "missing_image.nii.gz")],
-    })
+    df = pd.DataFrame(
+        {
+            "id": [0],
+            "mask": [str(tmp_path / "existing_mask.nii.gz")],
+            "ct": [str(tmp_path / "missing_image.nii.gz")],
+        }
+    )
     (tmp_path / "existing_mask.nii.gz").write_text("dummy mask")
 
     out_dir = tmp_path / "mist_output"

@@ -1,4 +1,5 @@
 """Tests for nnUNet utility functions."""
+
 import pytest
 
 # MIST imports.
@@ -7,11 +8,14 @@ from mist.models.nnunet import nnunet_utils
 # Tests for get_padding
 
 
-@pytest.mark.parametrize("kernel, stride, expected", [
-    (3, 1, 1),
-    ((3, 3), (1, 1), (1, 1)),
-    ((5, 3, 3), (1, 1, 1), (2, 1, 1)),
-])
+@pytest.mark.parametrize(
+    "kernel, stride, expected",
+    [
+        (3, 1, 1),
+        ((3, 3), (1, 1), (1, 1)),
+        ((5, 3, 3), (1, 1, 1), (2, 1, 1)),
+    ],
+)
 def test_get_padding_valid(kernel, stride, expected):
     """Covers the case where kernel and stride are valid."""
     assert nnunet_utils.get_padding(kernel, stride) == expected
@@ -19,18 +23,19 @@ def test_get_padding_valid(kernel, stride, expected):
 
 def test_get_padding_negative_raises():
     """Covers the case where padding would be negative."""
-    with pytest.raises(
-        ValueError, match="Padding value should not be negative"
-    ):
+    with pytest.raises(ValueError, match="Padding value should not be negative"):
         nnunet_utils.get_padding(2, 4)  # Will cause negative padding
 
 
 # Tests for get_output_padding.
-@pytest.mark.parametrize("kernel, stride, padding, expected", [
-    (3, 1, 1, 0),
-    ((3, 3), (1, 1), (1, 1), (0, 0)),
-    ((3, 3, 3), (2, 2, 2), (1, 1, 1), (1, 1, 1)),
-])
+@pytest.mark.parametrize(
+    "kernel, stride, padding, expected",
+    [
+        (3, 1, 1, 0),
+        ((3, 3), (1, 1), (1, 1), (0, 0)),
+        ((3, 3, 3), (2, 2, 2), (1, 1, 1), (1, 1, 1)),
+    ],
+)
 def test_get_output_padding_valid(kernel, stride, padding, expected):
     """Covers the case where kernel, stride, and padding are valid."""
     assert nnunet_utils.get_output_padding(kernel, stride, padding) == expected
@@ -38,9 +43,7 @@ def test_get_output_padding_valid(kernel, stride, padding, expected):
 
 def test_get_output_padding_negative_raises():
     """Covers the case where output padding would be negative."""
-    with pytest.raises(
-        ValueError, match="out_padding should not be negative"
-    ):
+    with pytest.raises(ValueError, match="out_padding should not be negative"):
         nnunet_utils.get_output_padding(5, 1, 1)
 
 
@@ -49,9 +52,7 @@ def test_get_unet_params_valid():
     """Covers the case where patch_size and spacings are valid."""
     patch_size = [128, 128, 128]
     spacings = [1.0, 1.0, 1.0]
-    kernels, strides, final_dim = nnunet_utils.get_unet_params(
-        patch_size, spacings
-    )
+    kernels, strides, final_dim = nnunet_utils.get_unet_params(patch_size, spacings)
 
     assert isinstance(kernels, list)
     assert isinstance(strides, list)

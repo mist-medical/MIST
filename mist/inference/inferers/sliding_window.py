@@ -1,4 +1,5 @@
 """Sliding window inferer implementation using MONAI."""
+
 from collections.abc import Callable
 import torch
 import monai
@@ -17,6 +18,7 @@ class SlidingWindowInferer(AbstractInferer):
     def __init__(
         self,
         patch_size: tuple[int, int, int],
+        sw_batch_size: int = 1,
         patch_overlap: float = 0.5,
         patch_blend_mode: str = "gaussian",
         device: str | torch.device | None = None,
@@ -30,6 +32,9 @@ class SlidingWindowInferer(AbstractInferer):
 
         Args:
             patch_size: Tuple representing the size of each patch (D, H, W).
+            sw_batch_size: Number of patches to process per forward pass.
+                Higher values improve GPU utilization at the cost of memory.
+                Default is 1.
             patch_overlap: Fractional overlap between patches must be in the
                 range [0, 1). Default is 0.5.
             patch_blend_mode: Blending mode to use (i.e., "gaussian" or
@@ -47,13 +52,15 @@ class SlidingWindowInferer(AbstractInferer):
             )
         if not all(isinstance(dim, int) and dim > 0 for dim in patch_size):
             raise ValueError(
-                "All patch dimensions must be positive integers, got: "
-                f"{patch_size}"
+                f"All patch dimensions must be positive integers, got: {patch_size}"
+            )
+        if not isinstance(sw_batch_size, int) or sw_batch_size < 1:
+            raise ValueError(
+                f"sw_batch_size must be a positive integer, got: {sw_batch_size}"
             )
         if not 0 <= patch_overlap < 1:
             raise ValueError(
-                "patch_overlap must be in the range [0, 1), got: "
-                f"{patch_overlap}"
+                f"patch_overlap must be in the range [0, 1), got: {patch_overlap}"
             )
         if patch_blend_mode not in ic.SLIDING_WINDOW_PATCH_BLEND_MODES:
             raise ValueError(
@@ -61,8 +68,9 @@ class SlidingWindowInferer(AbstractInferer):
                 f"modes: {sorted(ic.SLIDING_WINDOW_PATCH_BLEND_MODES)}"
             )
 
-        # Set the patch size, overlap, and blend mode.
+        # Set the patch size, sw_batch_size, overlap, and blend mode.
         self.patch_size = patch_size
+        self.sw_batch_size = sw_batch_size
         self.patch_overlap = patch_overlap
         self.patch_blend_mode = patch_blend_mode
 
@@ -88,7 +96,7 @@ class SlidingWindowInferer(AbstractInferer):
         prediction = monai.inferers.sliding_window_inference(  # type: ignore[attr-defined]
             inputs=image,
             roi_size=self.patch_size,
-            sw_batch_size=ic.SLIDING_WINDOW_BATCH_SIZE,
+            sw_batch_size=self.sw_batch_size,
             predictor=model,
             overlap=self.patch_overlap,
             mode=self.patch_blend_mode,
@@ -96,7 +104,5 @@ class SlidingWindowInferer(AbstractInferer):
         )
 
         # Apply softmax to the prediction tensor.
-        prediction = torch.nn.functional.softmax(
-            prediction, dim=ic.SOFTMAX_AXIS
-        )
+        prediction = torch.nn.functional.softmax(prediction, dim=ic.SOFTMAX_AXIS)
         return prediction

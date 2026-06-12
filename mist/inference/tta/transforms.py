@@ -1,4 +1,5 @@
 """Test time augmentation (TTA) transforms for MIST."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -15,6 +16,7 @@ TTA_TRANSFORM_REGISTRY: dict[str, type[AbstractTransform]] = {}
 
 def register_transform(name: str) -> Callable[[type[T]], type[T]]:
     """Decorator to register a TTA transform class by name."""
+
     def decorator(cls: type[T]) -> type[T]:
         if not issubclass(cls, AbstractTransform):
             raise TypeError(f"{cls.__name__} must subclass AbstractTransform.")
@@ -22,6 +24,7 @@ def register_transform(name: str) -> Callable[[type[T]], type[T]]:
             raise KeyError(f"Transform '{name}' is already registered.")
         TTA_TRANSFORM_REGISTRY[name] = cls  # Register class, not an instance
         return cls
+
     return decorator
 
 

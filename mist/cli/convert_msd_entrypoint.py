@@ -1,4 +1,5 @@
 """Command line tool for converting MSD datasets to MIST format."""
+
 from argparse import ArgumentDefaultsHelpFormatter
 from pathlib import Path
 import argparse
@@ -16,15 +17,21 @@ def _parse_convert_msd_args(
         description="Convert a Medical Segmentation Decathlon dataset to MIST format.",
     )
     parser.arg(
-        "--source", type=str, required=True,
+        "--source",
+        type=str,
+        required=True,
         help="Path to the MSD dataset directory (must contain dataset.json).",
     )
     parser.arg(
-        "--output", type=str, required=True,
+        "--output",
+        type=str,
+        required=True,
         help="Directory to save the converted MIST-format dataset.",
     )
     parser.arg(
-        "--num-workers-conversion", type=positive_int, default=1,
+        "--num-workers-conversion",
+        type=positive_int,
+        default=1,
         help="Number of parallel threads for file copying.",
     )
     return parser.parse_args(argv)

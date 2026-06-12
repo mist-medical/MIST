@@ -1,6 +1,5 @@
 """Unit tests for DiceCELoss in MIST."""
 
-
 import pytest
 import torch
 
@@ -25,9 +24,7 @@ def _make_mock_data(
             - y_pred: Logits (Batch, Class, Height, Width, Depth).
     """
     # Ground truth: Integer labels with channel dim (B, 1, H, W, D).
-    y_true = torch.randint(
-        0, n_classes, size=(batch_size, 1, size, size, size)
-    )
+    y_true = torch.randint(0, n_classes, size=(batch_size, 1, size, size, size))
     # Predictions: Logits (B, C, H, W, D).
     y_pred = torch.randn((batch_size, n_classes, size, size, size))
     return y_true, y_pred
@@ -51,7 +48,7 @@ class TestDiceCELoss:
     def test_exclude_background_configuration(self, exclude_bg):
         """Test that CE ignore_index is always default (-100).
 
-        We deliberately want CrossEntropy to include background pixels (to 
+        We deliberately want CrossEntropy to include background pixels (to
         suppress false positives) even if the Dice term excludes them.
         """
         loss_fn = DiceCELoss(exclude_background=exclude_bg)
@@ -79,7 +76,7 @@ class TestDiceCELoss:
             ((2, 3, 4, 4, 4), (1, 1, 4, 4, 4)),
             # Case 3: Mismatched spatial dimensions.
             ((1, 3, 4, 4, 4), (1, 1, 5, 5, 5)),
-        ]
+        ],
     )
     def test_invalid_shape_raises_error(self, pred_shape, true_shape):
         """Ensure invalid input shapes raise ValueError (via base class)."""

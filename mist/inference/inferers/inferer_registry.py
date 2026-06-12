@@ -1,4 +1,5 @@
 """Registry for inference strategies in MIST."""
+
 from typing import TypeVar
 from collections.abc import Callable
 
@@ -11,15 +12,15 @@ INFERER_REGISTRY: dict[str, type[AbstractInferer]] = {}
 
 def register_inferer(name: str) -> Callable[[type[T]], type[T]]:
     """Decorator to register a new inferer class."""
+
     def decorator(cls: type[T]) -> type[T]:
         if not issubclass(cls, AbstractInferer):
-            raise TypeError(
-                f"{cls.__name__} must inherit from AbstractInferer."
-            )
+            raise TypeError(f"{cls.__name__} must inherit from AbstractInferer.")
         if name in INFERER_REGISTRY:
             raise KeyError(f"Inferer '{name}' is already registered.")
         INFERER_REGISTRY[name] = cls  # Register the class, not an instance
         return cls
+
     return decorator
 
 

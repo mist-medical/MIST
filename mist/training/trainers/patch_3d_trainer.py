@@ -1,5 +1,6 @@
 """3D patch trainer for MIST built on top of BaseTrainer."""
 
+import contextlib
 from typing import Any
 
 import torch
@@ -101,12 +102,11 @@ class Patch3DTrainer(BaseTrainer):
         state = kwargs["state"]
         batch = kwargs["data"]
 
-        # Unpack the state. This includes the model, optimizer, scaler, loss
-        # function (i.e., criterion), and the alpha weight for composite losses
+        # Unpack the state. This includes the model, optimizer, loss function
+        # (i.e., criterion), and the alpha weight for composite losses
         # (pre-computed once per epoch by the training loop).
         model = state["model"]
         optimizer = state["optimizer"]
-        scaler = state["scaler"]
         criterion = state["loss_function"]
         alpha = state["alpha"]
 
@@ -117,27 +117,16 @@ class Patch3DTrainer(BaseTrainer):
         max_norm = self.config["training"].get(
             "grad_clip_norm", constants.GRAD_CLIP_VALUE
         )
+        amp_enabled = self.config["training"]["amp"]
+
+        amp_context = (
+            torch.autocast(device_type="cuda", dtype=torch.bfloat16)
+            if amp_enabled
+            else contextlib.nullcontext()
+        )
 
         optimizer.zero_grad()
-        if scaler is not None:
-            with torch.autocast(device_type="cuda", dtype=torch.float16):
-                output = model(image)
-
-                y_deep_supervision = output.get("deep_supervision", None)
-                loss = criterion(
-                    y_true=label,
-                    y_pred=output["prediction"],
-                    y_supervision=y_deep_supervision,
-                    alpha=alpha,
-                    dtm=dtm,
-                )
-
-            scaler.scale(loss).backward()
-            scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=max_norm)
-            scaler.step(optimizer)
-            scaler.update()
-        else:
+        with amp_context:
             output = model(image)
 
             y_deep_supervision = output.get("deep_supervision", None)
@@ -149,9 +138,9 @@ class Patch3DTrainer(BaseTrainer):
                 dtm=dtm,
             )
 
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=max_norm)
-            optimizer.step()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=max_norm)
+        optimizer.step()
         return loss
 
     def validation_step(self, **kwargs) -> torch.Tensor:
@@ -189,14 +178,21 @@ class Patch3DTrainer(BaseTrainer):
         label = batch["label"]
 
         # Perform sliding window inference for validation.
-        pred = sliding_window_inference(
-            inputs=image,
-            roi_size=patch_size,
-            overlap=overlap,
-            sw_batch_size=1,
-            predictor=model,
-            device=image.device,
+        sw_batch_size = 2 * self.config["training"]["batch_size_per_gpu"]
+        amp_context = (
+            torch.autocast(device_type="cuda", dtype=torch.bfloat16)
+            if self.config["training"]["amp"]
+            else contextlib.nullcontext()
         )
+        with amp_context:
+            pred = sliding_window_inference(
+                inputs=image,
+                roi_size=patch_size,
+                overlap=overlap,
+                sw_batch_size=sw_batch_size,
+                predictor=model,
+                device=image.device,
+            )
 
         # Compute the loss using the criterion.
         return self.validation_loss(label, pred)

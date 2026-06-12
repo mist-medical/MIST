@@ -1,10 +1,12 @@
 """Constants for nnUNet."""
+
 import dataclasses
 
 
 @dataclasses.dataclass(frozen=True)
 class NNUnetConstants:
     """Data class storing constants for nnUNet."""
+
     MAX_DEPTH = 5  # Maximum depth of the network.
     DEFAULT_STRIDE = 2  # Default stride for convolutional layers.
     ANISOTROPIC_MAX_RATIO = 2.0  # Maximum of spacing[i] / min(spacing).

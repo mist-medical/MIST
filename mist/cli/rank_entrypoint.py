@@ -1,4 +1,5 @@
 """Command line tool to rank multiple evaluation result CSVs BraTS-style."""
+
 import argparse
 from argparse import ArgumentDefaultsHelpFormatter
 from pathlib import Path
@@ -6,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from mist.cli.args import ArgParser
-from mist.evaluation.ranking import rank_results
+from mist.evaluation.ranking import rank_results, compute_pairwise_significance
 from mist.utils import io
 
 
@@ -21,7 +22,10 @@ def _parse_rank_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.arg(
-        "--results", type=str, nargs="+", required=True,
+        "--results",
+        type=str,
+        nargs="+",
+        required=True,
         help=(
             "Paths to two or more evaluation result CSVs (e.g., outputs of "
             "mist_evaluate). Each CSV must share the same id column and "
@@ -29,28 +33,37 @@ def _parse_rank_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.arg(
-        "--names", type=str, nargs="+", default=None,
+        "--names",
+        type=str,
+        nargs="+",
+        default=None,
         help=(
             "Optional friendly labels, one per --results CSV in the same "
             "order. Defaults to the file stem of each results CSV."
         ),
     )
     parser.arg(
-        "--output-csv", type=str, required=True,
+        "--output-csv",
+        type=str,
+        required=True,
         help=(
             "Path where the summary ranking CSV will be written. Columns: "
             "'strategy', 'average_rank'."
         ),
     )
     parser.arg(
-        "--output-detailed-csv", type=str, default=None,
+        "--output-detailed-csv",
+        type=str,
+        default=None,
         help=(
             "Optional path for a per-metric breakdown CSV containing mean "
             "ranks per strategy per metric column."
         ),
     )
     parser.arg(
-        "--metric-direction-overrides", type=str, default=None,
+        "--metric-direction-overrides",
+        type=str,
+        default=None,
         help=(
             "Optional path to a JSON file mapping metric column name to "
             "'higher' or 'lower'. Required only for columns whose suffix "
@@ -58,8 +71,21 @@ def _parse_rank_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.arg(
-        "--id-column", type=str, default="id",
+        "--id-column",
+        type=str,
+        default="id",
         help="Name of the column identifying each patient.",
+    )
+    parser.arg(
+        "--significance-csv",
+        type=str,
+        default=None,
+        help=(
+            "Optional path for a pairwise significance matrix CSV. Entry "
+            "[A, B] is the p-value for the one-sided Wilcoxon signed-rank "
+            "test that strategy A's per-patient mean rank is significantly "
+            "lower (better) than strategy B's. Diagonal entries are NaN."
+        ),
     )
 
     ns = parser.parse_args(argv)
@@ -75,9 +101,7 @@ def run_rank(ns: argparse.Namespace) -> None:
     """Load CSVs, run ranking, and write output(s)."""
     results_paths = [Path(p).expanduser().resolve() for p in ns.results]
     if len(results_paths) < 2:
-        raise ValueError(
-            "mist_rank requires at least two --results CSVs to rank."
-        )
+        raise ValueError("mist_rank requires at least two --results CSVs to rank.")
 
     if ns.names is not None:
         names = list(ns.names)
@@ -91,9 +115,7 @@ def run_rank(ns: argparse.Namespace) -> None:
 
     direction_overrides = None
     if ns.metric_direction_overrides is not None:
-        overrides_path = (
-            Path(ns.metric_direction_overrides).expanduser().resolve()
-        )
+        overrides_path = Path(ns.metric_direction_overrides).expanduser().resolve()
         direction_overrides = io.read_json_file(overrides_path)
         if not isinstance(direction_overrides, dict):
             raise ValueError(
@@ -118,6 +140,17 @@ def run_rank(ns: argparse.Namespace) -> None:
         detailed_csv = Path(ns.output_detailed_csv).expanduser().resolve()
         _ensure_output_dir(detailed_csv)
         detailed_df.to_csv(detailed_csv, index=False)
+
+    if ns.significance_csv is not None:
+        significance_df = compute_pairwise_significance(
+            results=results,
+            names=names,
+            direction_overrides=direction_overrides,
+            id_column=ns.id_column,
+        )
+        sig_csv = Path(ns.significance_csv).expanduser().resolve()
+        _ensure_output_dir(sig_csv)
+        significance_df.to_csv(sig_csv)
 
 
 def rank_entry(argv: list[str] | None = None) -> None:

@@ -1,4 +1,5 @@
 """Input output utilities for MIST runtime IO operations."""
+
 from typing import Any
 from pathlib import Path
 import json
@@ -18,9 +19,7 @@ def read_json_file(json_file: str | Path) -> dict[str, Any]:
     return json_data
 
 
-def write_json_file(
-    json_file: str | Path, json_data: dict[str, Any]
-) -> None:
+def write_json_file(json_file: str | Path, json_data: dict[str, Any]) -> None:
     """Write dictionary as json file.
 
     Args:

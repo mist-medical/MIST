@@ -1,4 +1,5 @@
 """Tests for the Predictor class."""
+
 import pytest
 import torch
 from mist.inference.predictor import Predictor
@@ -58,6 +59,7 @@ def _make_predictor(**overrides):
 # Existing / basic tests
 # =====================
 
+
 def test_predictor_basic_flow():
     """One model, one transform: result equals transform ∘ model ∘ inverse."""
     # image=1 → +1 → *2 → -1 = 2 (forward:+1, model:*2, inverse:-1 → net +2)
@@ -75,8 +77,11 @@ def test_predictor_multiple_models_and_tta():
     image = torch.ones(1, 1, 4, 4, 4)
 
     class AddOne:
-        def __call__(self, x): return x + 1
-        def inverse(self, x): return x - 1
+        def __call__(self, x):
+            return x + 1
+
+        def inverse(self, x):
+            return x - 1
 
     predictor = _make_predictor(
         models=[lambda x: x + 2, lambda x: x * 3],
@@ -92,6 +97,7 @@ def test_predictor_multiple_models_and_tta():
 # =====================
 # New behavioral tests
 # =====================
+
 
 def test_predictor_moves_image_to_device():
     """Predictor calls .to(device) on the input before inference."""
@@ -140,8 +146,11 @@ def test_predictor_inferer_receives_transformed_image():
             return model(image)
 
     class AddTwo:
-        def __call__(self, x): return x + 2
-        def inverse(self, x): return x - 2
+        def __call__(self, x):
+            return x + 2
+
+        def inverse(self, x):
+            return x - 2
 
     image = torch.zeros(1, 1, 4, 4, 4)
     predictor = _make_predictor(
@@ -194,6 +203,7 @@ def test_predictor_multiple_models_all_contribute_to_ensemble():
 
 def test_predictor_model_exception_propagates():
     """A RuntimeError raised inside a model is not swallowed."""
+
     def bad_model(_):
         raise RuntimeError("model exploded")
 
@@ -213,3 +223,84 @@ def test_predictor_default_device_is_cpu_without_cuda(monkeypatch):
         tta_transforms=[IdentityTransform()],
     )
     assert predictor.device == "cpu"
+
+
+def test_predictor_use_amp_defaults_to_false():
+    """use_amp defaults to False when not specified."""
+    predictor = _make_predictor()
+    assert predictor.use_amp is False
+
+
+def test_predictor_use_amp_stored(monkeypatch):
+    """use_amp=True is stored on the predictor."""
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    predictor = _make_predictor(use_amp=True)
+    assert predictor.use_amp is True
+
+
+def test_predictor_use_amp_calls_autocast_when_cuda_available(monkeypatch):
+    """use_amp=True with CUDA available enters torch.autocast."""
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+
+    entered = []
+
+    class _FakeAutocast:
+        def __enter__(self):
+            entered.append(True)
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+    monkeypatch.setattr(torch, "autocast", lambda **_: _FakeAutocast())
+
+    predictor = _make_predictor(use_amp=True)
+    predictor(torch.ones(1, 1, 4, 4, 4))
+
+    assert entered, "torch.autocast context should have been entered"
+
+
+def test_predictor_use_amp_skips_autocast_when_cuda_unavailable(monkeypatch):
+    """use_amp=True without CUDA does not enter torch.autocast."""
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+
+    autocast_entered = []
+
+    class _FakeAutocast:
+        def __enter__(self):
+            autocast_entered.append(True)
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+    monkeypatch.setattr(torch, "autocast", lambda **_: _FakeAutocast())
+
+    predictor = _make_predictor(use_amp=True)
+    predictor(torch.ones(1, 1, 4, 4, 4))
+
+    assert not autocast_entered, "torch.autocast should not be entered without CUDA"
+
+
+def test_predictor_use_amp_false_skips_autocast(monkeypatch):
+    """use_amp=False never enters torch.autocast even when CUDA is available."""
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+
+    autocast_entered = []
+
+    class _FakeAutocast:
+        def __enter__(self):
+            autocast_entered.append(True)
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+    monkeypatch.setattr(torch, "autocast", lambda **_: _FakeAutocast())
+
+    predictor = _make_predictor(use_amp=False)
+    predictor(torch.ones(1, 1, 4, 4, 4))
+
+    assert not autocast_entered, (
+        "torch.autocast should not be entered when use_amp=False"
+    )

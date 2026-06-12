@@ -19,6 +19,7 @@ def register_loss(name: str):
         @register_loss("dice")
         class DiceLoss(SegmentationLoss): ...
     """
+
     def decorator(cls: type[SegmentationLoss]) -> type[SegmentationLoss]:
         # Normalize to lowercase for robustness
         normalized_name = name.lower()
@@ -28,6 +29,7 @@ def register_loss(name: str):
 
         LOSS_REGISTRY[normalized_name] = cls
         return cls
+
     return decorator
 
 
@@ -47,8 +49,7 @@ def get_loss(name: str) -> Callable[..., SegmentationLoss]:
 
     if normalized_name not in LOSS_REGISTRY:
         raise ValueError(
-            f"Loss '{name}' is not registered. "
-            f"Available: {list_registered_losses()}"
+            f"Loss '{name}' is not registered. Available: {list_registered_losses()}"
         )
     return LOSS_REGISTRY[normalized_name]
 

@@ -85,8 +85,6 @@ class HDOneSidedLoss(DiceCELoss):
 
         # HDOS Calculation (Foreground Only):
         # Penalize the squared error weighted by the squared distance.
-        hdos_loss = torch.mean(
-            (y_true_onehot - y_pred_softmax) ** 2 * dtm ** 2
-        )
+        hdos_loss = torch.mean((y_true_onehot - y_pred_softmax) ** 2 * dtm**2)
 
         return alpha * region_loss + (1.0 - alpha) * hdos_loss
