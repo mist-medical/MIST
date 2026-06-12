@@ -1,9 +1,9 @@
 """Tests for mist.evaluation.ranking."""
+
 import numpy as np
 import pandas as pd
 import pytest
 
-from mist.evaluation import ranking
 from mist.evaluation.ranking import (
     SUMMARY_ROW_IDS,
     _build_rank_tensor,
@@ -19,6 +19,7 @@ from mist.evaluation.ranking import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _df(ids, **cols):
     """Build a small results DataFrame for tests."""
     return pd.DataFrame({"id": ids, **cols})
@@ -27,6 +28,7 @@ def _df(ids, **cols):
 # ---------------------------------------------------------------------------
 # _strip_summary_rows
 # ---------------------------------------------------------------------------
+
 
 class TestStripSummaryRows:
     """Tests for ranking._strip_summary_rows."""
@@ -48,9 +50,9 @@ class TestStripSummaryRows:
 
     def test_summary_row_ids_constant(self):
         """SUMMARY_ROW_IDS contains the exact labels emitted by evaluator."""
-        assert SUMMARY_ROW_IDS == frozenset({
-            "Mean", "Std", "25th Percentile", "Median", "75th Percentile"
-        })
+        assert SUMMARY_ROW_IDS == frozenset(
+            {"Mean", "Std", "25th Percentile", "Median", "75th Percentile"}
+        )
 
     def test_missing_id_column_raises(self):
         """A DataFrame without the id column raises ValueError."""
@@ -60,10 +62,12 @@ class TestStripSummaryRows:
 
     def test_alternate_id_column(self):
         """A custom id column name is honored."""
-        df = pd.DataFrame({
-            "patient": ["p1", "Mean"],
-            "WT_dice": [0.9, 0.8],
-        })
+        df = pd.DataFrame(
+            {
+                "patient": ["p1", "Mean"],
+                "WT_dice": [0.9, 0.8],
+            }
+        )
         out = _strip_summary_rows(df, "patient")
         assert list(out["patient"]) == ["p1"]
 
@@ -78,6 +82,7 @@ class TestStripSummaryRows:
 # _suffix_match_metric
 # ---------------------------------------------------------------------------
 
+
 class TestSuffixMatchMetric:
     """Tests for ranking._suffix_match_metric."""
 
@@ -88,12 +93,8 @@ class TestSuffixMatchMetric:
     def test_longest_match_wins(self):
         """A multi-word metric wins over a shorter substring."""
         keys = ["dice", "lesion_wise_dice", "surf_dice"]
-        assert _suffix_match_metric(
-            "WT_lesion_wise_dice", keys
-        ) == "lesion_wise_dice"
-        assert _suffix_match_metric(
-            "ET_surf_dice", keys
-        ) == "surf_dice"
+        assert _suffix_match_metric("WT_lesion_wise_dice", keys) == "lesion_wise_dice"
+        assert _suffix_match_metric("ET_surf_dice", keys) == "surf_dice"
 
     def test_no_match_returns_none(self):
         """Columns with no matching suffix return None."""
@@ -113,6 +114,7 @@ class TestSuffixMatchMetric:
 # _direction_for_column
 # ---------------------------------------------------------------------------
 
+
 class TestDirectionForColumn:
     """Tests for ranking._direction_for_column."""
 
@@ -126,20 +128,14 @@ class TestDirectionForColumn:
 
     def test_lesion_wise_metric_resolves(self):
         """Multi-word lesion-wise metrics resolve correctly."""
-        assert _direction_for_column(
-            "WT_lesion_wise_dice", None
-        ) == "higher"
-        assert _direction_for_column(
-            "WT_lesion_wise_haus95", None
-        ) == "lower"
+        assert _direction_for_column("WT_lesion_wise_dice", None) == "higher"
+        assert _direction_for_column("WT_lesion_wise_haus95", None) == "lower"
 
     def test_override_takes_precedence(self):
         """An override beats the registry default."""
         # Even though dice would normally be 'higher', an explicit override
         # of 'lower' wins.
-        assert _direction_for_column(
-            "WT_dice", {"WT_dice": "lower"}
-        ) == "lower"
+        assert _direction_for_column("WT_dice", {"WT_dice": "lower"}) == "lower"
 
     def test_invalid_override_raises(self):
         """Override values must be 'higher' or 'lower'."""
@@ -153,15 +149,19 @@ class TestDirectionForColumn:
 
     def test_unknown_column_with_override_resolves(self):
         """An override allows ranking of unregistered metrics."""
-        assert _direction_for_column(
-            "WT_custom_metric",
-            {"WT_custom_metric": "higher"},
-        ) == "higher"
+        assert (
+            _direction_for_column(
+                "WT_custom_metric",
+                {"WT_custom_metric": "higher"},
+            )
+            == "higher"
+        )
 
 
 # ---------------------------------------------------------------------------
 # rank_results — happy paths
 # ---------------------------------------------------------------------------
+
 
 class TestRankResults:
     """Tests for ranking.rank_results."""
@@ -202,9 +202,7 @@ class TestRankResults:
         df_b = _df(ids=["p1"], WT_dice=[0.9])
         df_c = _df(ids=["p1"], WT_dice=[0.5])
 
-        summary, _ = rank_results(
-            [df_a, df_b, df_c], names=["a", "b", "c"]
-        )
+        summary, _ = rank_results([df_a, df_b, df_c], names=["a", "b", "c"])
 
         # a and b tie for 1st (average rank (1+2)/2 = 1.5); c is 3rd.
         a_row = summary.loc[summary["strategy"] == "a"].iloc[0]
@@ -218,12 +216,8 @@ class TestRankResults:
         """Higher-better and lower-better metrics combine in the average."""
         # On WT_dice (higher better) a wins. On WT_haus95 (lower better)
         # a also wins. Average rank should be 1.0 for a, 2.0 for b.
-        df_a = _df(
-            ids=["p1"], WT_dice=[0.9], WT_haus95=[1.0]
-        )
-        df_b = _df(
-            ids=["p1"], WT_dice=[0.5], WT_haus95=[5.0]
-        )
+        df_a = _df(ids=["p1"], WT_dice=[0.9], WT_haus95=[1.0])
+        df_b = _df(ids=["p1"], WT_dice=[0.5], WT_haus95=[5.0])
 
         summary, detailed = rank_results([df_a, df_b], names=["a", "b"])
         a_row = summary.loc[summary["strategy"] == "a"].iloc[0]
@@ -264,7 +258,7 @@ class TestRankResults:
             WT_dice=[0.9, 0.5],  # a wins p1, loses p2
         )
         df_b = _df(
-            ids=["p2", "p1"],   # reversed order
+            ids=["p2", "p1"],  # reversed order
             WT_dice=[0.9, 0.5],  # b wins p2, loses p1
         )
 
@@ -281,9 +275,7 @@ class TestRankResults:
         df_b = _df(ids=["p1"], WT_dice=[0.7])
         df_c = _df(ids=["p1"], WT_dice=[0.5])
 
-        summary, _ = rank_results(
-            [df_a, df_b, df_c], names=["a", "b", "c"]
-        )
+        summary, _ = rank_results([df_a, df_b, df_c], names=["a", "b", "c"])
         ranks_by_name = dict(zip(summary["strategy"], summary["average_rank"]))
         assert ranks_by_name["a"] == pytest.approx(1.0)
         assert ranks_by_name["b"] == pytest.approx(2.0)
@@ -293,9 +285,7 @@ class TestRankResults:
         """A non-default id column is honored."""
         df_a = pd.DataFrame({"patient": ["p1"], "WT_dice": [0.9]})
         df_b = pd.DataFrame({"patient": ["p1"], "WT_dice": [0.5]})
-        summary, _ = rank_results(
-            [df_a, df_b], names=["a", "b"], id_column="patient"
-        )
+        summary, _ = rank_results([df_a, df_b], names=["a", "b"], id_column="patient")
         winner = summary.iloc[0]["strategy"]
         assert winner == "a"
 
@@ -338,6 +328,7 @@ class TestRankResults:
 # ---------------------------------------------------------------------------
 # rank_results — error paths
 # ---------------------------------------------------------------------------
+
 
 class TestRankResultsErrors:
     """Error handling in ranking.rank_results."""
@@ -426,6 +417,7 @@ class TestRankResultsErrors:
 # _build_rank_tensor
 # ---------------------------------------------------------------------------
 
+
 class TestBuildRankTensor:
     """Tests for ranking._build_rank_tensor (the shared internal helper)."""
 
@@ -435,8 +427,10 @@ class TestBuildRankTensor:
         df_a = _df(ids=ids, WT_dice=[0.9, 0.8, 0.7, 0.6, 0.5])
         df_b = _df(ids=ids, WT_dice=[0.5, 0.4, 0.3, 0.2, 0.1])
         _, metric_cols, ranks = _build_rank_tensor(
-            [df_a, df_b], names=["a", "b"],
-            direction_overrides=None, id_column="id",
+            [df_a, df_b],
+            names=["a", "b"],
+            direction_overrides=None,
+            id_column="id",
         )
         assert ranks.shape == (1, 5, 2)
         assert metric_cols == ["WT_dice"]
@@ -446,8 +440,10 @@ class TestBuildRankTensor:
         df_a = _df(ids=["p1"], WT_dice=[0.9])
         df_b = _df(ids=["p1"], WT_dice=[0.5])
         _, _, ranks = _build_rank_tensor(
-            [df_a, df_b], names=["a", "b"],
-            direction_overrides=None, id_column="id",
+            [df_a, df_b],
+            names=["a", "b"],
+            direction_overrides=None,
+            id_column="id",
         )
         # ranks[metric=0, patient=0, strategy=0] should be 1 (a wins).
         assert ranks[0, 0, 0] == pytest.approx(1.0)
@@ -457,6 +453,7 @@ class TestBuildRankTensor:
 # ---------------------------------------------------------------------------
 # compute_pairwise_significance
 # ---------------------------------------------------------------------------
+
 
 class TestComputePairwiseSignificance:
     """Tests for ranking.compute_pairwise_significance."""
@@ -470,12 +467,8 @@ class TestComputePairwiseSignificance:
 
     def test_returns_square_dataframe(self):
         """Output is a square DataFrame indexed and columned by strategy names."""
-        df_a, df_b = self._make_dfs(
-            20, [0.9] * 20, [0.5] * 20
-        )
-        result = compute_pairwise_significance(
-            [df_a, df_b], names=["a", "b"]
-        )
+        df_a, df_b = self._make_dfs(20, [0.9] * 20, [0.5] * 20)
+        result = compute_pairwise_significance([df_a, df_b], names=["a", "b"])
         assert result.shape == (2, 2)
         assert list(result.index) == ["a", "b"]
         assert list(result.columns) == ["a", "b"]
@@ -483,9 +476,7 @@ class TestComputePairwiseSignificance:
     def test_diagonal_is_nan(self):
         """Diagonal entries (same strategy vs itself) are NaN."""
         df_a, df_b = self._make_dfs(10, [0.9] * 10, [0.5] * 10)
-        result = compute_pairwise_significance(
-            [df_a, df_b], names=["a", "b"]
-        )
+        result = compute_pairwise_significance([df_a, df_b], names=["a", "b"])
         assert np.isnan(result.loc["a", "a"])
         assert np.isnan(result.loc["b", "b"])
 
@@ -498,9 +489,7 @@ class TestComputePairwiseSignificance:
             [0.9 + 0.01 * i for i in range(n)],
             [0.3 + 0.01 * i for i in range(n)],
         )
-        result = compute_pairwise_significance(
-            [df_a, df_b], names=["a", "b"]
-        )
+        result = compute_pairwise_significance([df_a, df_b], names=["a", "b"])
         assert result.loc["a", "b"] < 0.05
 
     def test_clear_winner_reverse_direction_large_p(self):
@@ -511,18 +500,14 @@ class TestComputePairwiseSignificance:
             [0.9 + 0.01 * i for i in range(n)],
             [0.3 + 0.01 * i for i in range(n)],
         )
-        result = compute_pairwise_significance(
-            [df_a, df_b], names=["a", "b"]
-        )
+        result = compute_pairwise_significance([df_a, df_b], names=["a", "b"])
         assert result.loc["b", "a"] > 0.5
 
     def test_identical_scores_returns_one(self):
         """When all per-patient differences are zero, p-value is 1.0."""
         scores = [0.8] * 20
         df_a, df_b = self._make_dfs(20, scores, scores)
-        result = compute_pairwise_significance(
-            [df_a, df_b], names=["a", "b"]
-        )
+        result = compute_pairwise_significance([df_a, df_b], names=["a", "b"])
         assert result.loc["a", "b"] == pytest.approx(1.0)
         assert result.loc["b", "a"] == pytest.approx(1.0)
 
@@ -549,24 +534,16 @@ class TestComputePairwiseSignificance:
         """Significance test aggregates correctly across multiple metrics."""
         n = 20
         ids = [f"p{i}" for i in range(n)]
-        df_a = pd.DataFrame({
-            "id": ids, "WT_dice": [0.9] * n, "WT_haus95": [1.0] * n
-        })
-        df_b = pd.DataFrame({
-            "id": ids, "WT_dice": [0.5] * n, "WT_haus95": [5.0] * n
-        })
-        result = compute_pairwise_significance(
-            [df_a, df_b], names=["a", "b"]
-        )
+        df_a = pd.DataFrame({"id": ids, "WT_dice": [0.9] * n, "WT_haus95": [1.0] * n})
+        df_b = pd.DataFrame({"id": ids, "WT_dice": [0.5] * n, "WT_haus95": [5.0] * n})
+        result = compute_pairwise_significance([df_a, df_b], names=["a", "b"])
         # A wins on both metrics consistently.
         assert result.loc["a", "b"] < 0.05
 
     def test_index_name_is_strategy(self):
         """The index of the output DataFrame is named 'strategy'."""
         df_a, df_b = self._make_dfs(10, [0.9] * 10, [0.5] * 10)
-        result = compute_pairwise_significance(
-            [df_a, df_b], names=["a", "b"]
-        )
+        result = compute_pairwise_significance([df_a, df_b], names=["a", "b"])
         assert result.index.name == "strategy"
 
     def test_fewer_than_two_raises(self):
@@ -579,14 +556,10 @@ class TestComputePairwiseSignificance:
         """names length must equal len(results)."""
         df_a, df_b = self._make_dfs(5, [0.9] * 5, [0.5] * 5)
         with pytest.raises(ValueError, match="names has length"):
-            compute_pairwise_significance(
-                [df_a, df_b], names=["only_one"]
-            )
+            compute_pairwise_significance([df_a, df_b], names=["only_one"])
 
     def test_duplicate_names_raises(self):
         """Duplicate names raise ValueError."""
         df_a, df_b = self._make_dfs(5, [0.9] * 5, [0.5] * 5)
         with pytest.raises(ValueError, match="names must be unique"):
-            compute_pairwise_significance(
-                [df_a, df_b], names=["same", "same"]
-            )
+            compute_pairwise_significance([df_a, df_b], names=["same", "same"])

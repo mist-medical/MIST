@@ -1,4 +1,5 @@
 """Tests for MIST label-space ensemblers."""
+
 import numpy as np
 import pytest
 import SimpleITK as sitk
@@ -17,6 +18,7 @@ from mist.inference.label_ensemblers.label_ensembler_registry import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_label_map(arr: np.ndarray) -> sitk.Image:
     """Wrap a numpy array as a SimpleITK uint8 image."""
     return sitk.GetImageFromArray(arr.astype(np.uint8))
@@ -31,6 +33,7 @@ def _to_array(img: sitk.Image) -> np.ndarray:
 # Dummy ensembler for base class testing
 # ---------------------------------------------------------------------------
 
+
 class DummyLabelEnsembler(AbstractLabelEnsembler):
     """Minimal concrete implementation for base class tests."""
 
@@ -41,6 +44,7 @@ class DummyLabelEnsembler(AbstractLabelEnsembler):
 # ---------------------------------------------------------------------------
 # AbstractLabelEnsembler base class tests
 # ---------------------------------------------------------------------------
+
 
 def test_base_call_delegates_to_combine():
     """__call__ should return the same result as combine."""
@@ -73,6 +77,7 @@ def test_base_hash_consistent():
 # ---------------------------------------------------------------------------
 # STAPLEEnsembler tests
 # ---------------------------------------------------------------------------
+
 
 def test_staple_output_shape_matches_input():
     """STAPLE output should have the same spatial size as the inputs."""
@@ -134,6 +139,7 @@ def test_staple_repr():
 # ---------------------------------------------------------------------------
 # MajorityVoteEnsembler tests
 # ---------------------------------------------------------------------------
+
 
 def test_majority_vote_output_shape_matches_input():
     """Majority vote output should have the same spatial size as the inputs."""
@@ -200,6 +206,7 @@ def test_majority_vote_repr():
 # Registry tests
 # ---------------------------------------------------------------------------
 
+
 def test_registry_get_staple():
     """get_label_ensembler('staple') should return a STAPLEEnsembler."""
     ens = get_label_ensembler("staple")
@@ -227,10 +234,12 @@ def test_registry_get_invalid_name_raises():
 
 def test_registry_rejects_non_subclass():
     """Registering a class that doesn't inherit from AbstractLabelEnsembler raises TypeError."""
+
     class NotAnEnsembler:
         pass
 
     with pytest.raises(TypeError, match="must inherit from AbstractLabelEnsembler"):
+
         @register_label_ensembler("bad_class")
         class Bad(NotAnEnsembler):
             pass
@@ -239,6 +248,7 @@ def test_registry_rejects_non_subclass():
 def test_registry_rejects_duplicate_name():
     """Re-registering an existing name should raise KeyError."""
     with pytest.raises(KeyError, match="already registered"):
+
         @register_label_ensembler("staple")
         class DuplicateSTAPLE(AbstractLabelEnsembler):
             def combine(self, label_maps):

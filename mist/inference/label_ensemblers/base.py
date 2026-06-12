@@ -1,4 +1,5 @@
 """Abstract base class for label-space ensemblers in MIST."""
+
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -42,7 +43,4 @@ class AbstractLabelEnsembler(ABC):
         return hash(self.name)
 
     def __eq__(self, other: Any) -> bool:
-        return (
-            isinstance(other, AbstractLabelEnsembler)
-            and self.name == other.name
-        )
+        return isinstance(other, AbstractLabelEnsembler) and self.name == other.name

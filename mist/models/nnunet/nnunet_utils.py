@@ -1,4 +1,5 @@
 """Utility functions for nnUNet."""
+
 from collections.abc import Sequence
 import numpy as np
 
@@ -117,10 +118,10 @@ def get_unet_params(
         # and the size of the dimension is greater than 8, we use a stride of 2.
         # Otherwise, we use a stride of 1.
         stride = [
-            constants.DEFAULT_STRIDE if
-            (
-                ratio <= constants.ANISOTROPIC_MAX_RATIO and
-                size >= constants.MIN_SIZE_FOR_STRIDE
+            constants.DEFAULT_STRIDE
+            if (
+                ratio <= constants.ANISOTROPIC_MAX_RATIO
+                and size >= constants.MIN_SIZE_FOR_STRIDE
             )
             else constants.ANISOTROPIC_STRIDE
             for (ratio, size) in zip(spacing_ratio, final_encoded_dimension)
@@ -129,11 +130,10 @@ def get_unet_params(
         # If the spacing ratio is less than or equal to 2 for a given dimension,
         # we use a kernel size of 3. Otherwise, we use a kernel size of 1.
         kernel = [
-            constants.DEFAULT_KERNEL_SIZE if
-            (
-                ratio <= constants.ANISOTROPIC_MAX_RATIO
-            )
-            else constants.ANISOTROPIC_KERNEL_SIZE for ratio in spacing_ratio
+            constants.DEFAULT_KERNEL_SIZE
+            if (ratio <= constants.ANISOTROPIC_MAX_RATIO)
+            else constants.ANISOTROPIC_KERNEL_SIZE
+            for ratio in spacing_ratio
         ]
 
         # If all strides are 1, we break out of the loop.

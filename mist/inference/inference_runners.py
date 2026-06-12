@@ -4,6 +4,7 @@ This module contains high-level entry points for running full-resolution
 3D segmentation inference using trained MIST models. It includes runners
 for fold-based evaluation and general test-time prediction from CSV input.
 """
+
 import argparse
 from pathlib import Path
 from typing import Any
@@ -194,9 +195,7 @@ def test_on_fold(
     )
 
     # Get bounding box data.
-    foreground_bounding_boxes = pd.read_csv(
-        results_dir / "fg_bboxes.csv"
-    )
+    foreground_bounding_boxes = pd.read_csv(results_dir / "fg_bboxes.csv")
 
     # Get DALI loader for streaming preprocessed numpy files.
     if dali_loader is None:
@@ -229,7 +228,7 @@ def test_on_fold(
     # Begin inference loop.
     with (
         torch.inference_mode(),
-        progress_bar.get_progress_bar(f'Testing on fold {fold_number}') as pb
+        progress_bar.get_progress_bar(f"Testing on fold {fold_number}") as pb,
     ):
         for image_index in pb.track(range(len(test_df))):
             patient = test_df.iloc[image_index].to_dict()
@@ -241,7 +240,8 @@ def test_on_fold(
                 # load the first image in the list. MIST already checks that
                 # the images are the same size and spacing.
                 image_paths = [
-                    v for k, v in patient.items()
+                    v
+                    for k, v in patient.items()
                     if k not in ic.PATIENT_DF_IGNORED_COLUMNS
                 ]
                 original_ants_image = ants.image_read(image_paths[0])
@@ -256,11 +256,9 @@ def test_on_fold(
                     config["preprocessing"]["crop_to_foreground"]
                     and not config["preprocessing"]["skip"]
                 ):
-                    foreground_bounding_box = (
-                        foreground_bounding_boxes.loc[
-                            foreground_bounding_boxes["id"] == patient_id
-                        ].iloc[0]
-                    )
+                    foreground_bounding_box = foreground_bounding_boxes.loc[
+                        foreground_bounding_boxes["id"] == patient_id
+                    ].iloc[0]
                     foreground_bounding_box = foreground_bounding_box.to_dict()
                 else:
                     foreground_bounding_box = None
@@ -274,9 +272,7 @@ def test_on_fold(
                     foreground_bounding_box=foreground_bounding_box,
                 )
             except (FileNotFoundError, RuntimeError, ValueError) as e:
-                error_messages.append(
-                    f"Prediction failed for {patient_id}: {str(e)}"
-                )
+                error_messages.append(f"Prediction failed for {patient_id}: {str(e)}")
             else:
                 # Write prediction as .nii.gz file.
                 ants.image_write(prediction, filename)
@@ -342,9 +338,7 @@ def infer_from_dataframe(
     )
 
     # Set up the predictor for inference.
-    predictor = _build_predictor(
-        mist_configuration, models=models_list, device=device
-    )
+    predictor = _build_predictor(mist_configuration, models=models_list, device=device)
 
     # If a postprocess strategy file is provided, check if it exists and
     # initialize the postprocessor.
@@ -366,17 +360,18 @@ def infer_from_dataframe(
     error_messages = []
 
     # Start inference loop.
-    with torch.inference_mode(), progress_bar.get_progress_bar("Running inference") as pb:
+    with (
+        torch.inference_mode(),
+        progress_bar.get_progress_bar("Running inference") as pb,
+    ):
         for patient_index in pb.track(range(len(paths_dataframe))):
             patient = paths_dataframe.iloc[patient_index].to_dict()
             patient_id = patient["id"]
-            prediction_filename = str(
-                Path(output_directory) / f"{patient_id}.nii.gz"
-            )
+            prediction_filename = str(Path(output_directory) / f"{patient_id}.nii.gz")
             try:
                 # Validate the input patient data.
-                anchor_image, image_paths = (
-                    inference_utils.validate_inference_images(patient)
+                anchor_image, image_paths = inference_utils.validate_inference_images(
+                    patient
                 )
 
                 # Preprocess the input images using the MIST preprocessing
@@ -394,14 +389,16 @@ def infer_from_dataframe(
                     # preprocess_example returns Dict[str, Any]; value type is
                     # not narrowed.
                     preprocessed_example["image"],  # type: ignore[index]
-                    axes=ic.NUMPY_TO_TORCH_TRANSPOSE_AXES
+                    axes=ic.NUMPY_TO_TORCH_TRANSPOSE_AXES,
                 )
                 preprocessed_image = np.expand_dims(
                     preprocessed_image, axis=ic.NUMPY_TO_TORCH_EXPAND_DIMS_AXES
                 )
-                preprocessed_image = torch.from_numpy(
-                    np.ascontiguousarray(preprocessed_image)
-                ).to(torch.float32).to(device)
+                preprocessed_image = (
+                    torch.from_numpy(np.ascontiguousarray(preprocessed_image))
+                    .to(torch.float32)
+                    .to(device)
+                )
 
                 # Perform prediction and restoration to original space.
                 prediction = predict_single_example(
@@ -428,9 +425,7 @@ def infer_from_dataframe(
                     if postprocessing_error_messages:
                         error_messages.extend(postprocessing_error_messages)
             except (FileNotFoundError, RuntimeError, ValueError) as e:
-                error_messages.append(
-                    f"Prediction failed for {patient_id}: {str(e)}"
-                )
+                error_messages.append(f"Prediction failed for {patient_id}: {str(e)}")
                 continue
             else:
                 # Write prediction as .nii.gz file.

@@ -3,6 +3,7 @@
 
 class PostprocessingConstants:
     """Dataclass for postprocessing constants."""
+
     # Default threshold for removing small objects in the mask for the
     # remove_small_objects function.
     SMALL_OBJECT_THRESHOLD = 64

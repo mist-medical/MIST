@@ -1,4 +1,5 @@
 """Tests for the Predictor class."""
+
 import pytest
 import torch
 from mist.inference.predictor import Predictor
@@ -58,6 +59,7 @@ def _make_predictor(**overrides):
 # Existing / basic tests
 # =====================
 
+
 def test_predictor_basic_flow():
     """One model, one transform: result equals transform ∘ model ∘ inverse."""
     # image=1 → +1 → *2 → -1 = 2 (forward:+1, model:*2, inverse:-1 → net +2)
@@ -75,8 +77,11 @@ def test_predictor_multiple_models_and_tta():
     image = torch.ones(1, 1, 4, 4, 4)
 
     class AddOne:
-        def __call__(self, x): return x + 1
-        def inverse(self, x): return x - 1
+        def __call__(self, x):
+            return x + 1
+
+        def inverse(self, x):
+            return x - 1
 
     predictor = _make_predictor(
         models=[lambda x: x + 2, lambda x: x * 3],
@@ -92,6 +97,7 @@ def test_predictor_multiple_models_and_tta():
 # =====================
 # New behavioral tests
 # =====================
+
 
 def test_predictor_moves_image_to_device():
     """Predictor calls .to(device) on the input before inference."""
@@ -140,8 +146,11 @@ def test_predictor_inferer_receives_transformed_image():
             return model(image)
 
     class AddTwo:
-        def __call__(self, x): return x + 2
-        def inverse(self, x): return x - 2
+        def __call__(self, x):
+            return x + 2
+
+        def inverse(self, x):
+            return x - 2
 
     image = torch.zeros(1, 1, 4, 4, 4)
     predictor = _make_predictor(
@@ -194,6 +203,7 @@ def test_predictor_multiple_models_all_contribute_to_ensemble():
 
 def test_predictor_model_exception_propagates():
     """A RuntimeError raised inside a model is not swallowed."""
+
     def bad_model(_):
         raise RuntimeError("model exploded")
 
@@ -291,4 +301,6 @@ def test_predictor_use_amp_false_skips_autocast(monkeypatch):
     predictor = _make_predictor(use_amp=False)
     predictor(torch.ones(1, 1, 4, 4, 4))
 
-    assert not autocast_entered, "torch.autocast should not be entered when use_amp=False"
+    assert not autocast_entered, (
+        "torch.autocast should not be entered when use_amp=False"
+    )

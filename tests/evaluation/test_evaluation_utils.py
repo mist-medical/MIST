@@ -1,4 +1,5 @@
 """Tests for mist.evaluation.evaluation_utils."""
+
 from pathlib import Path
 
 import ants
@@ -39,6 +40,7 @@ class _FakeImage:
 # validate_mask
 # ---------------------------------------------------------------------------
 
+
 class TestValidateMask:
     """Tests for evaluation_utils.validate_mask."""
 
@@ -51,12 +53,8 @@ class TestValidateMask:
         path = tmp_path / "mask.nii.gz"
         path.touch()
         arr = np.array([[[0, 1], [1, 0]]], dtype=np.int32)
-        monkeypatch.setattr(
-            ants, "image_header_info", lambda _: self._header(3)
-        )
-        monkeypatch.setattr(
-            ants, "image_read", lambda _: _FakeImage(arr)
-        )
+        monkeypatch.setattr(ants, "image_header_info", lambda _: self._header(3))
+        monkeypatch.setattr(ants, "image_read", lambda _: _FakeImage(arr))
         config = _make_eval_config()
         assert evaluation_utils.validate_mask(path, config) is None
 
@@ -65,21 +63,15 @@ class TestValidateMask:
         path = tmp_path / "mask.nii.gz"
         path.touch()
         arr = np.array([[[True, False]]], dtype=bool)
-        monkeypatch.setattr(
-            ants, "image_header_info", lambda _: self._header(3)
-        )
-        monkeypatch.setattr(
-            ants, "image_read", lambda _: _FakeImage(arr)
-        )
+        monkeypatch.setattr(ants, "image_header_info", lambda _: self._header(3))
+        monkeypatch.setattr(ants, "image_read", lambda _: _FakeImage(arr))
         assert evaluation_utils.validate_mask(path, _make_eval_config()) is None
 
     def test_4d_mask_returns_error(self, monkeypatch, tmp_path):
         """A 4D mask header returns a 'not a 3D image' error string."""
         path = tmp_path / "mask.nii.gz"
         path.touch()
-        monkeypatch.setattr(
-            ants, "image_header_info", lambda _: self._header(4)
-        )
+        monkeypatch.setattr(ants, "image_header_info", lambda _: self._header(4))
         result = evaluation_utils.validate_mask(path, _make_eval_config())
         assert result is not None
         assert "not a 3D image" in result
@@ -91,30 +83,20 @@ class TestValidateMask:
         path = tmp_path / "mask.nii.gz"
         path.touch()
         arr = np.array([[[0.5, 1.0]]], dtype=np.float32)
-        monkeypatch.setattr(
-            ants, "image_header_info", lambda _: self._header(3)
-        )
-        monkeypatch.setattr(
-            ants, "image_read", lambda _: _FakeImage(arr)
-        )
+        monkeypatch.setattr(ants, "image_header_info", lambda _: self._header(3))
+        monkeypatch.setattr(ants, "image_read", lambda _: _FakeImage(arr))
         result = evaluation_utils.validate_mask(path, _make_eval_config())
         assert result is not None
         assert "dtype" in result
         assert "non-integer" in result
 
-    def test_float_dtype_with_integer_values_returns_none(
-        self, monkeypatch, tmp_path
-    ):
+    def test_float_dtype_with_integer_values_returns_none(self, monkeypatch, tmp_path):
         """Float32 mask with only integer-valued labels (e.g. BraTS) is accepted."""
         path = tmp_path / "mask.nii.gz"
         path.touch()
         arr = np.array([[[0.0, 1.0], [1.0, 0.0]]], dtype=np.float32)
-        monkeypatch.setattr(
-            ants, "image_header_info", lambda _: self._header(3)
-        )
-        monkeypatch.setattr(
-            ants, "image_read", lambda _: _FakeImage(arr)
-        )
+        monkeypatch.setattr(ants, "image_header_info", lambda _: self._header(3))
+        monkeypatch.setattr(ants, "image_read", lambda _: _FakeImage(arr))
         assert evaluation_utils.validate_mask(path, _make_eval_config()) is None
 
     def test_unexpected_labels_returns_error(self, monkeypatch, tmp_path):
@@ -122,12 +104,8 @@ class TestValidateMask:
         path = tmp_path / "mask.nii.gz"
         path.touch()
         arr = np.array([[[0, 99]]], dtype=np.int32)
-        monkeypatch.setattr(
-            ants, "image_header_info", lambda _: self._header(3)
-        )
-        monkeypatch.setattr(
-            ants, "image_read", lambda _: _FakeImage(arr)
-        )
+        monkeypatch.setattr(ants, "image_header_info", lambda _: self._header(3))
+        monkeypatch.setattr(ants, "image_read", lambda _: _FakeImage(arr))
         result = evaluation_utils.validate_mask(path, _make_eval_config())
         assert result is not None
         assert "unexpected labels" in result
@@ -136,9 +114,7 @@ class TestValidateMask:
         """RuntimeError during ants.image_read is caught and reported."""
         path = tmp_path / "mask.nii.gz"
         path.touch()
-        monkeypatch.setattr(
-            ants, "image_header_info", lambda _: self._header(3)
-        )
+        monkeypatch.setattr(ants, "image_header_info", lambda _: self._header(3))
         monkeypatch.setattr(
             ants,
             "image_read",
@@ -152,9 +128,7 @@ class TestValidateMask:
         """The mask_type argument is included in error messages."""
         path = tmp_path / "pred.nii.gz"
         path.touch()
-        monkeypatch.setattr(
-            ants, "image_header_info", lambda _: self._header(4)
-        )
+        monkeypatch.setattr(ants, "image_header_info", lambda _: self._header(4))
         result = evaluation_utils.validate_mask(
             path, _make_eval_config(), mask_type="prediction"
         )
@@ -165,6 +139,7 @@ class TestValidateMask:
 # ---------------------------------------------------------------------------
 # build_evaluation_dataframe
 # ---------------------------------------------------------------------------
+
 
 class TestBuildEvaluationDataframe:
     """Tests for evaluation_utils.build_evaluation_dataframe."""
@@ -181,22 +156,22 @@ class TestBuildEvaluationDataframe:
         (pred_dir / "patient_002.nii.gz").touch()
 
         csv_path = tmp_path / "train_paths.csv"
-        pd.DataFrame({
-            "id": ["patient_001", "patient_002"],
-            "mask": [
-                str(tmp_path / "mask_001.nii.gz"),
-                str(tmp_path / "mask_002.nii.gz"),
-            ],
-        }).to_csv(csv_path, index=False)
+        pd.DataFrame(
+            {
+                "id": ["patient_001", "patient_002"],
+                "mask": [
+                    str(tmp_path / "mask_001.nii.gz"),
+                    str(tmp_path / "mask_002.nii.gz"),
+                ],
+            }
+        ).to_csv(csv_path, index=False)
 
         return csv_path, pred_dir
 
     def test_success_returns_correct_dataframe(self, csv_and_preds):
         """Valid inputs produce a two-row DataFrame with correct columns."""
         csv_path, pred_dir = csv_and_preds
-        df, err = evaluation_utils.build_evaluation_dataframe(
-            csv_path, pred_dir
-        )
+        df, err = evaluation_utils.build_evaluation_dataframe(csv_path, pred_dir)
         assert err is None
         assert len(df) == 2
         assert list(df.columns) == ["id", "mask", "prediction"]
@@ -224,9 +199,7 @@ class TestBuildEvaluationDataframe:
         """A patient whose mask is absent is skipped with an error message."""
         csv_path, pred_dir = csv_and_preds
         (csv_path.parent / "mask_001.nii.gz").unlink()
-        df, err = evaluation_utils.build_evaluation_dataframe(
-            csv_path, pred_dir
-        )
+        df, err = evaluation_utils.build_evaluation_dataframe(csv_path, pred_dir)
         assert len(df) == 1
         assert "patient_001" in err
         assert "mask" in err
@@ -235,9 +208,7 @@ class TestBuildEvaluationDataframe:
         """A patient whose prediction is absent is skipped."""
         csv_path, pred_dir = csv_and_preds
         (pred_dir / "patient_002.nii.gz").unlink()
-        df, err = evaluation_utils.build_evaluation_dataframe(
-            csv_path, pred_dir
-        )
+        df, err = evaluation_utils.build_evaluation_dataframe(csv_path, pred_dir)
         assert len(df) == 1
         assert "patient_002" in err
         assert "prediction" in err
@@ -247,9 +218,7 @@ class TestBuildEvaluationDataframe:
         csv_path, pred_dir = csv_and_preds
         (csv_path.parent / "mask_001.nii.gz").unlink()
         (csv_path.parent / "mask_002.nii.gz").unlink()
-        df, err = evaluation_utils.build_evaluation_dataframe(
-            csv_path, pred_dir
-        )
+        df, err = evaluation_utils.build_evaluation_dataframe(csv_path, pred_dir)
         assert df.empty
         assert list(df.columns) == ["id", "mask", "prediction"]
         assert err is not None
@@ -262,25 +231,20 @@ class TestBuildEvaluationDataframe:
                 csv_path, pred_dir, validate=True
             )
 
-    def test_validate_true_valid_masks_included(
-        self, monkeypatch, csv_and_preds
-    ):
+    def test_validate_true_valid_masks_included(self, monkeypatch, csv_and_preds):
         """validate=True with passing masks keeps both patients."""
         csv_path, pred_dir = csv_and_preds
-        monkeypatch.setattr(
-            evaluation_utils, "validate_mask", lambda *_a, **_k: None
-        )
+        monkeypatch.setattr(evaluation_utils, "validate_mask", lambda *_a, **_k: None)
         df, err = evaluation_utils.build_evaluation_dataframe(
-            csv_path, pred_dir,
+            csv_path,
+            pred_dir,
             evaluation_config=_make_eval_config(),
             validate=True,
         )
         assert err is None
         assert len(df) == 2
 
-    def test_validate_true_invalid_mask_skipped(
-        self, monkeypatch, csv_and_preds
-    ):
+    def test_validate_true_invalid_mask_skipped(self, monkeypatch, csv_and_preds):
         """validate=True with a failing mask skips that patient."""
         csv_path, pred_dir = csv_and_preds
 
@@ -290,11 +254,10 @@ class TestBuildEvaluationDataframe:
                 return "bad dtype"
             return None
 
-        monkeypatch.setattr(
-            evaluation_utils, "validate_mask", _failing_validate
-        )
+        monkeypatch.setattr(evaluation_utils, "validate_mask", _failing_validate)
         df, err = evaluation_utils.build_evaluation_dataframe(
-            csv_path, pred_dir,
+            csv_path,
+            pred_dir,
             evaluation_config=_make_eval_config(),
             validate=True,
         )
@@ -305,6 +268,7 @@ class TestBuildEvaluationDataframe:
 # ---------------------------------------------------------------------------
 # initialize_results_dataframe
 # ---------------------------------------------------------------------------
+
 
 class TestInitializeResultsDataframe:
     """Tests for evaluation_utils.initialize_results_dataframe."""
@@ -348,46 +312,58 @@ class TestInitializeResultsDataframe:
 # compute_results_stats
 # ---------------------------------------------------------------------------
 
+
 class TestComputeResultsStats:
     """Tests for evaluation_utils.compute_results_stats."""
 
     def test_appends_five_stat_rows(self):
         """Five summary rows are appended to the existing data rows."""
-        df = pd.DataFrame({
-            "id": ["p1", "p2", "p3"],
-            "tumor_dice": [0.8, 0.9, 1.0],
-        })
+        df = pd.DataFrame(
+            {
+                "id": ["p1", "p2", "p3"],
+                "tumor_dice": [0.8, 0.9, 1.0],
+            }
+        )
         result = evaluation_utils.compute_results_stats(df)
         assert len(result) == 8  # 3 data + 5 stats
 
     def test_stat_row_labels_are_correct(self):
         """The five appended rows have the expected label strings."""
-        df = pd.DataFrame({
-            "id": ["p1"],
-            "tumor_dice": [0.9],
-        })
+        df = pd.DataFrame(
+            {
+                "id": ["p1"],
+                "tumor_dice": [0.9],
+            }
+        )
         result = evaluation_utils.compute_results_stats(df)
         assert result["id"].tail(5).tolist() == [
-            "Mean", "Std",
-            "25th Percentile", "Median", "75th Percentile",
+            "Mean",
+            "Std",
+            "25th Percentile",
+            "Median",
+            "75th Percentile",
         ]
 
     def test_mean_computed_correctly_ignoring_nan(self):
         """nanmean is used, so NaN values are excluded from the mean."""
-        df = pd.DataFrame({
-            "id": ["p1", "p2", "p3", "p4"],
-            "tumor_dice": [0.8, 0.9, 1.0, np.nan],
-        })
+        df = pd.DataFrame(
+            {
+                "id": ["p1", "p2", "p3", "p4"],
+                "tumor_dice": [0.8, 0.9, 1.0, np.nan],
+            }
+        )
         result = evaluation_utils.compute_results_stats(df)
         mean_val = result.loc[result["id"] == "Mean", "tumor_dice"].values[0]
         assert mean_val == pytest.approx(0.9)
 
     def test_all_nan_column_returns_nan_without_error(self):
         """An entirely-NaN column produces NaN stats without crashing."""
-        df = pd.DataFrame({
-            "id": ["p1", "p2"],
-            "tumor_dice": [np.nan, np.nan],
-        })
+        df = pd.DataFrame(
+            {
+                "id": ["p1", "p2"],
+                "tumor_dice": [np.nan, np.nan],
+            }
+        )
         result = evaluation_utils.compute_results_stats(df)
         mean_val = result.loc[result["id"] == "Mean", "tumor_dice"].values[0]
         assert np.isnan(mean_val)
@@ -396,6 +372,7 @@ class TestComputeResultsStats:
 # ---------------------------------------------------------------------------
 # crop_to_union
 # ---------------------------------------------------------------------------
+
 
 class TestCropToUnion:
     """Tests for evaluation_utils.crop_to_union."""

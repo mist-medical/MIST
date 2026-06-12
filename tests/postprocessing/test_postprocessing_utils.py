@@ -1,4 +1,5 @@
 """Tests for the MIST postprocessing utilities."""
+
 import pytest
 import numpy as np
 
@@ -10,36 +11,20 @@ from mist.postprocessing import postprocessing_utils as utils
 
 def test_group_labels_with_valid_subset():
     """Test grouping with a valid subset of labels."""
-    mask = np.array([
-        [0, 1, 1],
-        [2, 0, 2],
-        [3, 3, 0]
-    ], dtype=np.uint8)
+    mask = np.array([[0, 1, 1], [2, 0, 2], [3, 3, 0]], dtype=np.uint8)
 
     result = utils.group_labels_in_mask(mask, [1, 2])
-    expected = np.array([
-        [0, 1, 1],
-        [2, 0, 2],
-        [0, 0, 0]
-    ], dtype=np.uint8)
+    expected = np.array([[0, 1, 1], [2, 0, 2], [0, 0, 0]], dtype=np.uint8)
 
     np.testing.assert_array_equal(result, expected)
 
 
 def test_group_labels_with_all_labels():
     """Test grouping with all labels given as [-1]."""
-    mask = np.array([
-        [0, 1, 1],
-        [2, 0, 2],
-        [3, 3, 0]
-    ], dtype=np.uint8)
+    mask = np.array([[0, 1, 1], [2, 0, 2], [3, 3, 0]], dtype=np.uint8)
 
     result = utils.group_labels_in_mask(mask, [-1])
-    expected = np.array([
-        [0, 1, 1],
-        [2, 0, 2],
-        [3, 3, 0]
-    ], dtype=np.uint8)
+    expected = np.array([[0, 1, 1], [2, 0, 2], [3, 3, 0]], dtype=np.uint8)
 
     np.testing.assert_array_equal(result, expected)
 
@@ -97,7 +82,7 @@ def create_mask_with_components():
     mask = np.zeros((10, 10), dtype=np.uint8)
     mask[1:3, 1:3] = 1  # Size 4.
     mask[4:7, 4:7] = 1  # Size 9.
-    mask[8, 8] = 1      # Size 1.
+    mask[8, 8] = 1  # Size 1.
     return mask
 
 
@@ -158,21 +143,24 @@ def test_top_k_connected_components_morph_cleanup_too_few_returns_original():
     [
         # All below threshold -> replaced with replacement_label.
         (
-            np.array([[False, False, False],
-                      [False, True,  False],
-                      [False, False, False]], dtype=bool),
-            1, 99, 2,
-            np.array([[0, 0, 0],
-                      [0, 99, 0],
-                      [0, 0, 0]], dtype=np.uint8)
+            np.array(
+                [[False, False, False], [False, True, False], [False, False, False]],
+                dtype=bool,
+            ),
+            1,
+            99,
+            2,
+            np.array([[0, 0, 0], [0, 99, 0], [0, 0, 0]], dtype=np.uint8),
         ),
         # All above threshold -> kept as original_label.
         (
             np.pad(np.ones((3, 3), dtype=bool), pad_width=1),
-            2, 99, 5,
-            np.pad(np.full((3, 3), 2, dtype=np.uint8), pad_width=1)
-        )
-    ]
+            2,
+            99,
+            5,
+            np.pad(np.full((3, 3), 2, dtype=np.uint8), pad_width=1),
+        ),
+    ],
 )
 def test_replace_small_objects_threshold_cases(
     mask, original_label, replacement_label, min_size, expected_output
@@ -182,7 +170,7 @@ def test_replace_small_objects_threshold_cases(
         binary_mask=mask,
         original_label=original_label,
         replacement_label=replacement_label,
-        min_size=min_size
+        min_size=min_size,
     )
     np.testing.assert_array_equal(result, expected_output)
 
@@ -190,13 +178,10 @@ def test_replace_small_objects_threshold_cases(
 def test_replace_small_objects_mixed():
     """Mix of small and large components → correct labeling per size."""
     mask = np.zeros((10, 10), dtype=bool)
-    mask[1:3, 1:3] = True       # Area = 4 (large).
-    mask[5, 5] = True           # Area = 1 (small).
+    mask[1:3, 1:3] = True  # Area = 4 (large).
+    mask[5, 5] = True  # Area = 1 (small).
     result = utils.replace_small_objects_binary(
-        binary_mask=mask,
-        original_label=3,
-        replacement_label=77,
-        min_size=3
+        binary_mask=mask, original_label=3, replacement_label=77, min_size=3
     )
     expected = np.zeros_like(mask, dtype=np.uint8)
     expected[1:3, 1:3] = 3
@@ -208,9 +193,6 @@ def test_replace_small_objects_empty_input():
     """Empty binary input → return unchanged."""
     mask = np.zeros((5, 5), dtype=bool)
     result = utils.replace_small_objects_binary(
-        binary_mask=mask,
-        original_label=5,
-        replacement_label=9,
-        min_size=2
+        binary_mask=mask, original_label=5, replacement_label=9, min_size=2
     )
     np.testing.assert_array_equal(result, mask.astype(np.uint8))

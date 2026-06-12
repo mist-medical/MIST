@@ -23,13 +23,14 @@ def create_mgnet(variant: str, **kwargs) -> MGNet:
     """
     # Validate required keys.
     required_keys = [
-        "in_channels", "out_channels", "patch_size", "target_spacing",
+        "in_channels",
+        "out_channels",
+        "patch_size",
+        "target_spacing",
     ]
     for key in required_keys:
         if key not in kwargs:
-            raise ValueError(
-                f"Missing required key '{key}' in model configuration."
-            )
+            raise ValueError(f"Missing required key '{key}' in model configuration.")
 
     common_args = {
         "in_channels": kwargs["in_channels"],

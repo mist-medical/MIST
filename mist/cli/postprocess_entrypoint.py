@@ -1,4 +1,5 @@
 """Command line tool for postprocessing predictions from MIST output."""
+
 from argparse import ArgumentDefaultsHelpFormatter
 from pathlib import Path
 import argparse
@@ -13,9 +14,7 @@ from mist.cli.args import ArgParser, positive_int
 from mist.utils import io
 
 
-def _parse_postprocess_args(
-    argv: list[str] | None = None
-) -> argparse.Namespace:
+def _parse_postprocess_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse command line arguments for postprocessing predictions."""
     p = ArgParser(
         formatter_class=ArgumentDefaultsHelpFormatter,
@@ -24,11 +23,15 @@ def _parse_postprocess_args(
 
     # Required arguments.
     p.arg(
-        "--base-predictions", type=str, required=True,
-        help="Directory containing base predictions (e.g., NIfTI files)."
+        "--base-predictions",
+        type=str,
+        required=True,
+        help="Directory containing base predictions (e.g., NIfTI files).",
     )
     p.arg(
-        "--output", type=str, required=True,
+        "--output",
+        type=str,
+        required=True,
         help=(
             "Root output directory. Postprocessed masks are written to "
             "output/predictions/, the strategy is copied to "
@@ -37,15 +40,21 @@ def _parse_postprocess_args(
         ),
     )
     p.arg(
-        "--postprocess-strategy", type=str, required=True,
-        help="Path to JSON file specifying the postprocessing strategy."
+        "--postprocess-strategy",
+        type=str,
+        required=True,
+        help="Path to JSON file specifying the postprocessing strategy.",
     )
     p.arg(
-        "--num-workers-postprocess", type=positive_int, default=1,
+        "--num-workers-postprocess",
+        type=positive_int,
+        default=1,
         help="Number of parallel workers for postprocessing.",
     )
     p.arg(
-        "--num-workers-evaluate", type=positive_int, default=1,
+        "--num-workers-evaluate",
+        type=positive_int,
+        default=1,
         help=(
             "Number of parallel workers for evaluating postprocessed "
             "predictions. Only used when --paths-csv and --eval-config are "
@@ -55,7 +64,10 @@ def _parse_postprocess_args(
 
     # Optional evaluation arguments.
     p.arg(
-        "--paths-csv", type=str, required=False, default=None,
+        "--paths-csv",
+        type=str,
+        required=False,
+        default=None,
         help=(
             "CSV with columns 'id' and 'mask' containing patient IDs and "
             "paths to ground truth masks. When provided alongside "
@@ -65,7 +77,10 @@ def _parse_postprocess_args(
         ),
     )
     p.arg(
-        "--eval-config", type=str, required=False, default=None,
+        "--eval-config",
+        type=str,
+        required=False,
+        default=None,
         help=(
             "Path to evaluation config JSON. Required when --paths-csv is "
             "provided. Accepts a full MIST config.json (the 'evaluation' key "
@@ -87,13 +102,9 @@ def _prepare_io(
     strategy_path = Path(ns.postprocess_strategy).expanduser().resolve()
 
     if not base_dir.exists():
-        raise FileNotFoundError(
-            f"Base predictions directory not found: {base_dir}"
-        )
+        raise FileNotFoundError(f"Base predictions directory not found: {base_dir}")
     if not strategy_path.exists():
-        raise FileNotFoundError(
-            f"Postprocess strategy file not found: {strategy_path}"
-        )
+        raise FileNotFoundError(f"Postprocess strategy file not found: {strategy_path}")
 
     predictions_dir = output_dir / "predictions"
     predictions_dir.mkdir(parents=True, exist_ok=True)
@@ -161,9 +172,7 @@ def _run_evaluation_after_postprocess(
     if not paths_csv.exists():
         raise FileNotFoundError(f"Paths CSV not found: {paths_csv}")
     if not eval_config_path.exists():
-        raise FileNotFoundError(
-            f"Evaluation config not found: {eval_config_path}"
-        )
+        raise FileNotFoundError(f"Evaluation config not found: {eval_config_path}")
 
     filepaths_df = _build_eval_filepaths_df(paths_csv, predictions_dir)
 
@@ -196,7 +205,9 @@ def run_postprocess(ns: argparse.Namespace) -> None:
 
     if ns.paths_csv is not None:
         _run_evaluation_after_postprocess(
-            ns, output_dir, predictions_dir,
+            ns,
+            output_dir,
+            predictions_dir,
             num_workers=ns.num_workers_evaluate,
         )
 

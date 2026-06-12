@@ -1,4 +1,5 @@
 """Tests for the Evaluator class in mist.evaluation.evaluator."""
+
 import concurrent.futures
 from pathlib import Path
 
@@ -24,6 +25,7 @@ from tests.evaluation.helpers import (
 # Module-level helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_filepaths_df(tmp_path: Path, n: int = 1) -> pd.DataFrame:
     """Create a filepaths DataFrame with *n* patients backed by real files."""
     rows = []
@@ -32,17 +34,20 @@ def _make_filepaths_df(tmp_path: Path, n: int = 1) -> pd.DataFrame:
         pred = tmp_path / f"pred_{i}.nii.gz"
         mask.touch()
         pred.touch()
-        rows.append({
-            "id": f"p{i}",
-            "mask": str(mask),
-            "prediction": str(pred),
-        })
+        rows.append(
+            {
+                "id": f"p{i}",
+                "mask": str(mask),
+                "prediction": str(pred),
+            }
+        )
     return pd.DataFrame(rows)
 
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def filepaths_df(tmp_path):
@@ -68,21 +73,18 @@ def _patch_run_env(monkeypatch):
         "ProcessPoolExecutor",
         lambda max_workers=None: FakeExecutor(),
     )
-    monkeypatch.setattr(
-        pb_mod, "get_progress_bar", fake_get_progress_bar, raising=True
-    )
+    monkeypatch.setattr(pb_mod, "get_progress_bar", fake_get_progress_bar, raising=True)
 
 
 # ---------------------------------------------------------------------------
 # __init__ and config validation
 # ---------------------------------------------------------------------------
 
+
 class TestEvaluatorInit:
     """Tests for Evaluator.__init__ and _validate_evaluation_config."""
 
-    def test_valid_config_stores_index_and_config(
-        self, filepaths_df, tmp_path
-    ):
+    def test_valid_config_stores_index_and_config(self, filepaths_df, tmp_path):
         """Valid new-format config: index is 'id', config stored correctly."""
         ev = Evaluator(
             filepaths_df,
@@ -169,9 +171,7 @@ class TestEvaluatorInit:
         with pytest.raises(ValueError, match=match_msg):
             Evaluator(filepaths_df, bad_config, tmp_path / "out.csv")
 
-    def test_results_dataframe_initialized_with_correct_columns(
-        self, evaluator
-    ):
+    def test_results_dataframe_initialized_with_correct_columns(self, evaluator):
         """results_dataframe is pre-populated with id + class_metric columns."""
         cols = list(evaluator.results_dataframe.columns)
         assert cols[0] == "id"
@@ -182,6 +182,7 @@ class TestEvaluatorInit:
 # Static helpers
 # ---------------------------------------------------------------------------
 
+
 class TestComputeDiagonalDistance:
     """Tests for Evaluator._compute_diagonal_distance."""
 
@@ -189,12 +190,14 @@ class TestComputeDiagonalDistance:
         "shape, spacing, expected",
         [
             pytest.param(
-                (10, 10, 10), (1.0, 1.0, 1.0),
+                (10, 10, 10),
+                (1.0, 1.0, 1.0),
                 np.sqrt(300),
                 id="unit_cube_10",
             ),
             pytest.param(
-                (4, 3), (2.0, 2.0),
+                (4, 3),
+                (2.0, 2.0),
                 np.sqrt(64 + 36),
                 id="2d_rect",
             ),
@@ -228,26 +231,25 @@ class TestHandleEdgeCases:
 # _load_patient_data
 # ---------------------------------------------------------------------------
 
+
 class TestLoadPatientData:
     """Tests for Evaluator._load_patient_data."""
 
-    def test_success_returns_mask_and_prediction(
-        self, evaluator, monkeypatch
-    ):
+    def test_success_returns_mask_and_prediction(self, evaluator, monkeypatch):
         """Valid patient ID returns a dict with mask and prediction keys."""
         mock_img = make_ants_image()
         monkeypatch.setattr(
-            ants, "image_header_info",
-            lambda _: {"dimensions": (10, 10, 10), "spacing": (1.0, 1.0, 1.0),
-                       "origin": (0.0, 0.0, 0.0),
-                       "direction": np.eye(3).flatten().tolist()},
+            ants,
+            "image_header_info",
+            lambda _: {
+                "dimensions": (10, 10, 10),
+                "spacing": (1.0, 1.0, 1.0),
+                "origin": (0.0, 0.0, 0.0),
+                "direction": np.eye(3).flatten().tolist(),
+            },
         )
-        monkeypatch.setattr(
-            ants, "image_read", lambda _: mock_img
-        )
-        monkeypatch.setattr(
-            analyzer_utils, "compare_headers", lambda *_: True
-        )
+        monkeypatch.setattr(ants, "image_read", lambda _: mock_img)
+        monkeypatch.setattr(analyzer_utils, "compare_headers", lambda *_: True)
         data = evaluator._load_patient_data("p0")
         assert "mask" in data
         assert "prediction" in data
@@ -257,19 +259,13 @@ class TestLoadPatientData:
         with pytest.raises(ValueError, match="No data found for patient ID"):
             evaluator._load_patient_data("does_not_exist")
 
-    def test_missing_mask_file_raises_file_not_found(
-        self, evaluator, tmp_path
-    ):
+    def test_missing_mask_file_raises_file_not_found(self, evaluator, tmp_path):
         """FileNotFoundError is raised when the mask file is absent."""
-        evaluator.filepaths_dataframe.loc["p0", "mask"] = str(
-            tmp_path / "gone.nii.gz"
-        )
+        evaluator.filepaths_dataframe.loc["p0", "mask"] = str(tmp_path / "gone.nii.gz")
         with pytest.raises(FileNotFoundError, match="Mask not found"):
             evaluator._load_patient_data("p0")
 
-    def test_missing_prediction_file_raises_file_not_found(
-        self, evaluator, tmp_path
-    ):
+    def test_missing_prediction_file_raises_file_not_found(self, evaluator, tmp_path):
         """FileNotFoundError is raised when the prediction file is absent."""
         evaluator.filepaths_dataframe.loc["p0", "prediction"] = str(
             tmp_path / "gone.nii.gz"
@@ -277,19 +273,19 @@ class TestLoadPatientData:
         with pytest.raises(FileNotFoundError, match="Prediction not found"):
             evaluator._load_patient_data("p0")
 
-    def test_header_mismatch_raises_value_error(
-        self, evaluator, monkeypatch
-    ):
+    def test_header_mismatch_raises_value_error(self, evaluator, monkeypatch):
         """Mismatched image headers raise ValueError."""
         monkeypatch.setattr(
-            ants, "image_header_info",
-            lambda _: {"dimensions": (10, 10, 10), "spacing": (1.0, 1.0, 1.0),
-                       "origin": (0.0, 0.0, 0.0),
-                       "direction": np.eye(3).flatten().tolist()},
+            ants,
+            "image_header_info",
+            lambda _: {
+                "dimensions": (10, 10, 10),
+                "spacing": (1.0, 1.0, 1.0),
+                "origin": (0.0, 0.0, 0.0),
+                "direction": np.eye(3).flatten().tolist(),
+            },
         )
-        monkeypatch.setattr(
-            analyzer_utils, "compare_headers", lambda *_: False
-        )
+        monkeypatch.setattr(analyzer_utils, "compare_headers", lambda *_: False)
         with pytest.raises(ValueError, match="Header mismatch"):
             evaluator._load_patient_data("p0")
 
@@ -299,10 +295,14 @@ class TestLoadPatientData:
         """When validate_masks=False, validate_mask is never called."""
         mock_img = make_ants_image()
         monkeypatch.setattr(
-            ants, "image_header_info",
-            lambda _: {"dimensions": (10, 10, 10), "spacing": (1.0, 1.0, 1.0),
-                       "origin": (0.0, 0.0, 0.0),
-                       "direction": np.eye(3).flatten().tolist()},
+            ants,
+            "image_header_info",
+            lambda _: {
+                "dimensions": (10, 10, 10),
+                "spacing": (1.0, 1.0, 1.0),
+                "origin": (0.0, 0.0, 0.0),
+                "direction": np.eye(3).flatten().tolist(),
+            },
         )
         monkeypatch.setattr(ants, "image_read", lambda _: mock_img)
         monkeypatch.setattr(analyzer_utils, "compare_headers", lambda *_: True)
@@ -329,16 +329,18 @@ class TestLoadPatientData:
         """When validate_masks=True, validate_mask is called for both files."""
         mock_img = make_ants_image()
         monkeypatch.setattr(
-            ants, "image_header_info",
-            lambda _: {"dimensions": (10, 10, 10), "spacing": (1.0, 1.0, 1.0),
-                       "origin": (0.0, 0.0, 0.0),
-                       "direction": np.eye(3).flatten().tolist()},
+            ants,
+            "image_header_info",
+            lambda _: {
+                "dimensions": (10, 10, 10),
+                "spacing": (1.0, 1.0, 1.0),
+                "origin": (0.0, 0.0, 0.0),
+                "direction": np.eye(3).flatten().tolist(),
+            },
         )
         monkeypatch.setattr(ants, "image_read", lambda _: mock_img)
         monkeypatch.setattr(analyzer_utils, "compare_headers", lambda *_: True)
-        monkeypatch.setattr(
-            evaluation_utils, "validate_mask", lambda *_a, **_k: None
-        )
+        monkeypatch.setattr(evaluation_utils, "validate_mask", lambda *_a, **_k: None)
 
         called = {"count": 0}
         original = evaluation_utils.validate_mask
@@ -382,11 +384,20 @@ class TestLoadPatientData:
 # _compute_metrics
 # ---------------------------------------------------------------------------
 
+
 class TestComputeMetrics:
     """Tests for Evaluator._compute_metrics."""
 
-    def _run(self, evaluator, monkeypatch, mock_metric, mask, pred,
-             spacing=(1.0, 1.0, 1.0), override=None):
+    def _run(
+        self,
+        evaluator,
+        monkeypatch,
+        mock_metric,
+        mask,
+        pred,
+        spacing=(1.0, 1.0, 1.0),
+        override=None,
+    ):
         """Patch get_metric and call _compute_metrics."""
         monkeypatch.setattr(
             "mist.evaluation.evaluator.get_metric",
@@ -405,59 +416,73 @@ class TestComputeMetrics:
         """Both-empty masks short-circuit to the metric's best value."""
         metric = type("M", (), {"best": 1.0, "worst": 0.0})()
         result, err = self._run(
-            evaluator, monkeypatch, metric,
-            np.zeros((5, 5, 5)), np.zeros((5, 5, 5)),
+            evaluator,
+            monkeypatch,
+            metric,
+            np.zeros((5, 5, 5)),
+            np.zeros((5, 5, 5)),
         )
         assert result["dice"] == 1.0
         assert err is None
 
-    def test_one_empty_finite_worst_returns_worst(
-        self, evaluator, monkeypatch
-    ):
+    def test_one_empty_finite_worst_returns_worst(self, evaluator, monkeypatch):
         """One empty mask short-circuits to the metric's finite worst value."""
         metric = type("M", (), {"best": 1.0, "worst": 0.0})()
         result, err = self._run(
-            evaluator, monkeypatch, metric,
-            np.ones((5, 5, 5)), np.zeros((5, 5, 5)),
+            evaluator,
+            monkeypatch,
+            metric,
+            np.ones((5, 5, 5)),
+            np.zeros((5, 5, 5)),
         )
         assert result["dice"] == 0.0
 
-    def test_one_empty_infinite_worst_uses_diagonal(
-        self, evaluator, monkeypatch
-    ):
+    def test_one_empty_infinite_worst_uses_diagonal(self, evaluator, monkeypatch):
         """With worst=inf the diagonal distance is substituted."""
         metric = type("M", (), {"best": 0.0, "worst": float("inf")})()
         shape = (10, 10, 10)
         spacing = (1.0, 1.0, 1.0)
         expected_diag = Evaluator._compute_diagonal_distance(shape, spacing)
         result, _ = self._run(
-            evaluator, monkeypatch, metric,
-            np.zeros(shape), np.ones(shape),
+            evaluator,
+            monkeypatch,
+            metric,
+            np.zeros(shape),
+            np.ones(shape),
             spacing=spacing,
         )
         assert result["dice"] == pytest.approx(expected_diag, rel=1e-4)
 
-    def test_diagonal_distance_override_is_used(
-        self, evaluator, monkeypatch
-    ):
+    def test_diagonal_distance_override_is_used(self, evaluator, monkeypatch):
         """diagonal_distance_override replaces the computed diagonal."""
         metric = type("M", (), {"best": 0.0, "worst": float("inf")})()
         result, _ = self._run(
-            evaluator, monkeypatch, metric,
-            np.zeros((5, 5, 5)), np.ones((5, 5, 5)),
+            evaluator,
+            monkeypatch,
+            metric,
+            np.zeros((5, 5, 5)),
+            np.ones((5, 5, 5)),
             override=99.9,
         )
         assert result["dice"] == pytest.approx(99.9)
 
     def test_valid_metric_result_stored(self, evaluator, monkeypatch):
         """A well-behaved metric's return value is stored directly."""
-        metric = type("M", (), {
-            "best": 1.0, "worst": 0.0,
-            "__call__": lambda self, *a, **k: 0.75,
-        })()
+        metric = type(
+            "M",
+            (),
+            {
+                "best": 1.0,
+                "worst": 0.0,
+                "__call__": lambda self, *a, **k: 0.75,
+            },
+        )()
         result, err = self._run(
-            evaluator, monkeypatch, metric,
-            np.ones((5, 5, 5)), np.ones((5, 5, 5)),
+            evaluator,
+            monkeypatch,
+            metric,
+            np.ones((5, 5, 5)),
+            np.ones((5, 5, 5)),
         )
         assert result["dice"] == pytest.approx(0.75)
         assert err is None
@@ -474,32 +499,47 @@ class TestComputeMetrics:
         self, evaluator, monkeypatch, bad_value
     ):
         """NaN or Inf returned by a metric is replaced with worst value."""
-        metric = type("M", (), {
-            "best": 1.0, "worst": 0.0,
-            "__call__": lambda self, *a, **k: bad_value,
-        })()
+        metric = type(
+            "M",
+            (),
+            {
+                "best": 1.0,
+                "worst": 0.0,
+                "__call__": lambda self, *a, **k: bad_value,
+            },
+        )()
         result, err = self._run(
-            evaluator, monkeypatch, metric,
-            np.ones((5, 5, 5)), np.ones((5, 5, 5)),
+            evaluator,
+            monkeypatch,
+            metric,
+            np.ones((5, 5, 5)),
+            np.ones((5, 5, 5)),
         )
         assert result["dice"] == 0.0
         assert err is not None
         assert "NaN/Inf" in err
 
-    def test_exception_in_metric_replaced_with_worst(
-        self, evaluator, monkeypatch
-    ):
+    def test_exception_in_metric_replaced_with_worst(self, evaluator, monkeypatch):
         """Exception raised by a metric is caught; worst value is used."""
+
         def _bad(*a, **k):
             raise RuntimeError("broken")
 
-        metric = type("M", (), {
-            "best": 1.0, "worst": 0.0,
-            "__call__": _bad,
-        })()
+        metric = type(
+            "M",
+            (),
+            {
+                "best": 1.0,
+                "worst": 0.0,
+                "__call__": _bad,
+            },
+        )()
         result, err = self._run(
-            evaluator, monkeypatch, metric,
-            np.ones((5, 5, 5)), np.ones((5, 5, 5)),
+            evaluator,
+            monkeypatch,
+            metric,
+            np.ones((5, 5, 5)),
+            np.ones((5, 5, 5)),
         )
         assert result["dice"] == 0.0
         assert err is not None
@@ -509,6 +549,7 @@ class TestComputeMetrics:
 # ---------------------------------------------------------------------------
 # _evaluate_single_patient
 # ---------------------------------------------------------------------------
+
 
 class TestEvaluateSinglePatient:
     """Tests for Evaluator._evaluate_single_patient."""
@@ -540,9 +581,7 @@ class TestEvaluateSinglePatient:
         mask[3:5, 3:5, 3:5] = 2
         pred[0:2, 0:2, 0:2] = 1
         pred[3:5, 3:5, 3:5] = 2
-        result, err = ev._evaluate_single_patient(
-            "p0", mask, pred, (1.0, 1.0, 1.0)
-        )
+        result, err = ev._evaluate_single_patient("p0", mask, pred, (1.0, 1.0, 1.0))
         assert result["combined_dice"] == pytest.approx(1.0)
         assert err is None
 
@@ -553,9 +592,14 @@ class TestEvaluateSinglePatient:
             "c2": {"labels": [2], "metrics": {"dice": {}}},
         }
 
-        def _fake_compute(patient_id, mask, prediction, spacing,
-                          class_metrics_config,
-                          diagonal_distance_override=None):
+        def _fake_compute(
+            patient_id,
+            mask,
+            prediction,
+            spacing,
+            class_metrics_config,
+            diagonal_distance_override=None,
+        ):
             """Return an error for class c2 only."""
             err = "bad" if class_metrics_config == {"dice": {}} else None
             return {"dice": 0.0}, err
@@ -576,24 +620,25 @@ class TestEvaluateSinglePatient:
 # _evaluate_patient_pipeline
 # ---------------------------------------------------------------------------
 
+
 class TestEvaluatePatientPipeline:
     """Tests for Evaluator._evaluate_patient_pipeline."""
 
-    def test_success_returns_result_and_no_error(
-        self, evaluator, monkeypatch
-    ):
+    def test_success_returns_result_and_no_error(self, evaluator, monkeypatch):
         """A successful pipeline returns a result dict and None for errors."""
         mock_img = make_ants_image()
         monkeypatch.setattr(
-            ants, "image_header_info",
-            lambda _: {"dimensions": (10, 10, 10), "spacing": (1.0, 1.0, 1.0),
-                       "origin": (0.0, 0.0, 0.0),
-                       "direction": np.eye(3).flatten().tolist()},
+            ants,
+            "image_header_info",
+            lambda _: {
+                "dimensions": (10, 10, 10),
+                "spacing": (1.0, 1.0, 1.0),
+                "origin": (0.0, 0.0, 0.0),
+                "direction": np.eye(3).flatten().tolist(),
+            },
         )
         monkeypatch.setattr(ants, "image_read", lambda _: mock_img)
-        monkeypatch.setattr(
-            analyzer_utils, "compare_headers", lambda *_: True
-        )
+        monkeypatch.setattr(analyzer_utils, "compare_headers", lambda *_: True)
         result, err = evaluator._evaluate_patient_pipeline("p0")
         assert result is not None
         assert "id" in result
@@ -613,27 +658,28 @@ class TestEvaluatePatientPipeline:
         assert "CRITICAL FAILURE" in err
         assert "disk error" in err
 
-    def test_metric_warning_propagated_in_error_message(
-        self, evaluator, monkeypatch
-    ):
+    def test_metric_warning_propagated_in_error_message(self, evaluator, monkeypatch):
         """Non-fatal metric warnings are surfaced in the pipeline error string."""
         mock_img = make_ants_image()
         monkeypatch.setattr(
-            ants, "image_header_info",
-            lambda _: {"dimensions": (10, 10, 10), "spacing": (1.0, 1.0, 1.0),
-                       "origin": (0.0, 0.0, 0.0),
-                       "direction": np.eye(3).flatten().tolist()},
+            ants,
+            "image_header_info",
+            lambda _: {
+                "dimensions": (10, 10, 10),
+                "spacing": (1.0, 1.0, 1.0),
+                "origin": (0.0, 0.0, 0.0),
+                "direction": np.eye(3).flatten().tolist(),
+            },
         )
         monkeypatch.setattr(ants, "image_read", lambda _: mock_img)
-        monkeypatch.setattr(
-            analyzer_utils, "compare_headers", lambda *_: True
-        )
+        monkeypatch.setattr(analyzer_utils, "compare_headers", lambda *_: True)
         # Make _evaluate_single_patient return a warning (non-None errors).
         monkeypatch.setattr(
             evaluator,
             "_evaluate_single_patient",
             lambda patient_id, mask, prediction, spacing: (
-                {"id": patient_id, "tumor_dice": 0.0}, "NaN/Inf warning"
+                {"id": patient_id, "tumor_dice": 0.0},
+                "NaN/Inf warning",
             ),
         )
         result, err = evaluator._evaluate_patient_pipeline("p0")
@@ -645,6 +691,7 @@ class TestEvaluatePatientPipeline:
 # ---------------------------------------------------------------------------
 # run
 # ---------------------------------------------------------------------------
+
 
 class TestEvaluatorRun:
     """Tests for Evaluator.run."""
@@ -676,7 +723,8 @@ class TestEvaluatorRun:
         )
         printed = []
         monkeypatch.setattr(
-            console_mod.console, "print",
+            console_mod.console,
+            "print",
             lambda msg, **k: printed.append(str(msg)),
         )
         evaluator.run()

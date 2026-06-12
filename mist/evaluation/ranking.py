@@ -20,6 +20,7 @@ Pairwise statistical significance between strategies is available via
 compute_pairwise_significance, which runs Wilcoxon signed-rank tests on
 per-patient mean ranks derived from the same rank tensor used for ranking.
 """
+
 from collections.abc import Mapping
 from typing import Literal
 
@@ -33,23 +34,25 @@ from mist.metrics.metrics_registry import METRIC_REGISTRY
 # Summary-row IDs added by mist.evaluation.evaluation_utils.compute_results_stats.
 # These are stripped before ranking so aggregate rows do not contaminate the
 # per-patient ranking.
-SUMMARY_ROW_IDS: frozenset[str] = frozenset({
-    "Mean", "Std", "25th Percentile", "Median", "75th Percentile",
-})
+SUMMARY_ROW_IDS: frozenset[str] = frozenset(
+    {
+        "Mean",
+        "Std",
+        "25th Percentile",
+        "Median",
+        "75th Percentile",
+    }
+)
 
 
 def _strip_summary_rows(df: pd.DataFrame, id_column: str) -> pd.DataFrame:
     """Drop rows whose id is a known aggregate label (Mean, Std, ...)."""
     if id_column not in df.columns:
-        raise ValueError(
-            f"DataFrame is missing the required id column '{id_column}'."
-        )
+        raise ValueError(f"DataFrame is missing the required id column '{id_column}'.")
     return df.loc[~df[id_column].astype(str).isin(SUMMARY_ROW_IDS)].copy()
 
 
-def _suffix_match_metric(
-    column: str, metric_keys: list[str]
-) -> str | None:
+def _suffix_match_metric(column: str, metric_keys: list[str]) -> str | None:
     """Return the registered metric name matching `column`'s suffix.
 
     Matches the longest registered metric name first so that, for example,
@@ -164,9 +167,9 @@ def _build_rank_tensor(
 
     aligned = [
         df.assign(_sort_key=df[id_column].astype(str))
-          .sort_values("_sort_key")
-          .drop(columns="_sort_key")
-          .reset_index(drop=True)
+        .sort_values("_sort_key")
+        .drop(columns="_sort_key")
+        .reset_index(drop=True)
         for df in cleaned
     ]
 
@@ -186,8 +189,7 @@ def _build_rank_tensor(
                 )
 
     directions = {
-        col: _direction_for_column(col, direction_overrides)
-        for col in metric_columns
+        col: _direction_for_column(col, direction_overrides) for col in metric_columns
     }
 
     n_strategies = len(aligned)
@@ -196,15 +198,11 @@ def _build_rank_tensor(
 
     ranks = np.empty((n_metrics, n_patients, n_strategies), dtype=float)
     for m_idx, col in enumerate(metric_columns):
-        values = np.stack(
-            [df[col].to_numpy(dtype=float) for df in aligned], axis=1
-        )
+        values = np.stack([df[col].to_numpy(dtype=float) for df in aligned], axis=1)
         if directions[col] == "higher":
             values = -values
         for p_idx in range(n_patients):
-            ranks[m_idx, p_idx, :] = rankdata(
-                values[p_idx, :], method="average"
-            )
+            ranks[m_idx, p_idx, :] = rankdata(values[p_idx, :], method="average")
 
     return aligned, metric_columns, ranks
 
@@ -256,8 +254,7 @@ def rank_results(
         names = [f"strategy_{i}" for i in range(len(results))]
     elif len(names) != len(results):
         raise ValueError(
-            f"names has length {len(names)} but results has length "
-            f"{len(results)}."
+            f"names has length {len(names)} but results has length {len(results)}."
         )
     if len(set(names)) != len(names):
         raise ValueError(f"names must be unique, got {names}.")
@@ -267,10 +264,12 @@ def rank_results(
     )
 
     avg_ranks = ranks.mean(axis=(0, 1))
-    summary_df = pd.DataFrame({
-        "strategy": names,
-        "average_rank": avg_ranks,
-    }).sort_values("average_rank", ignore_index=True)
+    summary_df = pd.DataFrame(
+        {
+            "strategy": names,
+            "average_rank": avg_ranks,
+        }
+    ).sort_values("average_rank", ignore_index=True)
 
     per_metric_means = ranks.mean(axis=1)  # (n_metrics, n_strategies)
     detailed_df = pd.DataFrame({"strategy": names})
@@ -325,22 +324,17 @@ def compute_pairwise_significance(
         names = [f"strategy_{i}" for i in range(len(results))]
     elif len(names) != len(results):
         raise ValueError(
-            f"names has length {len(names)} but results has length "
-            f"{len(results)}."
+            f"names has length {len(names)} but results has length {len(results)}."
         )
     if len(set(names)) != len(names):
         raise ValueError(f"names must be unique, got {names}.")
 
-    _, _, ranks = _build_rank_tensor(
-        results, names, direction_overrides, id_column
-    )
+    _, _, ranks = _build_rank_tensor(results, names, direction_overrides, id_column)
 
     # Per-patient mean rank across all metrics: shape (n_patients, n_strategies).
     per_patient_mean_ranks = ranks.mean(axis=0)
 
-    matrix = pd.DataFrame(
-        np.nan, index=names, columns=names, dtype=float
-    )
+    matrix = pd.DataFrame(np.nan, index=names, columns=names, dtype=float)
     for i, name_i in enumerate(names):
         for j, name_j in enumerate(names):
             if i == j:

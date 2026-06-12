@@ -1,4 +1,5 @@
 """Tests for the optimizer registry in MIST."""
+
 import pytest
 import torch
 from torch import nn

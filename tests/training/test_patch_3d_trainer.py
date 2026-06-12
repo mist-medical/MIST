@@ -1,4 +1,5 @@
 """Unit tests for Patch3DTrainer."""
+
 import json
 from contextlib import contextmanager
 from pathlib import Path
@@ -65,16 +66,10 @@ def no_op_autocast() -> Any:
 @pytest.fixture(autouse=True)
 def patch_cuda(monkeypatch):
     """Pretend CUDA exists and make .to(...) a no-op (CPU-only tests)."""
-    monkeypatch.setattr(
-        torch.cuda, "is_available", lambda: True, raising=False
-    )
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True, raising=False)
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 1, raising=False)
-    monkeypatch.setattr(
-        torch.cuda, "set_device", lambda _i: None, raising=False
-    )
-    monkeypatch.setattr(
-        nn.Module, "to", lambda self, *a, **k: self, raising=False
-    )
+    monkeypatch.setattr(torch.cuda, "set_device", lambda _i: None, raising=False)
+    monkeypatch.setattr(nn.Module, "to", lambda self, *a, **k: self, raising=False)
 
 
 @pytest.fixture
@@ -97,10 +92,7 @@ def tmp_pipeline(tmp_path):
             "patch_size": [32, 32, 32],
             "target_spacing": [1.0, 1.0, 1.0],
         },
-        "model": {
-            "architecture": "nnunet",
-            "params": {}
-        },
+        "model": {"architecture": "nnunet", "params": {}},
         "training": {
             "seed": 42,
             "nfolds": 5,
@@ -128,26 +120,23 @@ def tmp_pipeline(tmp_path):
                     "noise": True,
                     "blur": True,
                     "brightness": True,
-                    "contrast": True
-                }
+                    "contrast": True,
+                },
             },
             "hardware": {
                 "num_gpus": 2,
                 "num_cpu_workers": 8,
                 "master_addr": "localhost",
                 "master_port": 12345,
-                "communication_backend": "nccl"
-            }
+                "communication_backend": "nccl",
+            },
         },
         "inference": {
             "inferer": {
                 "name": "sliding_window",
-                "params": {
-                    "patch_blend_mode": "gaussian",
-                    "patch_overlap": 0.5
-                }
+                "params": {"patch_blend_mode": "gaussian", "patch_overlap": 0.5},
             },
-        }
+        },
     }
     (results / "config.json").write_text(json.dumps(cfg))
     return results, numpy_dir
@@ -196,9 +185,7 @@ def patch_utils(monkeypatch, tmp_pipeline):
     monkeypatch.setattr(bt.training_utils, "get_npy_paths", fake_get_npy_paths)
 
 
-def test_build_dataloaders_passes_expected_args(
-    tmp_pipeline, mist_args, monkeypatch
-):
+def test_build_dataloaders_passes_expected_args(tmp_pipeline, mist_args, monkeypatch):
     """Test build_dataloaders forwards the correct arguments to dali_loader."""
     # Capture calls.
     captured = {}
@@ -216,9 +203,7 @@ def test_build_dataloaders_passes_expected_args(
         return DummyIter(batch, steps=1)
 
     monkeypatch.setattr(dl, "get_training_dataset", fake_get_training_dataset)
-    monkeypatch.setattr(
-        dl, "get_validation_dataset", fake_get_validation_dataset
-    )
+    monkeypatch.setattr(dl, "get_validation_dataset", fake_get_validation_dataset)
 
     # Trainer instance (BaseTrainer __init__ will read config & set folds).
     t = Patch3DTrainer(mist_args)
@@ -232,9 +217,7 @@ def test_build_dataloaders_passes_expected_args(
         "val_labels": ["labels/p1.npy"],
     }
 
-    train_loader, val_loader = t.build_dataloaders(
-        fold_data, rank=0, world_size=1
-    )
+    train_loader, val_loader = t.build_dataloaders(fold_data, rank=0, world_size=1)
     assert isinstance(train_loader, DummyIter)
     assert isinstance(val_loader, DummyIter)
 
@@ -252,7 +235,10 @@ def test_build_dataloaders_passes_expected_args(
 
 @pytest.mark.parametrize("amp_enabled", [False, True])
 def test_training_step_uses_amp_context_when_configured(
-    tmp_pipeline, mist_args, monkeypatch, amp_enabled,
+    tmp_pipeline,
+    mist_args,
+    monkeypatch,
+    amp_enabled,
 ):
     """training_step enters torch.autocast(bfloat16) iff training.amp is True."""
     t = Patch3DTrainer(mist_args)
@@ -335,9 +321,12 @@ def test_training_step_parameters_updated_after_step(tmp_pipeline, mist_args):
         return (kwargs["y_pred"] - kwargs["y_true"]).pow(2).mean()
 
     state = {
-        "model": model, "optimizer": opt,
-        "loss_function": real_criterion, "composite_loss_weighting": None,
-        "epoch": 0, "alpha": 0.5,
+        "model": model,
+        "optimizer": opt,
+        "loss_function": real_criterion,
+        "composite_loss_weighting": None,
+        "epoch": 0,
+        "alpha": 0.5,
     }
     batch = {
         "image": torch.randn(1, 4),
@@ -355,7 +344,9 @@ def test_training_step_parameters_updated_after_step(tmp_pipeline, mist_args):
 
 @patch("mist.training.trainers.patch_3d_trainer.sliding_window_inference")
 def test_validation_step_calls_sliding_window_and_validation_loss(
-    mock_swi, tmp_pipeline, mist_args,
+    mock_swi,
+    tmp_pipeline,
+    mist_args,
 ):
     """Validate sliding-window inference wiring and validation loss usage.
 
@@ -400,9 +391,7 @@ def test_validation_step_calls_sliding_window_and_validation_loss(
     kwargs = mock_swi.call_args.kwargs
     assert torch.equal(kwargs["inputs"], batch["image"])
     assert kwargs["roi_size"] == t.config["spatial_config"]["patch_size"]
-    expected_overlap = (
-        t.config["inference"]["inferer"]["params"]["patch_overlap"]
-    )
+    expected_overlap = t.config["inference"]["inferer"]["params"]["patch_overlap"]
     assert kwargs["overlap"] == pytest.approx(expected_overlap)
     expected_sw_batch_size = 2 * t.config["training"]["batch_size_per_gpu"]
     assert kwargs["sw_batch_size"] == expected_sw_batch_size
@@ -442,10 +431,13 @@ def test_validation_step_uses_autocast_when_amp_enabled(
 
     monkeypatch.setattr(torch, "autocast", _FakeAutocast)
 
-    t.validation_step(state={"model": model}, data={
-        "image": torch.ones(1, 4, dtype=torch.float32),
-        "label": torch.zeros(1, 4, dtype=torch.float32),
-    })
+    t.validation_step(
+        state={"model": model},
+        data={
+            "image": torch.ones(1, 4, dtype=torch.float32),
+            "label": torch.zeros(1, 4, dtype=torch.float32),
+        },
+    )
 
     assert len(autocast_entered) == 1
     assert autocast_entered[0]["dtype"] == torch.bfloat16
@@ -479,9 +471,12 @@ def test_validation_step_no_autocast_when_amp_disabled(
 
     monkeypatch.setattr(torch, "autocast", _FakeAutocast)
 
-    t.validation_step(state={"model": model}, data={
-        "image": torch.ones(1, 4, dtype=torch.float32),
-        "label": torch.zeros(1, 4, dtype=torch.float32),
-    })
+    t.validation_step(
+        state={"model": model},
+        data={
+            "image": torch.ones(1, 4, dtype=torch.float32),
+            "label": torch.zeros(1, 4, dtype=torch.float32),
+        },
+    )
 
     assert not autocast_entered, "autocast should not be entered when amp=False"

@@ -70,9 +70,7 @@ class TestCheckLossInputs:
             ),
         ],
     )
-    def test_invalid_inputs_raise_error(
-        self, y_true_shape, y_pred_shape, error_match
-    ):
+    def test_invalid_inputs_raise_error(self, y_true_shape, y_pred_shape, error_match):
         """Test that invalid shapes raise ValueError with correct messages."""
         y_true = torch.zeros(y_true_shape)
         y_pred = torch.zeros(y_pred_shape)

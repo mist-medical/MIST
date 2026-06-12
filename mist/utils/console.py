@@ -10,6 +10,7 @@ Rule for warnings.warn() vs these helpers:
     - Use these helpers for every user-facing message printed during a
       pipeline run.
 """
+
 from rich.console import Console
 
 console = Console()

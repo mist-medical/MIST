@@ -1,4 +1,5 @@
 """STAPLE label ensembler for MIST."""
+
 import SimpleITK as sitk
 
 from mist.inference.label_ensemblers.base import AbstractLabelEnsembler
@@ -33,9 +34,7 @@ class STAPLEEnsembler(AbstractLabelEnsembler):
             ValueError: If label_maps is empty.
         """
         if not label_maps:
-            raise ValueError(
-                "STAPLEEnsembler requires at least one label map."
-            )
+            raise ValueError("STAPLEEnsembler requires at least one label map.")
         cast = [sitk.Cast(lm, sitk.sitkUInt32) for lm in label_maps]
         result = sitk.MultiLabelSTAPLE(cast)
         return sitk.Cast(result, sitk.sitkUInt8)

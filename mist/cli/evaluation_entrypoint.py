@@ -18,16 +18,20 @@ def _parse_eval_args(argv: list[str] | None = None) -> argparse.Namespace:
         description="Evaluate predictions produced by MIST.",
     )
     parser.arg(
-        "--config", type=str, required=True,
+        "--config",
+        type=str,
+        required=True,
         help=(
             "Path to an evaluation config JSON. Accepts either a full MIST "
             "config.json (the 'evaluation' key is extracted automatically) or "
             "a standalone evaluation config with the nested per-class structure: "
-            "{\"class\": {\"labels\": [...], \"metrics\": {\"metric\": {params}}}}."
+            '{"class": {"labels": [...], "metrics": {"metric": {params}}}}.'
         ),
     )
     parser.arg(
-        "--paths-csv", type=str, required=True,
+        "--paths-csv",
+        type=str,
+        required=True,
         help=(
             "CSV with columns 'id', 'mask', and 'prediction' containing the "
             "patient ID and absolute paths to the ground truth mask and "
@@ -35,11 +39,15 @@ def _parse_eval_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.arg(
-        "--output-csv", type=str, required=True,
-        help="Path where the evaluation results CSV will be written."
+        "--output-csv",
+        type=str,
+        required=True,
+        help="Path where the evaluation results CSV will be written.",
     )
     parser.arg(
-        "--num-workers-evaluate", type=positive_int, default=1,
+        "--num-workers-evaluate",
+        type=positive_int,
+        default=1,
         help="Number of parallel workers for evaluation.",
     )
     parser.flag(

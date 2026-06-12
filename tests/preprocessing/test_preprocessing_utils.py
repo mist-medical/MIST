@@ -1,4 +1,5 @@
 """Tests for MIST preprocessing utilities."""
+
 import numpy as np
 import pytest
 import SimpleITK as sitk
@@ -49,12 +50,11 @@ def test_ants_to_sitk_preserves_metadata_and_orientation():
     arr = np.arange(3 * 4 * 5, dtype=np.float32).reshape(3, 4, 5)
     spacing = (1.2, 1.5, 2.5)
     origin = (5.0, -3.0, 2.0)
-    direction = np.array([[1.0, 0.0, 0.0],
-                          [0.0, 1.0, 0.0],
-                          [0.0, 0.0, 1.0]])
+    direction = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
 
-    img_ants = _make_ants_image(arr, spacing=spacing, origin=origin,
-                                direction_mat=direction)
+    img_ants = _make_ants_image(
+        arr, spacing=spacing, origin=origin, direction_mat=direction
+    )
     img_sitk = pu.ants_to_sitk(img_ants)
 
     # Metadata preserved.
@@ -99,7 +99,7 @@ def test_get_fg_mask_bbox_detects_cube(monkeypatch):
     xs, xe = 3, 9
     ys, ye = 4, 12
     zs, ze = 5, 15
-    vol[xs:xe + 1, ys:ye + 1, zs:ze + 1] = 100.0  # Bright cube.
+    vol[xs : xe + 1, ys : ye + 1, zs : ze + 1] = 100.0  # Bright cube.
 
     img = _make_ants_image(vol)
     bbox = pu.get_fg_mask_bbox(img)
@@ -108,9 +108,7 @@ def test_get_fg_mask_bbox_detects_cube(monkeypatch):
     assert bbox["y_start"] == ys and bbox["y_end"] == ye
     assert bbox["z_start"] == zs and bbox["z_end"] == ze
     assert (
-        bbox["x_og_size"] == 16
-        and bbox["y_og_size"] == 17
-        and bbox["z_og_size"] == 18
+        bbox["x_og_size"] == 16 and bbox["y_og_size"] == 17 and bbox["z_og_size"] == 18
     )
 
 
@@ -124,10 +122,15 @@ def test_get_fg_mask_bbox_returns_full_when_empty(monkeypatch):
     bbox = pu.get_fg_mask_bbox(img)
 
     assert bbox == {
-        "x_start": 0, "x_end": 7,
-        "y_start": 0, "y_end": 8,
-        "z_start": 0, "z_end": 9,
-        "x_og_size": 8, "y_og_size": 9, "z_og_size": 10,
+        "x_start": 0,
+        "x_end": 7,
+        "y_start": 0,
+        "y_end": 8,
+        "z_start": 0,
+        "z_end": 9,
+        "x_og_size": 8,
+        "y_og_size": 9,
+        "z_og_size": 10,
     }
 
 
@@ -145,9 +148,7 @@ def test_aniso_intermediate_resample_changes_only_low_axis():
     target_spacing = (1.0, 1.0, 2.5)
     new_size = (6, 7, 6)  # Double along low-res axis only.
 
-    out = pu.aniso_intermediate_resample(
-        img, new_size, target_spacing, low_axis
-    )
+    out = pu.aniso_intermediate_resample(img, new_size, target_spacing, low_axis)
 
     assert out.GetSize() == new_size
     assert out.GetSpacing()[low_axis] == pytest.approx(target_spacing[low_axis])
@@ -165,8 +166,9 @@ def test_check_anisotropic_true_and_false():
     assert res1["low_resolution_axis"] == 2
 
     # False case: ratio == 3 -> not anisotropic by strict '>' check.
-    img2 = _make_sitk_image_from_xyz(np.zeros((4, 4, 2), np.float32),
-                                     spacing=(1.0, 1.0, 3.0))
+    img2 = _make_sitk_image_from_xyz(
+        np.zeros((4, 4, 2), np.float32), spacing=(1.0, 1.0, 3.0)
+    )
     res2 = pu.check_anisotropic(img2)
     assert res2["is_anisotropic"] is False
     assert res2["low_resolution_axis"] is None
@@ -205,8 +207,7 @@ def test_make_onehot_creates_binary_masks_with_metadata():
 def test_sitk_get_min_max_and_sum():
     """Statistics filters return correct min, max, and sum."""
     arr = np.array(
-        [[[0, 1], [2, 3]],
-         [[4, 5], [6, 7]]],
+        [[[0, 1], [2, 3]], [[4, 5], [6, 7]]],
         dtype=np.float32,
     )  # Shape (2, 2, 2).
     img = _make_sitk_image_from_xyz(arr)
@@ -224,21 +225,21 @@ def test_crop_to_fg_returns_expected_shape():
     xs, xe = 2, 7
     ys, ye = 3, 9
     zs, ze = 1, 6
-    vol[xs:xe + 1, ys:ye + 1, zs:ze + 1] = 5.0
+    vol[xs : xe + 1, ys : ye + 1, zs : ze + 1] = 5.0
 
     img = _make_ants_image(vol)
 
     bbox = {
-        "x_start": xs, "x_end": xe,
-        "y_start": ys, "y_end": ye,
-        "z_start": zs, "z_end": ze,
+        "x_start": xs,
+        "x_end": xe,
+        "y_start": ys,
+        "y_end": ye,
+        "z_start": zs,
+        "z_end": ze,
     }
     cropped = pu.crop_to_fg(img, bbox)
     cropped_arr = cropped.numpy()
 
     exp_shape = (xe - xs + 1, ye - ys + 1, ze - zs + 1)
     assert cropped_arr.shape == exp_shape
-    assert np.allclose(
-        cropped_arr,
-        vol[xs:xe + 1, ys:ye + 1, zs:ze + 1]
-    )
+    assert np.allclose(cropped_arr, vol[xs : xe + 1, ys : ye + 1, zs : ze + 1])

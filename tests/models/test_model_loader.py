@@ -1,4 +1,5 @@
 """Unit tests for model construction and loading utilities."""
+
 from collections import OrderedDict
 from unittest.mock import patch, MagicMock
 import pytest
@@ -10,7 +11,7 @@ from mist.models.model_loader import (
     validate_encoder_compatibility,
     load_pretrained_encoder,
     validate_mist_config_for_model_loading,
-    load_model_from_config
+    load_model_from_config,
 )
 from mist.models.model_registry import get_model_from_registry
 from mist.models.nnunet.mist_nnunet import NNUNet
@@ -29,8 +30,8 @@ def valid_mist_config():
             "params": {
                 "in_channels": 1,
                 "out_channels": 2,
-            }
-        }
+            },
+        },
     }
 
 
@@ -38,13 +39,16 @@ def valid_mist_config():
 # average_fold_weights tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def simple_state_dict():
     """A minimal state dict with one weight tensor."""
-    return OrderedDict({
-        "encoder.weight": torch.ones(4, 1, 3, 3, 3),
-        "encoder.bias": torch.zeros(4),
-    })
+    return OrderedDict(
+        {
+            "encoder.weight": torch.ones(4, 1, 3, 3, 3),
+            "encoder.bias": torch.zeros(4),
+        }
+    )
 
 
 def test_average_fold_weights_returns_ordered_dict(simple_state_dict, tmp_path):
@@ -74,10 +78,12 @@ def test_average_fold_weights_correct_mean(tmp_path):
 
 def test_average_fold_weights_strips_ddp_prefix(tmp_path):
     """DDP module. prefix is stripped before averaging."""
-    sd = OrderedDict({
-        "module.encoder.weight": torch.ones(4, 1, 3, 3, 3),
-        "module.encoder.bias": torch.zeros(4),
-    })
+    sd = OrderedDict(
+        {
+            "module.encoder.weight": torch.ones(4, 1, 3, 3, 3),
+            "module.encoder.bias": torch.zeros(4),
+        }
+    )
     p = tmp_path / "ddp.pt"
     torch.save(sd, p)
 
@@ -116,6 +122,7 @@ def test_average_fold_weights_mismatched_keys_raises(tmp_path):
 # validate_encoder_compatibility tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def nnunet_config():
     return {
@@ -128,8 +135,8 @@ def nnunet_config():
             "params": {
                 "in_channels": 1,
                 "out_channels": 2,
-            }
-        }
+            },
+        },
     }
 
 
@@ -141,7 +148,7 @@ def mednext_config():
             "params": {
                 "in_channels": 1,
                 "out_channels": 2,
-            }
+            },
         }
     }
 
@@ -161,8 +168,8 @@ def test_validate_encoder_compatibility_allows_in_out_channel_diff(nnunet_config
                 **nnunet_config["model"]["params"],
                 "in_channels": 4,
                 "out_channels": 5,
-            }
-        }
+            },
+        },
     }
     validate_encoder_compatibility(nnunet_config, target)
 
@@ -193,7 +200,7 @@ def test_validate_encoder_compatibility_patch_size_mismatch_raises(nnunet_config
         "model": {
             "architecture": "nnunet",
             "params": {**nnunet_config["model"]["params"]},
-        }
+        },
     }
     with pytest.raises(ValueError, match="patch_size mismatch"):
         validate_encoder_compatibility(nnunet_config, target)
@@ -209,7 +216,7 @@ def test_validate_encoder_compatibility_spacing_mismatch_raises(nnunet_config):
         "model": {
             "architecture": "nnunet",
             "params": {**nnunet_config["model"]["params"]},
-        }
+        },
     }
     with pytest.raises(ValueError, match="target_spacing mismatch"):
         validate_encoder_compatibility(nnunet_config, target)
@@ -232,11 +239,11 @@ def test_validate_encoder_compatibility_non_adaptive_ignores_patch_size(
 # load_pretrained_encoder tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def nnunet_source():
     """Minimal source NNUNet with in_channels=1."""
     return NNUNet(
-
         in_channels=1,
         out_channels=2,
         patch_size=[32, 32, 32],
@@ -260,7 +267,6 @@ def test_load_pretrained_encoder_same_channels_returns_summary(
 ):
     """Loading into same-channel model populates the summary."""
     target = NNUNet(
-
         in_channels=1,
         out_channels=3,  # Different out_channels — decoder should be fresh.
         patch_size=[32, 32, 32],
@@ -279,7 +285,6 @@ def test_load_pretrained_encoder_encoder_weights_transferred(
 ):
     """Encoder weights in target should match source after loading."""
     target = NNUNet(
-
         in_channels=1,
         out_channels=3,
         patch_size=[32, 32, 32],
@@ -296,12 +301,9 @@ def test_load_pretrained_encoder_encoder_weights_transferred(
         assert torch.allclose(source_enc[key].float(), target_enc[key].float())
 
 
-def test_load_pretrained_encoder_decoder_unchanged(
-    nnunet_source, source_checkpoint
-):
+def test_load_pretrained_encoder_decoder_unchanged(nnunet_source, source_checkpoint):
     """Decoder weights must not be overwritten by encoder loading."""
     target = NNUNet(
-
         in_channels=1,
         out_channels=3,
         patch_size=[32, 32, 32],
@@ -311,13 +313,19 @@ def test_load_pretrained_encoder_decoder_unchanged(
         use_pocket_model=True,
     )
     decoder_before = {
-        k: v.clone() for k, v in target.state_dict().items()
-        if not k.startswith(("unet.input_block.", "unet.encoder_layers.", "unet.bottleneck."))
+        k: v.clone()
+        for k, v in target.state_dict().items()
+        if not k.startswith(
+            ("unet.input_block.", "unet.encoder_layers.", "unet.bottleneck.")
+        )
     }
     target, _ = load_pretrained_encoder(target, source_checkpoint)
     decoder_after = {
-        k: v for k, v in target.state_dict().items()
-        if not k.startswith(("unet.input_block.", "unet.encoder_layers.", "unet.bottleneck."))
+        k: v
+        for k, v in target.state_dict().items()
+        if not k.startswith(
+            ("unet.input_block.", "unet.encoder_layers.", "unet.bottleneck.")
+        )
     }
     for key in decoder_before:
         assert torch.allclose(decoder_before[key].float(), decoder_after[key].float())
@@ -328,7 +336,6 @@ def test_load_pretrained_encoder_in_channel_average_strategy(
 ):
     """'average' strategy produces a weight with the correct target shape."""
     target = NNUNet(
-
         in_channels=4,  # Different from source (1).
         out_channels=2,
         patch_size=[32, 32, 32],
@@ -352,7 +359,6 @@ def test_load_pretrained_encoder_in_channel_first_strategy(
 ):
     """'first' strategy applies without error and produces correct shape."""
     target = NNUNet(
-
         in_channels=2,
         out_channels=2,
         patch_size=[32, 32, 32],
@@ -375,7 +381,6 @@ def test_load_pretrained_encoder_in_channel_skip_strategy(
 ):
     """'skip' strategy skips the mismatched layer entirely."""
     target = NNUNet(
-
         in_channels=2,
         out_channels=2,
         patch_size=[32, 32, 32],
@@ -393,7 +398,6 @@ def test_load_pretrained_encoder_in_channel_skip_strategy(
 def test_load_pretrained_encoder_invalid_strategy_raises(source_checkpoint):
     """An invalid in_channel_strategy raises ValueError."""
     target = NNUNet(
-
         in_channels=1,
         out_channels=2,
         patch_size=[32, 32, 32],
@@ -415,7 +419,6 @@ def test_load_pretrained_encoder_strips_ddp_prefix(nnunet_source, tmp_path):
     torch.save(ddp_sd, path)
 
     target = NNUNet(
-
         in_channels=1,
         out_channels=2,
         patch_size=[32, 32, 32],
@@ -430,17 +433,21 @@ def test_load_pretrained_encoder_strips_ddp_prefix(nnunet_source, tmp_path):
 
 def test_load_pretrained_encoder_no_get_encoder_raises(source_checkpoint):
     """Models without get_encoder_state_dict raise AttributeError."""
+
     class BareModel(torch.nn.Module):
         def forward(self, x):
             return x
 
-    with pytest.raises(AttributeError, match="does not implement get_encoder_state_dict"):
+    with pytest.raises(
+        AttributeError, match="does not implement get_encoder_state_dict"
+    ):
         load_pretrained_encoder(BareModel(), source_checkpoint)
 
 
 # ---------------------------------------------------------------------------
 # Model construction and loading tests
 # ---------------------------------------------------------------------------
+
 
 def test_get_model_from_registry_success(valid_mist_config):
     """Test model construction from valid configuration."""
@@ -486,14 +493,14 @@ def test_validate_missing_required_params_key(valid_mist_config):
 
 
 @patch("torch.load")
-def test_load_model_from_config_strips_ddp_prefix(
-    mock_torch_load, valid_mist_config
-):
+def test_load_model_from_config_strips_ddp_prefix(mock_torch_load, valid_mist_config):
     """DDP checkpoints (with 'module.' prefix) are stripped before loading."""
     dummy_model = MagicMock(spec=NNUNet)
 
     # Return a dummy model instance from registry constructor.
-    with patch("mist.models.model_loader.get_model_from_registry", return_value=dummy_model):
+    with patch(
+        "mist.models.model_loader.get_model_from_registry", return_value=dummy_model
+    ):
         # Fake DDP-wrapped weights.
         mock_torch_load.return_value = {
             "module.encoder.weight": torch.randn(4, 1, 3, 3, 3),
@@ -506,20 +513,18 @@ def test_load_model_from_config_strips_ddp_prefix(
         loaded_state_dict = dummy_model.load_state_dict.call_args[0][0]
         assert "encoder.weight" in loaded_state_dict
         assert "encoder.bias" in loaded_state_dict
-        assert all(
-            not k.startswith("module.") for k in loaded_state_dict.keys()
-        )
+        assert all(not k.startswith("module.") for k in loaded_state_dict.keys())
         assert model is dummy_model
 
 
 @patch("torch.load")
-def test_load_model_from_config_keeps_non_ddp_keys(
-    mock_torch_load, valid_mist_config
-):
+def test_load_model_from_config_keeps_non_ddp_keys(mock_torch_load, valid_mist_config):
     """Non-DDP checkpoints are loaded without key modification."""
     dummy_model = MagicMock(spec=NNUNet)
 
-    with patch("mist.models.model_loader.get_model_from_registry", return_value=dummy_model):
+    with patch(
+        "mist.models.model_loader.get_model_from_registry", return_value=dummy_model
+    ):
         # Raw (non-DDP) state dict.
         mock_torch_load.return_value = {
             "encoder.weight": torch.randn(4, 1, 3, 3, 3),
@@ -533,8 +538,7 @@ def test_load_model_from_config_keeps_non_ddp_keys(
         assert "encoder.bias" in loaded_state_dict
         # Ensure nothing was stripped.
         assert all(
-            k in ["encoder.weight", "encoder.bias"]
-            for k in loaded_state_dict.keys()
+            k in ["encoder.weight", "encoder.bias"] for k in loaded_state_dict.keys()
         )
         assert model is dummy_model
 
@@ -542,6 +546,7 @@ def test_load_model_from_config_keeps_non_ddp_keys(
 # ---------------------------------------------------------------------------
 # validate_mist_config_for_model_loading — spatial_config coverage gaps
 # ---------------------------------------------------------------------------
+
 
 def test_validate_missing_spatial_config_key(valid_mist_config):
     """Missing 'spatial_config' key raises ValueError."""
@@ -565,10 +570,12 @@ def test_validate_missing_spatial_config_subkey(valid_mist_config):
 # load_pretrained_encoder — skipped-key coverage gaps
 # ---------------------------------------------------------------------------
 
+
 def test_load_pretrained_encoder_target_key_absent_from_source_is_skipped(
     source_checkpoint,
 ):
     """A target encoder key not present in the source checkpoint is skipped."""
+
     class _ExtraKeyModel(torch.nn.Module):
         def get_encoder_state_dict(self):
             return {"nonexistent_key": torch.randn(4, 1, 3, 3, 3)}

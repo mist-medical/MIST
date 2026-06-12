@@ -1,6 +1,5 @@
 """Unit tests for the BoundaryLoss function."""
 
-
 import torch
 import pytest
 
@@ -13,9 +12,7 @@ def _make_mock_data(
     size: int = 8,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Generates valid inputs + DTM for BoundaryLoss testing."""
-    y_true = torch.randint(
-        0, n_classes, size=(batch_size, 1, size, size, size)
-    )
+    y_true = torch.randint(0, n_classes, size=(batch_size, 1, size, size, size))
     y_pred = torch.randn((batch_size, n_classes, size, size, size))
     # Mock DTM: Positive values (simple random)
     dtm = torch.abs(torch.randn((batch_size, n_classes, size, size, size)))

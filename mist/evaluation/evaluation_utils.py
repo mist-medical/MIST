@@ -103,9 +103,7 @@ def build_evaluation_dataframe(
             Any warning messages related to missing or invalid files.
     """
     if validate and evaluation_config is None:
-        raise ValueError(
-            "evaluation_config must be provided when validate=True."
-        )
+        raise ValueError("evaluation_config must be provided when validate=True.")
 
     # Initialize the error messages list.
     error_messages = []
@@ -116,9 +114,7 @@ def build_evaluation_dataframe(
 
     # Check if the train_paths.csv file exists.
     if not train_paths_csv.exists():
-        error_messages.append(
-            f"No train_paths.csv at {train_paths_csv}"
-        )
+        error_messages.append(f"No train_paths.csv at {train_paths_csv}")
         return pd.DataFrame(), "\n".join(error_messages)
 
     # Otherwise, read the CSV file and extract the patient IDs and file paths.
@@ -161,17 +157,18 @@ def build_evaluation_dataframe(
             validation_errors = [e for e in (gt_error, pred_error) if e]
             if validation_errors:
                 error_messages.append(
-                    f"Skipping ID '{patient_id}': "
-                    + " | ".join(validation_errors)
+                    f"Skipping ID '{patient_id}': " + " | ".join(validation_errors)
                 )
                 continue
 
         # Convert back to string for compatibility with ANTsPy/Evaluator.
-        filepaths.append({
-            "id": patient_id,
-            "mask": str(mask_path),
-            "prediction": str(prediction_path)
-        })
+        filepaths.append(
+            {
+                "id": patient_id,
+                "mask": str(mask_path),
+                "prediction": str(prediction_path),
+            }
+        )
 
     # Explicitly define columns if no valid files are found.
     if not filepaths:
@@ -182,9 +179,7 @@ def build_evaluation_dataframe(
     return filepaths_df, "\n".join(error_messages) if error_messages else None
 
 
-def initialize_results_dataframe(
-    evaluation_config: dict[str, Any]
-) -> pd.DataFrame:
+def initialize_results_dataframe(evaluation_config: dict[str, Any]) -> pd.DataFrame:
     """Initialize results dataframe from the evaluation configuration.
 
     Args:
@@ -216,9 +211,7 @@ def compute_results_stats(results_df: pd.DataFrame) -> pd.DataFrame:
         results_df: Updated results dataframe with statistics added at the
             bottom five rows.
     """
-    stats_labels = [
-        "Mean", "Std", "25th Percentile", "Median", "75th Percentile"
-    ]
+    stats_labels = ["Mean", "Std", "25th Percentile", "Median", "75th Percentile"]
 
     def safe_stat(func, array):
         """Helper to compute stats safely ignoring all-NaN warnings."""
@@ -242,23 +235,18 @@ def compute_results_stats(results_df: pd.DataFrame) -> pd.DataFrame:
     # We skip the 'id' column (results_df.columns[1:]).
     stats_rows = [
         {
-            "id": label, **{
-                col: safe_stat(func, results_df[col])
-                for col in results_df.columns[1:]
-            }
+            "id": label,
+            **{col: safe_stat(func, results_df[col]) for col in results_df.columns[1:]},
         }
         for label, func in zip(stats_labels, stats_functions)
     ]
 
-    results_df = pd.concat(
-        [results_df, pd.DataFrame(stats_rows)], ignore_index=True
-    )
+    results_df = pd.concat([results_df, pd.DataFrame(stats_rows)], ignore_index=True)
     return results_df
 
 
 def crop_to_union(
-    mask: np.ndarray,
-    prediction: np.ndarray
+    mask: np.ndarray, prediction: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
     """Crop both arrays to the bounding box of their non-zero union.
 
@@ -286,9 +274,6 @@ def crop_to_union(
     max_coords = coords.max(axis=0) + 1  # +1 because slicing is exclusive
 
     # 4. Generate slices dynamically for N-dimensions (works for 2D or 3D).
-    slices = tuple(
-        slice(min_c, max_c)
-        for min_c, max_c in zip(min_coords, max_coords)
-    )
+    slices = tuple(slice(min_c, max_c) for min_c, max_c in zip(min_coords, max_coords))
 
     return mask[slices], prediction[slices]

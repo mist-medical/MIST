@@ -1,4 +1,5 @@
 """Sliding window inferer implementation using MONAI."""
+
 from collections.abc import Callable
 import torch
 import monai
@@ -51,8 +52,7 @@ class SlidingWindowInferer(AbstractInferer):
             )
         if not all(isinstance(dim, int) and dim > 0 for dim in patch_size):
             raise ValueError(
-                "All patch dimensions must be positive integers, got: "
-                f"{patch_size}"
+                f"All patch dimensions must be positive integers, got: {patch_size}"
             )
         if not isinstance(sw_batch_size, int) or sw_batch_size < 1:
             raise ValueError(
@@ -60,8 +60,7 @@ class SlidingWindowInferer(AbstractInferer):
             )
         if not 0 <= patch_overlap < 1:
             raise ValueError(
-                "patch_overlap must be in the range [0, 1), got: "
-                f"{patch_overlap}"
+                f"patch_overlap must be in the range [0, 1), got: {patch_overlap}"
             )
         if patch_blend_mode not in ic.SLIDING_WINDOW_PATCH_BLEND_MODES:
             raise ValueError(
@@ -105,7 +104,5 @@ class SlidingWindowInferer(AbstractInferer):
         )
 
         # Apply softmax to the prediction tensor.
-        prediction = torch.nn.functional.softmax(
-            prediction, dim=ic.SOFTMAX_AXIS
-        )
+        prediction = torch.nn.functional.softmax(prediction, dim=ic.SOFTMAX_AXIS)
         return prediction

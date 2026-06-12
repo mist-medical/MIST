@@ -1,4 +1,5 @@
 """Tests for mist.utils.io."""
+
 from pathlib import Path
 from typing import Any
 import json

@@ -41,10 +41,7 @@ class TestLinearScheduler:
         """Test that alpha stays at start_val during the pause phase."""
         pause = 5
         scheduler = LinearScheduler(
-            num_epochs=20,
-            init_pause=pause,
-            start_val=1.0,
-            end_val=0.0
+            num_epochs=20, init_pause=pause, start_val=1.0, end_val=0.0
         )
         for i in range(pause + 1):
             assert scheduler(i) == 1.0
@@ -52,10 +49,7 @@ class TestLinearScheduler:
     def test_linear_decay_math(self):
         """Test the linear interpolation math."""
         scheduler = LinearScheduler(
-            num_epochs=11,
-            init_pause=0,
-            start_val=1.0,
-            end_val=0.0
+            num_epochs=11, init_pause=0, start_val=1.0, end_val=0.0
         )
         assert scheduler(0) == 1.0
         assert scheduler(5) == pytest.approx(0.5)
@@ -64,10 +58,7 @@ class TestLinearScheduler:
     def test_clamping_at_end(self):
         """Test that alpha clamps to end_val after decay duration."""
         scheduler = LinearScheduler(
-            num_epochs=10,
-            init_pause=2,
-            start_val=1.0,
-            end_val=0.2
+            num_epochs=10, init_pause=2, start_val=1.0, end_val=0.2
         )
         assert scheduler(100) == pytest.approx(0.2)
 
@@ -85,10 +76,7 @@ class TestCosineScheduler:
         # Setup: 11 epochs (0-10). Pause 0.
         # Makes the math clean: progress goes from 0.0 to 1.0 over 10 steps.
         scheduler = CosineScheduler(
-            num_epochs=11,
-            init_pause=0,
-            start_val=1.0,
-            end_val=0.0
+            num_epochs=11, init_pause=0, start_val=1.0, end_val=0.0
         )
         assert scheduler(0) == pytest.approx(1.0)
         assert scheduler(10) == pytest.approx(0.0)
@@ -98,10 +86,7 @@ class TestCosineScheduler:
     def test_cosine_with_pause(self):
         """Test that cosine decay respects the init_pause."""
         scheduler = CosineScheduler(
-            num_epochs=20,
-            init_pause=5,
-            start_val=1.0,
-            end_val=0.0
+            num_epochs=20, init_pause=5, start_val=1.0, end_val=0.0
         )
         assert scheduler(3) == 1.0
         assert scheduler(6) < 1.0

@@ -1,4 +1,5 @@
 """Unit tests for the loss function registry in MIST."""
+
 import pytest
 from torch import nn
 
@@ -36,9 +37,7 @@ def test_register_duplicate_loss_raises():
     """Test that registering the same loss name twice raises an error."""
     name = "duplicate_loss"
     loss_registry.register_loss(name)(DummyLoss)
-    with pytest.raises(
-        ValueError, match=f"Loss '{name}' is already registered."
-    ):
+    with pytest.raises(ValueError, match=f"Loss '{name}' is already registered."):
         loss_registry.register_loss(name)(DummyLoss)
 
 

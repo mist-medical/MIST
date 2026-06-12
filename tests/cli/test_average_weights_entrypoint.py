@@ -1,4 +1,5 @@
 """Tests for mist.cli.average_weights_entrypoint."""
+
 import pytest
 
 from mist.cli import average_weights_entrypoint as entry
@@ -17,9 +18,7 @@ def test_parse_args_missing_required_raises():
         entry._parse_args(["--output", "avg.pt"])  # missing --weights
 
 
-def test_average_weights_entry_calls_average_and_prints(
-    monkeypatch, capsys
-):
+def test_average_weights_entry_calls_average_and_prints(monkeypatch, capsys):
     """average_weights_entry calls average_fold_weights and prints a summary."""
     called = {}
     monkeypatch.setattr(

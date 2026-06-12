@@ -26,9 +26,7 @@ def _make_mock_data(
             - y_pred: Logits (Batch, Class, Height, Width, Depth).
     """
     # Ground truth: Integer labels (B, 1, H, W, D).
-    y_true = torch.randint(
-        0, n_classes, size=(batch_size, 1, size, size, size)
-    )
+    y_true = torch.randint(0, n_classes, size=(batch_size, 1, size, size, size))
     # Predictions: Logits (B, C, H, W, D).
     y_pred = torch.randn((batch_size, n_classes, size, size, size))
     return y_true, y_pred

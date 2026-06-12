@@ -9,6 +9,7 @@ the normalization parameters for CT images if applicable. It also saves the
 configuration file and the paths dataframe to the results directory, which will
 be used for preprocessing and training models.
 """
+
 import argparse
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -58,14 +59,9 @@ def _welford_merge(
         else:
             delta = float(mean_i) - total_mean
             total_M2 = (
-                total_M2
-                + float(M2_i)
-                + delta ** 2 * total_n * n_i / (total_n + n_i)
+                total_M2 + float(M2_i) + delta**2 * total_n * n_i / (total_n + n_i)
             )
-            total_mean = (
-                (total_mean * total_n + float(mean_i) * n_i)
-                / (total_n + n_i)
-            )
+            total_mean = (total_mean * total_n + float(mean_i) * n_i) / (total_n + n_i)
             total_n += n_i
     total_std = float(np.sqrt(total_M2 / total_n)) if total_n > 0 else 0.0
     return total_n, total_mean, total_std
@@ -123,9 +119,7 @@ class Analyzer:
         self.config = analyzer_utils.build_base_config()
 
         # Initialize the dataframe with the file paths for the images and masks.
-        self.paths_df = analyzer_utils.get_files_df(
-            self.mist_arguments.data, "train"
-        )
+        self.paths_df = analyzer_utils.get_files_df(self.mist_arguments.data, "train")
 
         # Set file paths for saving files like the training paths,
         # foreground bounding boxes, and configuration file. Resolve so that
@@ -140,17 +134,13 @@ class Analyzer:
         # is aware that the configuration file is being overwritten and that
         # they should check the new configuration file for any changes.
         if self.config_json.exists() and self.mist_arguments.overwrite:
-            print_warning(
-                f"Overwriting existing configuration at {self.config_json}"
-            )
+            print_warning(f"Overwriting existing configuration at {self.config_json}")
 
         # Number of parallel workers for analysis. Stored as an instance
         # attribute rather than in config so it is not persisted to
         # config.json — it is system-dependent and not needed to reproduce
         # analysis results.
-        num_workers = getattr(
-            self.mist_arguments, "num_workers_analyze", None
-        )
+        num_workers = getattr(self.mist_arguments, "num_workers_analyze", None)
         self.n_workers = int(num_workers) if num_workers is not None else 1
 
     def _check_dataset_info(self) -> None:
@@ -315,9 +305,7 @@ class Analyzer:
         # in labels. This is checked after the loop so both fields are known
         # to be valid lists/dicts before we compare them.
         all_labels = set(self.dataset_info["labels"])
-        for class_name, class_labels in (
-            self.dataset_info["final_classes"].items()
-        ):
+        for class_name, class_labels in self.dataset_info["final_classes"].items():
             unknown = [lbl for lbl in class_labels if lbl not in all_labels]
             if unknown:
                 raise ValueError(
@@ -342,6 +330,7 @@ class Analyzer:
         foreground mask and then computes the bounding box around the
         non-zero voxels of the foreground mask.
         """
+
         def _process(patient):
             try:
                 image_list = list(patient.values())[3:]
@@ -352,9 +341,7 @@ class Analyzer:
                     fg_bbox["y_end"] - fg_bbox["y_start"] + 1,
                     fg_bbox["z_end"] - fg_bbox["z_start"] + 1,
                 ]
-                vol_reduction_i = (
-                    1.0 - (np.prod(cropped_dims_i) / np.prod(image.shape))
-                )
+                vol_reduction_i = 1.0 - (np.prod(cropped_dims_i) / np.prod(image.shape))
                 fg_bbox["id"] = patient["id"]
                 return fg_bbox, cropped_dims_i, vol_reduction_i
             except Exception as e:
@@ -363,24 +350,16 @@ class Analyzer:
                 ) from e
 
         n_workers = self.n_workers
-        patients = [
-            self.paths_df.iloc[i].to_dict()
-            for i in range(len(self.paths_df))
-        ]
+        patients = [self.paths_df.iloc[i].to_dict() for i in range(len(self.paths_df))]
         fg_bbox_records = [None] * len(patients)
         cropped_dims = np.zeros((len(patients), 3))
         vol_reduction = [0.0] * len(patients)
 
         progress = progress_bar.get_progress_bar("Checking FG vol. reduction")
         with ThreadPoolExecutor(max_workers=n_workers) as executor:
-            futures = {
-                executor.submit(_process, p): i
-                for i, p in enumerate(patients)
-            }
+            futures = {executor.submit(_process, p): i for i, p in enumerate(patients)}
             with progress as pb:
-                for future in pb.track(
-                    as_completed(futures), total=len(patients)
-                ):
+                for future in pb.track(as_completed(futures), total=len(patients)):
                     i = futures[future]
                     fg_bbox_records[i], cropped_dims[i, :], vol_reduction[i] = (
                         future.result()
@@ -388,8 +367,7 @@ class Analyzer:
 
         pd.DataFrame(fg_bbox_records).to_csv(self.fg_bboxes_csv, index=False)
         crop_to_fg = (
-            np.mean(vol_reduction)
-            >= constants.MIN_AVERAGE_VOLUME_REDUCTION_FRACTION
+            np.mean(vol_reduction) >= constants.MIN_AVERAGE_VOLUME_REDUCTION_FRACTION
         )
         return crop_to_fg, cropped_dims
 
@@ -403,6 +381,7 @@ class Analyzer:
         cases) and apply the normalization scheme only to the non-zero
         voxels.
         """
+
         def _process(patient):
             try:
                 image_list = list(patient.values())[3:]
@@ -414,27 +393,17 @@ class Analyzer:
                 ) from e
 
         n_workers = self.n_workers
-        patients = [
-            self.paths_df.iloc[i].to_dict()
-            for i in range(len(self.paths_df))
-        ]
+        patients = [self.paths_df.iloc[i].to_dict() for i in range(len(self.paths_df))]
         nz_ratio = [0.0] * len(patients)
 
         progress = progress_bar.get_progress_bar("Checking non-zero ratio")
         with ThreadPoolExecutor(max_workers=n_workers) as executor:
-            futures = {
-                executor.submit(_process, p): i
-                for i, p in enumerate(patients)
-            }
+            futures = {executor.submit(_process, p): i for i, p in enumerate(patients)}
             with progress as pb:
-                for future in pb.track(
-                    as_completed(futures), total=len(patients)
-                ):
+                for future in pb.track(as_completed(futures), total=len(patients)):
                     nz_ratio[futures[future]] = future.result()
 
-        use_nz_mask = (
-            (1.0 - np.mean(nz_ratio)) >= constants.MIN_SPARSITY_FRACTION
-        )
+        use_nz_mask = (1.0 - np.mean(nz_ratio)) >= constants.MIN_SPARSITY_FRACTION
         return use_nz_mask
 
     def get_target_spacing(self) -> list[float]:
@@ -448,6 +417,7 @@ class Analyzer:
         that we still have a reasonable resolution when we preprocess the
         data.
         """
+
         def _process(patient):
             try:
                 mask = ants.image_read(patient["mask"])
@@ -460,22 +430,14 @@ class Analyzer:
                 ) from e
 
         n_workers = self.n_workers
-        patients = [
-            self.paths_df.iloc[i].to_dict()
-            for i in range(len(self.paths_df))
-        ]
+        patients = [self.paths_df.iloc[i].to_dict() for i in range(len(self.paths_df))]
         spacings = [None] * len(patients)
 
         progress = progress_bar.get_progress_bar("Getting target spacing")
         with ThreadPoolExecutor(max_workers=n_workers) as executor:
-            futures = {
-                executor.submit(_process, p): i
-                for i, p in enumerate(patients)
-            }
+            futures = {executor.submit(_process, p): i for i, p in enumerate(patients)}
             with progress as pb:
-                for future in pb.track(
-                    as_completed(futures), total=len(patients)
-                ):
+                for future in pb.track(as_completed(futures), total=len(patients)):
                     spacings[futures[future]] = future.result()
 
         original_spacings = np.array(spacings, dtype=float)
@@ -547,10 +509,8 @@ class Analyzer:
                 new_dims = analyzer_utils.get_resampled_image_dimensions(
                     current_dims, current_spacing, tgt_spacing
                 )
-                image_memory_size = (
-                    analyzer_utils.get_float32_example_memory_size(
-                        new_dims, len(image_list), n_labels
-                    )
+                image_memory_size = analyzer_utils.get_float32_example_memory_size(
+                    new_dims, len(image_list), n_labels
                 )
                 msg = None
                 if image_memory_size > constants.MAX_RECOMMENDED_MEMORY_SIZE:
@@ -567,25 +527,18 @@ class Analyzer:
                 ) from e
 
         n_workers = self.n_workers
-        patients = [
-            self.paths_df.iloc[i].to_dict()
-            for i in range(len(self.paths_df))
-        ]
+        patients = [self.paths_df.iloc[i].to_dict() for i in range(len(self.paths_df))]
         resampled_dims = np.zeros((len(patients), 3))
         messages = [None] * len(patients)
 
-        progress = progress_bar.get_progress_bar(
-            "Checking resampled dimensions"
-        )
+        progress = progress_bar.get_progress_bar("Checking resampled dimensions")
         with ThreadPoolExecutor(max_workers=n_workers) as executor:
             futures = {
                 executor.submit(_process, patients[i], cropped_dims[i, :]): i
                 for i in range(len(patients))
             }
             with progress as pb:
-                for future in pb.track(
-                    as_completed(futures), total=len(patients)
-                ):
+                for future in pb.track(as_completed(futures), total=len(patients)):
                     i = futures[future]
                     resampled_dims[i, :], messages[i] = future.result()
 
@@ -625,13 +578,15 @@ class Analyzer:
                 mask = ants.image_read(patient["mask"])
                 arr = np.asarray(
                     (image[mask != 0]).tolist()[  # type: ignore
-                        ::constants.CT_GATHER_EVERY_ITH_VOXEL_VALUE
+                        :: constants.CT_GATHER_EVERY_ITH_VOXEL_VALUE
                     ],
                     dtype=np.float64,
                 )
                 if len(arr) == 0:
                     return (
-                        0, 0.0, 0.0,
+                        0,
+                        0.0,
+                        0.0,
                         np.zeros(constants.CT_HU_HIST_BINS, dtype=np.int64),
                         0,
                     )
@@ -639,10 +594,12 @@ class Analyzer:
                 mean = float(np.mean(arr))
                 M2 = float(np.sum((arr - mean) ** 2))
                 hist, _ = np.histogram(arr, bins=_hist_bin_edges)
-                n_out_of_range = int(np.sum(
-                    (arr < constants.CT_HU_HIST_MIN)
-                    | (arr > constants.CT_HU_HIST_MAX)
-                ))
+                n_out_of_range = int(
+                    np.sum(
+                        (arr < constants.CT_HU_HIST_MIN)
+                        | (arr > constants.CT_HU_HIST_MAX)
+                    )
+                )
                 return n, mean, M2, hist.astype(np.int64), n_out_of_range
             except Exception as e:
                 raise RuntimeError(
@@ -650,32 +607,19 @@ class Analyzer:
                 ) from e
 
         n_workers = self.n_workers
-        patients = [
-            self.paths_df.iloc[i].to_dict()
-            for i in range(len(self.paths_df))
-        ]
+        patients = [self.paths_df.iloc[i].to_dict() for i in range(len(self.paths_df))]
         per_patient = [None] * len(patients)
 
         progress = progress_bar.get_progress_bar("Getting CT norm. params.")
         with ThreadPoolExecutor(max_workers=n_workers) as executor:
-            futures = {
-                executor.submit(_process, p): i
-                for i, p in enumerate(patients)
-            }
+            futures = {executor.submit(_process, p): i for i, p in enumerate(patients)}
             with progress as pb:
-                for future in pb.track(
-                    as_completed(futures), total=len(patients)
-                ):
+                for future in pb.track(as_completed(futures), total=len(patients)):
                     per_patient[futures[future]] = future.result()
 
         # Merge per-patient statistics — no per-voxel list required.
-        welford_stats = [
-            (n_i, mean_i, M2_i)
-            for n_i, mean_i, M2_i, _, _ in per_patient
-        ]
-        combined_hist = np.sum(
-            [hist_i for _, _, _, hist_i, _ in per_patient], axis=0
-        )
+        welford_stats = [(n_i, mean_i, M2_i) for n_i, mean_i, M2_i, _, _ in per_patient]
+        combined_hist = np.sum([hist_i for _, _, _, hist_i, _ in per_patient], axis=0)
         total_out_of_range = sum(r[4] for r in per_patient)
         if total_out_of_range > 0:
             print_warning(
@@ -684,9 +628,7 @@ class Analyzer:
                 f" {constants.CT_HU_HIST_MAX:.0f}]. These voxels are included "
                 "in mean/std but excluded from window bound estimation."
             )
-        _, global_z_score_mean, global_z_score_std = _welford_merge(
-            welford_stats
-        )
+        _, global_z_score_mean, global_z_score_std = _welford_merge(welford_stats)
         global_window_range_min = _percentile_from_histogram(
             combined_hist, _hist_bin_edges, constants.CT_GLOBAL_CLIP_MIN_PERCENTILE
         )
@@ -718,15 +660,11 @@ class Analyzer:
 
         # Update the dataset information in the configuration.
         self.config["dataset_info"]["task"] = self.dataset_info["task"]
-        self.config["dataset_info"]["modality"] = (
-            self.dataset_info["modality"].lower()
-        )
+        self.config["dataset_info"]["modality"] = self.dataset_info["modality"].lower()
         # Store the names of the images for more robust inference later. This
         # allows us to ensure that the order of the images is correct for new
         # test data.
-        self.config["dataset_info"]["images"] = (
-            list(self.dataset_info["images"].keys())
-        )
+        self.config["dataset_info"]["images"] = list(self.dataset_info["images"].keys())
         self.config["dataset_info"]["labels"] = self.dataset_info["labels"]
 
         # Get the target spacing for the dataset.
@@ -751,17 +689,15 @@ class Analyzer:
         # Check if the images are sparse, i.e., if 20% or less of the image is
         # non-zero.
         normalize_with_nz_mask = self.check_nz_ratio()
-        self.config["preprocessing"]["normalize_with_nonzero_mask"] = (
-            bool(normalize_with_nz_mask)
+        self.config["preprocessing"]["normalize_with_nonzero_mask"] = bool(
+            normalize_with_nz_mask
         )
 
         # If we are using CT images, we need to get the normalization
         # parameters for CT images and update the configuration.
         if self.config["dataset_info"]["modality"] == "ct":
             # Get CT normalization parameters.
-            ct_normalization_parameters = (
-                self.get_ct_normalization_parameters()
-            )
+            ct_normalization_parameters = self.get_ct_normalization_parameters()
             self.config["preprocessing"]["ct_normalization"].update(
                 ct_normalization_parameters
             )
@@ -783,15 +719,11 @@ class Analyzer:
             target_spacing,
             batch_size_per_gpu=self.config["training"]["batch_size_per_gpu"],
         )
-        self.config["spatial_config"]["patch_size"] = [
-            int(size) for size in patch_size
-        ]
+        self.config["spatial_config"]["patch_size"] = [int(size) for size in patch_size]
 
         # Build and add the evaluation metrics to the evaluation section of the
         # configuration.
-        evaluation_config = analyzer_utils.build_evaluation_config(
-            self.dataset_info
-        )
+        evaluation_config = analyzer_utils.build_evaluation_config(self.dataset_info)
         self.config.update(evaluation_config)
 
     def validate_dataset(self) -> None:
@@ -816,7 +748,6 @@ class Analyzer:
                 mask = ants.image_read(patient["mask"])
                 mask_labels = set(mask.unique().astype(int))
                 mask_header = ants.image_header_info(patient["mask"])
-                image_header = ants.image_header_info(image_list[0])  # noqa: F841
 
                 if not mask_labels.issubset(dataset_labels_set):
                     return True, (
@@ -826,15 +757,12 @@ class Analyzer:
 
                 if not analyzer_utils.is_image_3d(mask_header):
                     return True, (
-                        f"In {patient['id']}: Got 4D mask, make sure all "
-                        "images are 3D"
+                        f"In {patient['id']}: Got 4D mask, make sure all images are 3D"
                     )
 
                 for image_path in image_list:
                     image_header = ants.image_header_info(image_path)
-                    if not analyzer_utils.compare_headers(
-                        mask_header, image_header
-                    ):
+                    if not analyzer_utils.compare_headers(mask_header, image_header):
                         return True, (
                             f"In {patient['id']}: Mismatch between image and "
                             "mask header information"
@@ -863,23 +791,15 @@ class Analyzer:
                 return True, f"In {patient['id']}: {e}"
 
         n_workers = self.n_workers
-        patients = [
-            self.paths_df.iloc[i].to_dict()
-            for i in range(len(self.paths_df))
-        ]
+        patients = [self.paths_df.iloc[i].to_dict() for i in range(len(self.paths_df))]
         is_bad = [False] * len(patients)
         messages = [None] * len(patients)
 
         progress = progress_bar.get_progress_bar("Verifying dataset")
         with ThreadPoolExecutor(max_workers=n_workers) as executor:
-            futures = {
-                executor.submit(_validate, p): i
-                for i, p in enumerate(patients)
-            }
+            futures = {executor.submit(_validate, p): i for i, p in enumerate(patients)}
             with progress as pb:
-                for future in pb.track(
-                    as_completed(futures), total=len(patients)
-                ):
+                for future in pb.track(as_completed(futures), total=len(patients)):
                     i = futures[future]
                     is_bad[i], messages[i] = future.result()
 
@@ -895,8 +815,7 @@ class Analyzer:
         # If all of the data is bad, then raise an error.
         if len(bad_data) >= len(self.paths_df):
             raise RuntimeError(
-                "All examples were excluded from training. "
-                "Please check your data."
+                "All examples were excluded from training. Please check your data."
             )
 
         # Drop bad data from paths dataframe and reset index.
@@ -916,9 +835,7 @@ class Analyzer:
         # Step 2: Add folds to the paths dataframe and update the
         # configuration with the number of folds that we are using.
         if self.mist_arguments.nfolds is not None:
-            self.config["training"]["nfolds"] = int(
-                self.mist_arguments.nfolds
-            )
+            self.config["training"]["nfolds"] = int(self.mist_arguments.nfolds)
         self.paths_df = analyzer_utils.add_folds_to_df(
             self.paths_df, n_splits=self.config["training"]["nfolds"]
         )
@@ -926,8 +843,8 @@ class Analyzer:
         # By default, we assume that we are running all folds for training.
         # This can be overridden by the user in the config file or in the
         # command line arguments for the training pipeline.
-        self.config["training"]["folds"] = (
-            list(range(self.config["training"]["nfolds"]))
+        self.config["training"]["folds"] = list(
+            range(self.config["training"]["nfolds"])
         )
 
         # Step 3: Analyze the dataset to prepare the configuration file.

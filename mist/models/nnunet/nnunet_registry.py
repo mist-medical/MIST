@@ -1,4 +1,5 @@
 """Create variants of nnUNet model."""
+
 # MIST imports.
 from mist.models.nnunet.mist_nnunet import NNUNet
 from mist.models.model_registry import register_model
@@ -18,9 +19,7 @@ def _create_nnunet_base(use_pocket_model: bool, **kwargs) -> NNUNet:
     required_keys = ["in_channels", "out_channels", "patch_size", "target_spacing"]
     for key in required_keys:
         if key not in kwargs:
-            raise ValueError(
-                f"Missing required key '{key}' in model configuration."
-            )
+            raise ValueError(f"Missing required key '{key}' in model configuration.")
 
     return NNUNet(
         in_channels=kwargs["in_channels"],

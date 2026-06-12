@@ -1,4 +1,5 @@
 """Tests for converting MSD datasets to MIST format."""
+
 import json
 import shutil
 import numpy as np
@@ -43,10 +44,12 @@ def temp_msd_dir(tmp_path):
         "name": "MSD Task",
         "modality": {"0": "T1", "1": "T2"},
         "labels": {"0": "background", "1": "tumor"},
-        "training": [{
-            "image": "imagesTr/patient_001.nii.gz",
-            "label": "labelsTr/patient_001.nii.gz",
-        }],
+        "training": [
+            {
+                "image": "imagesTr/patient_001.nii.gz",
+                "label": "labelsTr/patient_001.nii.gz",
+            }
+        ],
         "test": ["imagesTs/patient_002.nii.gz"],
     }
     with open(source / "dataset.json", "w", encoding="utf-8") as f:
@@ -127,10 +130,12 @@ def test_copy_msd_data_skips_missing_files(tmp_path):
     (source / "imagesTr").mkdir(parents=True)
     (source / "labelsTr").mkdir()
     msd_json = {
-        "training": [{
-            "image": "imagesTr/missing.nii.gz",
-            "label": "labelsTr/missing.nii.gz",
-        }]
+        "training": [
+            {
+                "image": "imagesTr/missing.nii.gz",
+                "label": "labelsTr/missing.nii.gz",
+            }
+        ]
     }
     copy_msd_data(source, dest, msd_json, {0: "ct"}, "training", "Skip test")
 
@@ -171,14 +176,14 @@ def test_copy_msd_data_skips_missing_mask(tmp_path):
     )
 
     msd_json = {
-        "training": [{
-            "image": "imagesTr/patient_missing_mask.nii.gz",
-            "label": "labelsTr/patient_missing_mask.nii.gz",
-        }]
+        "training": [
+            {
+                "image": "imagesTr/patient_missing_mask.nii.gz",
+                "label": "labelsTr/patient_missing_mask.nii.gz",
+            }
+        ]
     }
-    copy_msd_data(
-        source, dest, msd_json, {0: "ct"}, "training", "Missing mask test"
-    )
+    copy_msd_data(source, dest, msd_json, {0: "ct"}, "training", "Missing mask test")
 
     assert not (dest / "raw" / "train" / "patient_missing_mask").exists()
 
@@ -200,14 +205,14 @@ def test_copy_msd_data_single_modality_copy(tmp_path):
     )
 
     msd_json = {
-        "training": [{
-            "image": "imagesTr/patient_single_mod.nii.gz",
-            "label": "labelsTr/patient_single_mod.nii.gz",
-        }]
+        "training": [
+            {
+                "image": "imagesTr/patient_single_mod.nii.gz",
+                "label": "labelsTr/patient_single_mod.nii.gz",
+            }
+        ]
     }
-    copy_msd_data(
-        source, dest, msd_json, {0: "ct"}, "training", "Single modality test"
-    )
+    copy_msd_data(source, dest, msd_json, {0: "ct"}, "training", "Single modality test")
 
     patient_dir = dest / "raw" / "train" / "patient_single_mod"
     assert patient_dir.exists()
@@ -232,15 +237,20 @@ def test_convert_msd_no_test_data_creates_correct_json(tmp_path):
     )
 
     with open(source / "dataset.json", "w", encoding="utf-8") as f:
-        json.dump({
-            "name": "MSD Task No Test",
-            "modality": {"0": "ct"},
-            "labels": {"0": "background", "1": "tumor"},
-            "training": [{
-                "image": "imagesTr/patient.nii.gz",
-                "label": "labelsTr/patient.nii.gz",
-            }],
-        }, f)
+        json.dump(
+            {
+                "name": "MSD Task No Test",
+                "modality": {"0": "ct"},
+                "labels": {"0": "background", "1": "tumor"},
+                "training": [
+                    {
+                        "image": "imagesTr/patient.nii.gz",
+                        "label": "labelsTr/patient.nii.gz",
+                    }
+                ],
+            },
+            f,
+        )
 
     convert_msd(source, dest)
 

@@ -1,4 +1,5 @@
 """Unit tests for the model registry mechanism in MIST."""
+
 import pytest
 
 # MIST imports.
@@ -20,6 +21,7 @@ def clear_registry():
 
 def test_register_model_success():
     """Test that a model can be successfully registered and retrieved."""
+
     @register_model("dummy")
     def build_dummy():
         return "dummy_model"
@@ -30,11 +32,13 @@ def test_register_model_success():
 
 def test_register_model_duplicate_name():
     """Test that registering a model with a duplicate name raises an error."""
+
     @register_model("dup")
     def model_one():
         return "one"
 
     with pytest.raises(ValueError, match="Model 'dup' is already registered"):
+
         @register_model("dup")
         def model_two():
             return "two"
@@ -48,11 +52,14 @@ def test_get_model_from_registry_not_found():
 
 def test_list_registered_models_returns_sorted():
     """Test that list_registered_models returns sorted model names."""
+
     @register_model("z_model")
-    def z(): return None
+    def z():
+        return None
 
     @register_model("a_model")
-    def a(): return None
+    def a():
+        return None
 
     registered = list_registered_models()
     assert registered == ["a_model", "z_model"]

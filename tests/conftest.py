@@ -1,4 +1,5 @@
 """Configuration for pytest."""
+
 import sys
 import types
 from unittest import mock
@@ -17,7 +18,7 @@ fake_dali = types.SimpleNamespace(
     math=mock.MagicMock(),
     ops=mock.MagicMock(),
     pipeline=types.SimpleNamespace(Pipeline=DummyPipeline),
-    plugin=types.SimpleNamespace(pytorch=mock.MagicMock())
+    plugin=types.SimpleNamespace(pytorch=mock.MagicMock()),
 )
 
 # Register modules.

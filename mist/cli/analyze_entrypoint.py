@@ -1,4 +1,5 @@
 """Entrypoint for the analyze command."""
+
 from argparse import ArgumentDefaultsHelpFormatter
 from pathlib import Path
 import argparse

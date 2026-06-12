@@ -1,4 +1,5 @@
 """Run analyze, preprocess, and train in one command."""
+
 import argparse
 from argparse import ArgumentDefaultsHelpFormatter
 from pathlib import Path
@@ -66,20 +67,38 @@ def run_all_entry(argv: list[str] | None = None) -> None:
     ns = _parse_run_all_args(argv)
 
     analyzer_keys = [
-        "data", "results", "nfolds", "num_workers_analyze",
-        "verify", "data_dump", "overwrite",
+        "data",
+        "results",
+        "nfolds",
+        "num_workers_analyze",
+        "verify",
+        "data_dump",
+        "overwrite",
     ]
     preprocess_keys = [
-        "results", "numpy", "num_workers_preprocess",
-        "no_preprocess", "compute_dtms", "overwrite"
+        "results",
+        "numpy",
+        "num_workers_preprocess",
+        "no_preprocess",
+        "compute_dtms",
+        "overwrite",
     ]
     train_keys = [
-        "results", "numpy",
-        "model", "patch_size",
-        "loss", "composite_loss_weighting",
-        "epochs", "batch_size_per_gpu", "learning_rate",
-        "lr_scheduler", "optimizer", "l2_penalty",
-        "folds", "num_workers_evaluate", "overwrite",
+        "results",
+        "numpy",
+        "model",
+        "patch_size",
+        "loss",
+        "composite_loss_weighting",
+        "epochs",
+        "batch_size_per_gpu",
+        "learning_rate",
+        "lr_scheduler",
+        "optimizer",
+        "l2_penalty",
+        "folds",
+        "num_workers_evaluate",
+        "overwrite",
     ]
 
     # Run each stage with the appropriate subset of args.

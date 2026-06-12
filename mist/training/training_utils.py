@@ -1,4 +1,5 @@
 """Utility functions for MIST trainers."""
+
 from pathlib import Path
 from collections.abc import Sequence
 
@@ -64,6 +65,7 @@ def sanity_check_fold_data(
     Raises:
         ValueError: If any of the checks fail, providing details on the issue.
     """
+
     def _normalize(paths: Sequence[str | Path]) -> list[str]:
         return [str(Path(p).expanduser().resolve()) for p in paths]
 
@@ -93,8 +95,7 @@ def sanity_check_fold_data(
         )
     if n_va_img != n_va_lbl:
         raise ValueError(
-            f"Fold {fold} mismatch: val_images ({n_va_img}) "
-            f"!= val_labels ({n_va_lbl})"
+            f"Fold {fold} mismatch: val_images ({n_va_img}) != val_labels ({n_va_lbl})"
         )
 
     # No duplicates inside each split.
@@ -128,13 +129,9 @@ def sanity_check_fold_data(
         return [Path(p).stem for p in paths]
 
     if _stems(tr_img) != _stems(tr_lbl):
-        raise ValueError(
-            f"Fold {fold} image/label stem mismatch in training set."
-        )
+        raise ValueError(f"Fold {fold} image/label stem mismatch in training set.")
     if _stems(va_img) != _stems(va_lbl):
-        raise ValueError(
-            f"Fold {fold} image/label stem mismatch in validation set."
-        )
+        raise ValueError(f"Fold {fold} image/label stem mismatch in validation set.")
 
     # If DTMs are provided, ensure they align with training images.
     if tr_dtm is not None:
@@ -146,9 +143,7 @@ def sanity_check_fold_data(
         if len(set(tr_dtm)) != len(tr_dtm):
             raise ValueError(f"Fold {fold} has duplicate entries in DTMs.")
         if _stems(tr_img) != _stems(tr_dtm):
-            raise ValueError(
-                f"Fold {fold} image/DTM stem mismatch in training set."
-            )
+            raise ValueError(f"Fold {fold} image/DTM stem mismatch in training set.")
 
 
 def get_npy_paths(
@@ -180,9 +175,8 @@ def get_npy_paths(
         missing = [p for p in paths if not Path(p).exists()]
         if missing:
             preview = ", ".join(missing[:5])
-            more = f" (+{len(missing)-5} more)" if len(missing) > 5 else ""
+            more = f" (+{len(missing) - 5} more)" if len(missing) > 5 else ""
             raise FileNotFoundError(
-                f"Missing {len(missing)} expected files under {base}: "
-                f"{preview}{more}"
+                f"Missing {len(missing)} expected files under {base}: {preview}{more}"
             )
     return paths

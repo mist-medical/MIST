@@ -1,4 +1,5 @@
 """Preprocessing functions for medical images and masks."""
+
 import argparse
 import concurrent.futures
 from pathlib import Path
@@ -14,9 +15,7 @@ from mist.utils import io, progress_bar
 from mist.utils.console import print_section_header, print_warning, print_success
 from mist.analyze_data import analyzer_utils
 from mist.preprocessing import preprocessing_utils
-from mist.preprocessing.preprocessing_constants import (
-    PreprocessingConstants as pc
-)
+from mist.preprocessing.preprocessing_constants import PreprocessingConstants as pc
 
 
 def resample_image(
@@ -57,14 +56,12 @@ def resample_image(
     # to resample the image to its new size along the low resolution axis.
     if anisotropic_results["is_anisotropic"]:
         if not isinstance(anisotropic_results["low_resolution_axis"], int):
-            raise ValueError(
-                "The low resolution axis must be an integer."
-            )
+            raise ValueError("The low resolution axis must be an integer.")
         img_sitk = preprocessing_utils.aniso_intermediate_resample(
             img_sitk,
             new_size,
             target_spacing,
-            int(anisotropic_results["low_resolution_axis"])
+            int(anisotropic_results["low_resolution_axis"]),
         )
 
     # Resample the image to the target spacing using B-spline interpolation.
@@ -122,14 +119,12 @@ def resample_mask(
     for i in range(len(labels)):
         if anisotropic_results["is_anisotropic"]:
             if not isinstance(anisotropic_results["low_resolution_axis"], int):
-                raise ValueError(
-                    "The low resolution axis must be an integer."
-                )
+                raise ValueError("The low resolution axis must be an integer.")
             masks_sitk[i] = preprocessing_utils.aniso_intermediate_resample(
                 masks_sitk[i],
                 new_size,
                 target_spacing,
-                anisotropic_results["low_resolution_axis"]
+                anisotropic_results["low_resolution_axis"],
             )
 
         # Use linear interpolation for each mask in the series. We use
@@ -143,7 +138,7 @@ def resample_mask(
             outputSpacing=target_spacing,
             outputDirection=masks_sitk[i].GetDirection(),
             defaultPixelValue=0,
-            outputPixelType=masks_sitk[i].GetPixelID()
+            outputPixelType=masks_sitk[i].GetPixelID(),
         )
 
     # Use the argmax function to join the masks into a single mask.
@@ -260,7 +255,7 @@ def compute_dtm(
             dtm_i = sitk.SignedMaurerDistanceMap(
                 sitk.Cast(mask, sitk.sitkUInt8),
                 squaredDistance=False,
-                useImageSpacing=False
+                useImageSpacing=False,
             )
 
             # Normalize the DTM if necessary.
@@ -301,9 +296,7 @@ def compute_dtm(
                 diagonal_distance = np.sqrt(
                     mask_depth**2 + mask_width**2 + mask_height**2
                 )
-                dtm_i = sitk.GetImageFromArray(
-                    diagonal_distance * all_ones_mask
-                )
+                dtm_i = sitk.GetImageFromArray(diagonal_distance * all_ones_mask)
 
         # Set the pixel type and spacing for the DTM.
         dtm_i = sitk.Cast(dtm_i, sitk.sitkFloat32)
@@ -413,9 +406,7 @@ def preprocess_example(
             # Put mask into standard space.
             mask = ants.reorient_image2(mask, "RAI")
             mask.set_direction(pc.RAI_ANTS_DIRECTION)
-            mask = resample_mask(
-                mask, labels=labels, target_spacing=target_spacing
-            )
+            mask = resample_mask(mask, labels=labels, target_spacing=target_spacing)
 
         # Compute DTM if requested and cast to float32.
         if compute_dtms:
@@ -509,17 +500,13 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
     # Check if configuration file exists and read it.
     config_path = results_dir / "config.json"
     if not config_path.exists():
-        raise FileNotFoundError(
-            f"Configuration file not found in {args.results}."
-        )
+        raise FileNotFoundError(f"Configuration file not found in {args.results}.")
     config = io.read_json_file(config_path)
 
     # Check if training paths file exists and read it.
     train_paths_file = results_dir / "train_paths.csv"
     if not train_paths_file.exists():
-        raise FileNotFoundError(
-            f"Training paths file not found in {args.results}."
-        )
+        raise FileNotFoundError(f"Training paths file not found in {args.results}.")
     df = pd.read_csv(train_paths_file)
 
     # Create output directories for preprocessed images and labels.
@@ -554,8 +541,7 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
     fg_bboxes_file = results_dir / "fg_bboxes.csv"
     if not fg_bboxes_file.exists():
         raise FileNotFoundError(
-            "Foreground bounding box (fg_bboxes.csv) file not found in "
-            f"{args.results}."
+            f"Foreground bounding box (fg_bboxes.csv) file not found in {args.results}."
         )
     fg_bboxes = pd.read_csv(fg_bboxes_file)
 
@@ -571,9 +557,7 @@ def preprocess_dataset(args: argparse.Namespace) -> None:
     max_workers = getattr(args, "num_workers_preprocess", 1)
 
     error_messages = []
-    with concurrent.futures.ProcessPoolExecutor(
-        max_workers=max_workers
-    ) as executor:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
         future_to_patient = {
             executor.submit(
                 _preprocess_single_patient,

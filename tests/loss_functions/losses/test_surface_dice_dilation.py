@@ -47,10 +47,14 @@ def _make_preprocessed_data(
     SurfaceDilationLogic.forward receives already-preprocessed tensors from
     the parent loss, so tests that call it directly need this form.
     """
-    y_true, y_pred = _make_mock_data(n_classes=n_classes, batch_size=batch_size, size=size)
-    y_true_oh = F.one_hot(
-        y_true.squeeze(1).long(), num_classes=n_classes
-    ).permute(0, 4, 1, 2, 3).float()
+    y_true, y_pred = _make_mock_data(
+        n_classes=n_classes, batch_size=batch_size, size=size
+    )
+    y_true_oh = (
+        F.one_hot(y_true.squeeze(1).long(), num_classes=n_classes)
+        .permute(0, 4, 1, 2, 3)
+        .float()
+    )
     y_pred_prob = F.softmax(y_pred, dim=1)
     return y_true_oh, y_pred_prob
 
@@ -69,6 +73,7 @@ def _make_logic(spacing=ISOTROPIC, tau_mm="auto") -> SurfaceDilationLogic:
 # SurfaceDilationLogic — init / auto-tau / kernel sizes
 # ---------------------------------------------------------------------------
 
+
 class TestSurfaceDilationLogicInit:
     """Tests for SurfaceDilationLogic.__init__."""
 
@@ -78,8 +83,11 @@ class TestSurfaceDilationLogicInit:
 
     def test_auto_tau_case_insensitive(self):
         logic = SurfaceDilationLogic(
-            spacing_xyz=ISOTROPIC, tau_mm="AUTO",
-            tau_safety_factor=1.0, boundary_ksize=3, eps=1e-6,
+            spacing_xyz=ISOTROPIC,
+            tau_mm="AUTO",
+            tau_safety_factor=1.0,
+            boundary_ksize=3,
+            eps=1e-6,
         )
         assert logic.tau_mm == pytest.approx(1.0 * 1.0)
 
@@ -102,7 +110,10 @@ class TestSurfaceDilationLogicInit:
         with pytest.raises(ValueError, match="3-tuple"):
             SurfaceDilationLogic(
                 spacing_xyz=(1.0, 1.0),  # 2D, not 3D
-                tau_mm="auto", tau_safety_factor=1.25, boundary_ksize=3, eps=1e-6,
+                tau_mm="auto",
+                tau_safety_factor=1.25,
+                boundary_ksize=3,
+                eps=1e-6,
             )
 
 
@@ -146,6 +157,7 @@ class TestSurfaceDilationLogicKernelSizes:
 # SurfaceDilationLogic — forward
 # ---------------------------------------------------------------------------
 
+
 class TestSurfaceDilationLogicForward:
     """Tests for SurfaceDilationLogic.forward."""
 
@@ -187,7 +199,7 @@ class TestSurfaceDilationLogicForward:
         # Build a foreground blob: 8×8×8 cube of 1s inside a 16³ volume.
         b, s = 1, 16
         y_true_oh = torch.zeros(b, 2, s, s, s)
-        y_true_oh[:, 0] = 1.0            # background everywhere
+        y_true_oh[:, 0] = 1.0  # background everywhere
         y_true_oh[:, 1, 4:12, 4:12, 4:12] = 1.0  # foreground blob
         y_true_oh[:, 0, 4:12, 4:12, 4:12] = 0.0  # clear bg inside blob
 
@@ -195,15 +207,14 @@ class TestSurfaceDilationLogicForward:
         y_pred_prob = y_true_oh.clone()
 
         # Pass only the foreground channel (exclude_background=True path).
-        loss = logic(
-            y_true_oh[:, 1:], y_pred_prob[:, 1:], exclude_background=True
-        )
+        loss = logic(y_true_oh[:, 1:], y_pred_prob[:, 1:], exclude_background=True)
         assert torch.isclose(loss, torch.tensor(0.0), atol=1e-5)
 
 
 # ---------------------------------------------------------------------------
 # VolumetricSDDL
 # ---------------------------------------------------------------------------
+
 
 class TestVolumetricSDDL:
     """Tests for VolumetricSDDL (Dice+CE + Surface Dice Dilation)."""
@@ -294,6 +305,7 @@ class TestVolumetricSDDL:
 # ---------------------------------------------------------------------------
 # VesselSDDL
 # ---------------------------------------------------------------------------
+
 
 class TestVesselSDDL:
     """Tests for VesselSDDL (CLDice + Surface Dice Dilation)."""

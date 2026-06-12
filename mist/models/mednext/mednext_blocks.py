@@ -1,4 +1,5 @@
 """Implementation of MedNeXt blocks for the MedNeXt model."""
+
 import torch
 from torch import nn
 
@@ -53,9 +54,7 @@ class MedNeXtBlock(nn.Module):
         )
 
         if norm_type == "group":
-            self.norm = nn.GroupNorm(
-                num_groups=in_channels, num_channels=in_channels
-            )
+            self.norm = nn.GroupNorm(num_groups=in_channels, num_channels=in_channels)
         elif norm_type == "layer":
             self.norm = nn.GroupNorm(num_groups=1, num_channels=in_channels)
         else:

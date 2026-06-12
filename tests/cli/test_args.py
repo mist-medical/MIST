@@ -1,4 +1,5 @@
 """Tests for MIST arguments handling."""
+
 import argparse
 import pytest
 
@@ -19,7 +20,7 @@ def test_positive_int_success(val, expected):
 
 @pytest.mark.parametrize("val", [0, -1, "-5"])
 def test_positive_int_rejects_non_positive(val):
-    """ Non-positive values raise argparse.ArgumentTypeError."""
+    """Non-positive values raise argparse.ArgumentTypeError."""
     with pytest.raises(argparse.ArgumentTypeError):
         args_mod.positive_int(val)
 
@@ -39,7 +40,7 @@ def test_positive_float_success(val, expected):
 
 @pytest.mark.parametrize("val", [0, -0.1, "-2.3"])
 def test_positive_float_rejects_non_positive(val):
-    """ Non-positive values raise argparse.ArgumentTypeError."""
+    """Non-positive values raise argparse.ArgumentTypeError."""
     with pytest.raises(argparse.ArgumentTypeError):
         args_mod.positive_float(val)
 
@@ -51,9 +52,7 @@ def test_positive_float_rejects_non_numeric_string(val):
         args_mod.positive_float(val)
 
 
-@pytest.mark.parametrize(
-    "val,expected", [(0, 0), ("0", 0), (5, 5), ("10", 10)]
-)
+@pytest.mark.parametrize("val,expected", [(0, 0), ("0", 0), (5, 5), ("10", 10)])
 def test_non_negative_int_success(val, expected):
     """Valid non-negative integers accepted as-is or converted from strings."""
     assert args_mod.non_negative_int(val) == expected
@@ -132,9 +131,7 @@ def test_str2bool_rejects_unknown():
 
 def _mk_parser() -> args_mod.ArgParser:
     """Create a bare ArgParser for testing."""
-    return args_mod.ArgParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
+    return args_mod.ArgParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 
 def test_argparser_arg_adds_argument_and_parses():
@@ -207,9 +204,12 @@ def test_add_analyzer_args_defaults_and_parsing():
     # Explicit values.
     ns = parser.parse_args(
         [
-            "--data", "path/to/dataset.json",
-            "--results", "out",
-            "--nfolds", "3",
+            "--data",
+            "path/to/dataset.json",
+            "--results",
+            "out",
+            "--nfolds",
+            "3",
             "--verify",
             "--data-dump",
             "--overwrite",
@@ -244,8 +244,10 @@ def test_add_preprocess_args_defaults_and_parsing():
     # Explicit.
     ns = parser.parse_args(
         [
-            "--results", "out",
-            "--numpy", "npdir",
+            "--results",
+            "out",
+            "--numpy",
+            "npdir",
             "--no-preprocess",
             "--compute-dtms",
             "--overwrite",
@@ -327,20 +329,38 @@ def test_add_train_args_full_parse_success(patched_registries):
     args_mod.add_train_args(parser)
 
     argv = [
-        "--results", "out",
-        "--numpy", "npdir",
-        "--model", "mednext",
-        "--patch-size", "32", "64", "48",
-        "--loss", "dice",
-        "--composite-loss-weighting", "linear",
-        "--epochs", "10",
-        "--batch-size-per-gpu", "2",
-        "--learning-rate", "0.001",
-        "--lr-scheduler", "cos",
-        "--warmup-epochs", "5",
-        "--optimizer", "adam",
-        "--l2-penalty", "0.0005",
-        "--folds", "0", "2", "4",
+        "--results",
+        "out",
+        "--numpy",
+        "npdir",
+        "--model",
+        "mednext",
+        "--patch-size",
+        "32",
+        "64",
+        "48",
+        "--loss",
+        "dice",
+        "--composite-loss-weighting",
+        "linear",
+        "--epochs",
+        "10",
+        "--batch-size-per-gpu",
+        "2",
+        "--learning-rate",
+        "0.001",
+        "--lr-scheduler",
+        "cos",
+        "--warmup-epochs",
+        "5",
+        "--optimizer",
+        "adam",
+        "--l2-penalty",
+        "0.0005",
+        "--folds",
+        "0",
+        "2",
+        "4",
         "--overwrite",
         "--resume",
     ]

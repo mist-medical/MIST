@@ -1,4 +1,5 @@
 """Registry for segmentation metrics used in evaluation."""
+
 from abc import ABC, abstractmethod
 import numpy as np
 
@@ -10,6 +11,7 @@ from mist.metrics.metrics_constants import LesionWiseMetricsConstants
 
 class Metric(ABC):
     """Base class for all metrics."""
+
     name: str  # Unique identifier.
     best: float  # Ideal value for this metric.
     worst: float  # Worst-case fallback value.
@@ -22,9 +24,7 @@ class Metric(ABC):
                 for base in cls.__mro__
                 if base not in (Metric, object)
             ):
-                raise TypeError(
-                    f"{cls.__name__} must define class attribute '{attr}'"
-                )
+                raise TypeError(f"{cls.__name__} must define class attribute '{attr}'")
 
     @abstractmethod
     def __call__(
@@ -32,7 +32,7 @@ class Metric(ABC):
         truth: np.ndarray,
         pred: np.ndarray,
         spacing: tuple[float, float, float],
-        **kwargs
+        **kwargs,
     ) -> float:
         """Compute the metric.
 
@@ -74,6 +74,7 @@ def list_registered_metrics() -> list[str]:
 @register_metric
 class DiceCoefficient(Metric):
     """Dice coefficient metric."""
+
     name = "dice"
     best = 1.0
     worst = 0.0
@@ -85,30 +86,26 @@ class DiceCoefficient(Metric):
 @register_metric
 class Hausdorff95(Metric):
     """95th percentile Hausdorff distance metric."""
+
     name = "haus95"
     best = 0.0
     worst = float("inf")  # Sentinel: evaluator substitutes the image diagonal.
 
     def __call__(self, truth, pred, spacing, **kwargs):
-        distances = segmentation_metrics.compute_surface_distances(
-            truth, pred, spacing
-        )
-        return segmentation_metrics.compute_robust_hausdorff(
-            distances, percent=95
-        )
+        distances = segmentation_metrics.compute_surface_distances(truth, pred, spacing)
+        return segmentation_metrics.compute_robust_hausdorff(distances, percent=95)
 
 
 @register_metric
 class SurfaceDice(Metric):
     """Surface Dice metric."""
+
     name = "surf_dice"
     best = 1.0
     worst = 0.0
 
     def __call__(self, truth, pred, spacing, **kwargs):
-        distances = segmentation_metrics.compute_surface_distances(
-            truth, pred, spacing
-        )
+        distances = segmentation_metrics.compute_surface_distances(truth, pred, spacing)
         return segmentation_metrics.compute_surface_dice_at_tolerance(
             distances, tolerance_mm=kwargs.get("tolerance", 1.0)
         )
@@ -117,20 +114,20 @@ class SurfaceDice(Metric):
 @register_metric
 class AverageSurfaceDistance(Metric):
     """Average surface distance metric."""
+
     name = "avg_surf"
     best = 0.0
     worst = float("inf")  # Sentinel: evaluator substitutes the image diagonal.
 
     def __call__(self, truth, pred, spacing, **kwargs):
-        distances = segmentation_metrics.compute_surface_distances(
-            truth, pred, spacing
-        )
+        distances = segmentation_metrics.compute_surface_distances(truth, pred, spacing)
         return segmentation_metrics.compute_average_surface_distance(distances)
 
 
 @register_metric
 class LesionWiseDice(Metric):
     """Lesion-wise Dice coefficient metric."""
+
     name = "lesion_wise_dice"
     best = 1.0
     worst = 0.0
@@ -159,6 +156,7 @@ class LesionWiseDice(Metric):
 @register_metric
 class LesionWiseHausdorff95(Metric):
     """Lesion-wise 95th percentile Hausdorff distance metric."""
+
     name = "lesion_wise_haus95"
     best = 0.0
     worst = float("inf")  # Sentinel: evaluator substitutes the image diagonal.
@@ -187,6 +185,7 @@ class LesionWiseHausdorff95(Metric):
 @register_metric
 class LesionWiseSurfaceDice(Metric):
     """Lesion-wise surface Dice metric at configurable tolerance."""
+
     name = "lesion_wise_surf_dice"
     best = 1.0
     worst = 0.0

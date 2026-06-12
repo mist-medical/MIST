@@ -1,4 +1,5 @@
 """Handle command line arguments for main MIST pipelines."""
+
 import argparse
 from argparse import ArgumentParser
 
@@ -45,8 +46,7 @@ def float_0_1(value: str | float) -> float:
     float_value = float(value)
     if not 0 <= float_value <= 1:
         raise argparse.ArgumentTypeError(
-            "Argparse error. Expected a float from range [0, 1], "
-            f"but got {value}."
+            f"Argparse error. Expected a float from range [0, 1], but got {value}."
         )
     return float_value
 
@@ -113,7 +113,9 @@ def add_analyzer_args(parser: ArgParser) -> None:
         ),
     )
     parser.boolean_flag(
-        "--overwrite", default=False, help="Overwrite previous configuration/results.",
+        "--overwrite",
+        default=False,
+        help="Overwrite previous configuration/results.",
     )
 
 
@@ -150,7 +152,9 @@ def add_preprocess_args(parser: ArgParser) -> None:
         ),
     )
     parser.boolean_flag(
-        "--overwrite", default=False, help="Overwrite previous configuration/results.",
+        "--overwrite",
+        default=False,
+        help="Overwrite previous configuration/results.",
     )
 
 
@@ -198,7 +202,9 @@ def add_train_args(parser: ArgParser) -> None:
         help="Batch size per GPU/CPU worker.",
     )
     g.add_argument(
-        "--learning-rate", type=positive_float, default=None,
+        "--learning-rate",
+        type=positive_float,
+        default=None,
         help="Learning rate.",
     )
     g.add_argument(
@@ -214,10 +220,15 @@ def add_train_args(parser: ArgParser) -> None:
         help="Number of linear warmup epochs before the main LR schedule.",
     )
     g.add_argument(
-        "--optimizer", type=str, choices=list_optimizers(), help="Optimizer to use.",
+        "--optimizer",
+        type=str,
+        choices=list_optimizers(),
+        help="Optimizer to use.",
     )
     g.add_argument(
-        "--l2-penalty", type=positive_float, help="L2 penalty (weight decay).",
+        "--l2-penalty",
+        type=positive_float,
+        help="L2 penalty (weight decay).",
     )
     g.add_argument("--folds", nargs="+", type=int, help="Specify which folds to run.")
     g.add_argument(
@@ -246,14 +257,14 @@ def add_train_args(parser: ArgParser) -> None:
         type=str,
         default=None,
         help="Path to pretrained checkpoint to initialize the encoder from. "
-             "Accepts a single fold checkpoint or the output of mist_average_weights.",
+        "Accepts a single fold checkpoint or the output of mist_average_weights.",
     )
     g.add_argument(
         "--pretrained-config",
         type=str,
         default=None,
         help="Path to the source model's config.json for encoder compatibility "
-             "validation. Required when --pretrained-weights is set.",
+        "validation. Required when --pretrained-weights is set.",
     )
     g.add_argument(
         "--input-channel-strategy",
@@ -261,11 +272,13 @@ def add_train_args(parser: ArgParser) -> None:
         default="average",
         choices=["average", "first", "skip"],
         help="How to handle in_channels mismatch between source and target "
-             "encoder. 'average': mean over source channels. 'first': use "
-             "first source channel only. 'skip': keep random init.",
+        "encoder. 'average': mean over source channels. 'first': use "
+        "first source channel only. 'skip': keep random init.",
     )
 
     # Overwrite.
     parser.boolean_flag(
-        "--overwrite", default=False, help="Overwrite previous configuration/results.",
+        "--overwrite",
+        default=False,
+        help="Overwrite previous configuration/results.",
     )

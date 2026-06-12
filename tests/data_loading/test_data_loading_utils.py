@@ -17,13 +17,16 @@ class TestIsValidGenericPipelineInput:
         valid_file.write_text("test")
         assert utils.is_valid_generic_pipeline_input([str(valid_file)])
 
-    @pytest.mark.parametrize("bad_input", [
-        "string.npy",
-        42,
-        [],
-        ["file.txt"],
-        ["nonexistent.npy"],
-    ])
+    @pytest.mark.parametrize(
+        "bad_input",
+        [
+            "string.npy",
+            42,
+            [],
+            ["file.txt"],
+            ["nonexistent.npy"],
+        ],
+    )
     def test_invalid_inputs(self, bad_input):
         """Returns False for non-list, wrong extension, or non-existent files."""
         assert not utils.is_valid_generic_pipeline_input(bad_input)
@@ -32,13 +35,26 @@ class TestIsValidGenericPipelineInput:
 class TestValidateTrainAndEvalInputs:
     """Tests for utils.validate_train_and_eval_inputs."""
 
-    @pytest.mark.parametrize("imgs,lbls,dtms,err_msg", [
-        ([], ["lbl"], None, "No images found!"),
-        (["img"], [], None, "No labels found!"),
-        (["img1"], ["lbl1", "lbl2"], None, "Number of images and labels do not match!"),
-        (["img"], ["lbl"], ["dtm1", "dtm2"], "Number of images and DTMs do not match!"),
-        (["img"], ["lbl"], [], "No DTM data found!"),
-    ])
+    @pytest.mark.parametrize(
+        "imgs,lbls,dtms,err_msg",
+        [
+            ([], ["lbl"], None, "No images found!"),
+            (["img"], [], None, "No labels found!"),
+            (
+                ["img1"],
+                ["lbl1", "lbl2"],
+                None,
+                "Number of images and labels do not match!",
+            ),
+            (
+                ["img"],
+                ["lbl"],
+                ["dtm1", "dtm2"],
+                "Number of images and DTMs do not match!",
+            ),
+            (["img"], ["lbl"], [], "No DTM data found!"),
+        ],
+    )
     def test_raises_for_invalid_inputs(self, imgs, lbls, dtms, err_msg):
         """Raises ValueError with the expected message for invalid inputs."""
         with pytest.raises(ValueError, match=err_msg):
@@ -86,11 +102,22 @@ class TestRandomAugmentation:
 class TestNoiseFn:
     """Tests for utils.noise_fn."""
 
-    @mock.patch("mist.data_loading.data_loading_utils.random_augmentation", return_value="augmented")
-    @mock.patch("mist.data_loading.data_loading_utils.math.clamp", return_value="clamped")
-    @mock.patch("mist.data_loading.data_loading_utils.fn.reductions.min", return_value="img_min")
-    @mock.patch("mist.data_loading.data_loading_utils.fn.reductions.max", return_value="img_max")
-    @mock.patch("mist.data_loading.data_loading_utils.fn.random.normal", return_value="noise")
+    @mock.patch(
+        "mist.data_loading.data_loading_utils.random_augmentation",
+        return_value="augmented",
+    )
+    @mock.patch(
+        "mist.data_loading.data_loading_utils.math.clamp", return_value="clamped"
+    )
+    @mock.patch(
+        "mist.data_loading.data_loading_utils.fn.reductions.min", return_value="img_min"
+    )
+    @mock.patch(
+        "mist.data_loading.data_loading_utils.fn.reductions.max", return_value="img_max"
+    )
+    @mock.patch(
+        "mist.data_loading.data_loading_utils.fn.random.normal", return_value="noise"
+    )
     def test_clamps_to_image_range_and_applies_probability(
         self, mock_normal, mock_max, mock_min, mock_clamp, mock_aug
     ):
@@ -98,18 +125,31 @@ class TestNoiseFn:
         result = utils.noise_fn("img")
 
         mock_clamp.assert_called_once_with("imgnoise", "img_min", "img_max")
-        mock_aug.assert_called_once_with(constants.NOISE_FN_PROBABILITY, "clamped", "img")
+        mock_aug.assert_called_once_with(
+            constants.NOISE_FN_PROBABILITY, "clamped", "img"
+        )
         assert result == "augmented"
 
 
 class TestBlurFn:
     """Tests for utils.blur_fn."""
 
-    @mock.patch("mist.data_loading.data_loading_utils.random_augmentation", return_value="augmented")
-    @mock.patch("mist.data_loading.data_loading_utils.math.clamp", return_value="clamped")
-    @mock.patch("mist.data_loading.data_loading_utils.fn.reductions.min", return_value="img_min")
-    @mock.patch("mist.data_loading.data_loading_utils.fn.reductions.max", return_value="img_max")
-    @mock.patch("mist.data_loading.data_loading_utils.fn.gaussian_blur", return_value="blurred")
+    @mock.patch(
+        "mist.data_loading.data_loading_utils.random_augmentation",
+        return_value="augmented",
+    )
+    @mock.patch(
+        "mist.data_loading.data_loading_utils.math.clamp", return_value="clamped"
+    )
+    @mock.patch(
+        "mist.data_loading.data_loading_utils.fn.reductions.min", return_value="img_min"
+    )
+    @mock.patch(
+        "mist.data_loading.data_loading_utils.fn.reductions.max", return_value="img_max"
+    )
+    @mock.patch(
+        "mist.data_loading.data_loading_utils.fn.gaussian_blur", return_value="blurred"
+    )
     def test_clamps_to_image_range_and_applies_probability(
         self, mock_blur, mock_max, mock_min, mock_clamp, mock_aug
     ):
@@ -117,7 +157,9 @@ class TestBlurFn:
         result = utils.blur_fn("img")
 
         mock_clamp.assert_called_once_with("blurred", "img_min", "img_max")
-        mock_aug.assert_called_once_with(constants.BLUR_FN_PROBABILITY, "clamped", "img")
+        mock_aug.assert_called_once_with(
+            constants.BLUR_FN_PROBABILITY, "clamped", "img"
+        )
         assert result == "augmented"
 
 
@@ -139,10 +181,18 @@ class TestContrastFn:
     """Tests for utils.contrast_fn."""
 
     @mock.patch("mist.data_loading.data_loading_utils.random_augmentation")
-    @mock.patch("mist.data_loading.data_loading_utils.math.clamp", return_value="clamped")
-    @mock.patch("mist.data_loading.data_loading_utils.fn.reductions.min", return_value="min")
-    @mock.patch("mist.data_loading.data_loading_utils.fn.reductions.max", return_value="max")
-    def test_clamps_contrast_scaled_image(self, mock_max, mock_min, mock_clamp, mock_aug):
+    @mock.patch(
+        "mist.data_loading.data_loading_utils.math.clamp", return_value="clamped"
+    )
+    @mock.patch(
+        "mist.data_loading.data_loading_utils.fn.reductions.min", return_value="min"
+    )
+    @mock.patch(
+        "mist.data_loading.data_loading_utils.fn.reductions.max", return_value="max"
+    )
+    def test_clamps_contrast_scaled_image(
+        self, mock_max, mock_min, mock_clamp, mock_aug
+    ):
         """Scales by contrast factor and clamps to original image intensity range."""
         scale = mock.MagicMock(name="scale")
         scale.__rmul__.return_value = "scaled"

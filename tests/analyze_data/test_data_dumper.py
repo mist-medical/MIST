@@ -1,4 +1,5 @@
 """Tests for mist.analyze_data.data_dumper."""
+
 import json
 from pathlib import Path
 from typing import Any
@@ -16,14 +17,17 @@ from mist.utils import io as io_mod
 # Shared helpers / fixtures
 # ---------------------------------------------------------------------------
 
+
 def _make_paths_df(n=3) -> pd.DataFrame:
     """Minimal paths DataFrame."""
-    return pd.DataFrame({
-        "id": list(range(n)),
-        "fold": list(range(n)),
-        "mask": [f"p{i}_mask.nii.gz" for i in range(n)],
-        "t1": [f"p{i}_t1.nii.gz" for i in range(n)],
-    })
+    return pd.DataFrame(
+        {
+            "id": list(range(n)),
+            "fold": list(range(n)),
+            "mask": [f"p{i}_mask.nii.gz" for i in range(n)],
+            "t1": [f"p{i}_t1.nii.gz" for i in range(n)],
+        }
+    )
 
 
 def _make_dataset_info() -> dict[str, Any]:
@@ -39,9 +43,7 @@ def _make_dataset_info() -> dict[str, Any]:
 
 def _make_config() -> dict[str, Any]:
     """Minimal MIST config dictionary."""
-    return {
-        "preprocessing": {"median_resampled_image_size": [64, 64, 32]}
-    }
+    return {"preprocessing": {"median_resampled_image_size": [64, 64, 32]}}
 
 
 def _make_controlled_dump(results_dir: str) -> dict[str, Any]:
@@ -62,18 +64,30 @@ def _make_controlled_dump(results_dir: str) -> dict[str, Any]:
             "spacing": {
                 "per_axis": {
                     "axis_0": {
-                        "mean": 1.0, "std": 0.0, "min": 1.0,
-                        "p25": 1.0, "median": 1.0, "p75": 1.0,
+                        "mean": 1.0,
+                        "std": 0.0,
+                        "min": 1.0,
+                        "p25": 1.0,
+                        "median": 1.0,
+                        "p75": 1.0,
                         "max": 1.0,
                     },
                     "axis_1": {
-                        "mean": 1.0, "std": 0.0, "min": 1.0,
-                        "p25": 1.0, "median": 1.0, "p75": 1.0,
+                        "mean": 1.0,
+                        "std": 0.0,
+                        "min": 1.0,
+                        "p25": 1.0,
+                        "median": 1.0,
+                        "p75": 1.0,
                         "max": 1.0,
                     },
                     "axis_2": {
-                        "mean": 2.5, "std": 0.0, "min": 2.5,
-                        "p25": 2.5, "median": 2.5, "p75": 2.5,
+                        "mean": 2.5,
+                        "std": 0.0,
+                        "min": 2.5,
+                        "p25": 2.5,
+                        "median": 2.5,
+                        "p75": 2.5,
                         "max": 2.5,
                     },
                 },
@@ -85,18 +99,30 @@ def _make_controlled_dump(results_dir: str) -> dict[str, Any]:
                 "original": {
                     "per_axis": {
                         "axis_0": {
-                            "mean": 64.0, "std": 0.0, "min": 64.0,
-                            "p25": 64.0, "median": 64.0, "p75": 64.0,
+                            "mean": 64.0,
+                            "std": 0.0,
+                            "min": 64.0,
+                            "p25": 64.0,
+                            "median": 64.0,
+                            "p75": 64.0,
                             "max": 64.0,
                         },
                         "axis_1": {
-                            "mean": 64.0, "std": 0.0, "min": 64.0,
-                            "p25": 64.0, "median": 64.0, "p75": 64.0,
+                            "mean": 64.0,
+                            "std": 0.0,
+                            "min": 64.0,
+                            "p25": 64.0,
+                            "median": 64.0,
+                            "p75": 64.0,
                             "max": 64.0,
                         },
                         "axis_2": {
-                            "mean": 32.0, "std": 0.0, "min": 32.0,
-                            "p25": 32.0, "median": 32.0, "p75": 32.0,
+                            "mean": 32.0,
+                            "std": 0.0,
+                            "min": 32.0,
+                            "p25": 32.0,
+                            "median": 32.0,
+                            "p75": 32.0,
                             "max": 32.0,
                         },
                     }
@@ -106,14 +132,24 @@ def _make_controlled_dump(results_dir: str) -> dict[str, Any]:
             "intensity": {
                 "per_channel": {
                     "t1": {
-                        "mean": 100.0, "std": 50.0, "p01": -10.0,
-                        "p05": 0.0, "p25": 60.0, "p50": 100.0,
-                        "p75": 140.0, "p95": 190.0, "p99": 210.0,
+                        "mean": 100.0,
+                        "std": 50.0,
+                        "p01": -10.0,
+                        "p05": 0.0,
+                        "p25": 60.0,
+                        "p50": 100.0,
+                        "p75": 140.0,
+                        "p95": 190.0,
+                        "p99": 210.0,
                     },
                 },
                 "foreground_fraction": {
-                    "mean": 0.85, "std": 0.05, "min": 0.8,
-                    "p25": 0.83, "median": 0.85, "p75": 0.87,
+                    "mean": 0.85,
+                    "std": 0.05,
+                    "min": 0.8,
+                    "p25": 0.83,
+                    "median": 0.85,
+                    "p75": 0.87,
                     "max": 0.9,
                 },
             },
@@ -122,8 +158,11 @@ def _make_controlled_dump(results_dir: str) -> dict[str, Any]:
             "per_label": {
                 "1": {
                     "voxel_count": {
-                        "mean": 500.0, "std": 50.0, "min": 450,
-                        "median": 500.0, "max": 550,
+                        "mean": 500.0,
+                        "std": 50.0,
+                        "min": 450,
+                        "median": 500.0,
+                        "max": 550,
                     },
                     "mean_volume_fraction_of_foreground_pct": 50.0,
                     "mean_volume_fraction_of_image_pct": 2.0,
@@ -140,8 +179,11 @@ def _make_controlled_dump(results_dir: str) -> dict[str, Any]:
                 },
                 "2": {
                     "voxel_count": {
-                        "mean": 50.0, "std": 10.0, "min": 40,
-                        "median": 50.0, "max": 60,
+                        "mean": 50.0,
+                        "std": 10.0,
+                        "min": 40,
+                        "median": 50.0,
+                        "max": 60,
                     },
                     "mean_volume_fraction_of_foreground_pct": 5.0,
                     "mean_volume_fraction_of_image_pct": 0.2,
@@ -194,6 +236,7 @@ def dumper(tmp_path):
 # __init__
 # ---------------------------------------------------------------------------
 
+
 class TestDataDumperInit:
     """Tests for DataDumper.__init__."""
 
@@ -213,8 +256,11 @@ class TestDataDumperInit:
         """cropped_dims argument is stored as an instance attribute."""
         dims = np.ones((2, 3))
         d = DataDumper(
-            _make_paths_df(), _make_dataset_info(), _make_config(),
-            str(tmp_path), cropped_dims=dims,
+            _make_paths_df(),
+            _make_dataset_info(),
+            _make_config(),
+            str(tmp_path),
+            cropped_dims=dims,
         )
         assert d.cropped_dims is dims
 
@@ -222,6 +268,7 @@ class TestDataDumperInit:
 # ---------------------------------------------------------------------------
 # _build_dataset_summary
 # ---------------------------------------------------------------------------
+
 
 class TestBuildDatasetSummary:
     """Tests for DataDumper._build_dataset_summary."""
@@ -251,6 +298,7 @@ class TestBuildDatasetSummary:
 # build_data_dump
 # ---------------------------------------------------------------------------
 
+
 class TestBuildDataDump:
     """Tests for DataDumper.build_data_dump."""
 
@@ -263,22 +311,16 @@ class TestBuildDataDump:
         monkeypatch.setattr(
             ddu,
             "build_image_statistics",
-            lambda *_: {
-                "spacing": {}, "dimensions": {}, "intensity": {}
-            },
+            lambda *_: {"spacing": {}, "dimensions": {}, "intensity": {}},
             raising=True,
         )
         monkeypatch.setattr(
             ddu,
             "build_label_statistics",
-            lambda *_: {
-                "per_label": {}, "final_classes": {}, "class_imbalance": {}
-            },
+            lambda *_: {"per_label": {}, "final_classes": {}, "class_imbalance": {}},
             raising=True,
         )
-        monkeypatch.setattr(
-            ddu, "generate_observations", lambda *_: [], raising=True
-        )
+        monkeypatch.setattr(ddu, "generate_observations", lambda *_: [], raising=True)
 
         result = dumper.build_data_dump()
         assert set(result.keys()) == {
@@ -294,40 +336,25 @@ class TestBuildDataDump:
         monkeypatch.setattr(
             ddu, "collect_per_patient_stats", lambda *_, **__: {}, raising=True
         )
-        monkeypatch.setattr(
-            ddu, "build_image_statistics", lambda *_: {}, raising=True
-        )
-        monkeypatch.setattr(
-            ddu, "build_label_statistics", lambda *_: {}, raising=True
-        )
-        monkeypatch.setattr(
-            ddu, "generate_observations", lambda *_: [], raising=True
-        )
+        monkeypatch.setattr(ddu, "build_image_statistics", lambda *_: {}, raising=True)
+        monkeypatch.setattr(ddu, "build_label_statistics", lambda *_: {}, raising=True)
+        monkeypatch.setattr(ddu, "generate_observations", lambda *_: [], raising=True)
 
         result = dumper.build_data_dump()
-        assert result["mist_config_path"] == str(
-            dumper.results_dir / "config.json"
-        )
+        assert result["mist_config_path"] == str(dumper.results_dir / "config.json")
 
-    def test_collect_called_with_paths_df_and_dataset_info(
-        self, dumper, monkeypatch
-    ):
+    def test_collect_called_with_paths_df_and_dataset_info(self, dumper, monkeypatch):
         """collect_per_patient_stats receives the right arguments."""
         calls = []
         monkeypatch.setattr(
-            ddu, "collect_per_patient_stats",
-            lambda df, info, **kw: (calls.append((df, info)) or {}),
+            ddu,
+            "collect_per_patient_stats",
+            lambda df, info, **kw: calls.append((df, info)) or {},
             raising=True,
         )
-        monkeypatch.setattr(
-            ddu, "build_image_statistics", lambda *_: {}, raising=True
-        )
-        monkeypatch.setattr(
-            ddu, "build_label_statistics", lambda *_: {}, raising=True
-        )
-        monkeypatch.setattr(
-            ddu, "generate_observations", lambda *_: [], raising=True
-        )
+        monkeypatch.setattr(ddu, "build_image_statistics", lambda *_: {}, raising=True)
+        monkeypatch.setattr(ddu, "build_label_statistics", lambda *_: {}, raising=True)
+        monkeypatch.setattr(ddu, "generate_observations", lambda *_: [], raising=True)
 
         dumper.build_data_dump()
         assert len(calls) == 1
@@ -339,6 +366,7 @@ class TestBuildDataDump:
 # ---------------------------------------------------------------------------
 # generate_markdown_summary
 # ---------------------------------------------------------------------------
+
 
 class TestGenerateMarkdownSummary:
     """Tests for DataDumper.generate_markdown_summary."""
@@ -408,6 +436,7 @@ class TestGenerateMarkdownSummary:
 # run
 # ---------------------------------------------------------------------------
 
+
 class TestDataDumperRun:
     """Tests for DataDumper.run — verifies file I/O and console output."""
 
@@ -420,7 +449,8 @@ class TestDataDumperRun:
         )
         # Stub io.write_json_file to write the file (fast, no numpy issues).
         monkeypatch.setattr(
-            io_mod, "write_json_file",
+            io_mod,
+            "write_json_file",
             lambda path, data: Path(path).write_text(
                 json.dumps(data), encoding="utf-8"
             ),

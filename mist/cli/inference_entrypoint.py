@@ -1,4 +1,5 @@
 """Command line tool MIST inference on a given dataset."""
+
 from argparse import ArgumentDefaultsHelpFormatter
 from pathlib import Path
 import argparse
@@ -22,15 +23,21 @@ def _parse_inference_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     # Required.
     p.arg(
-        "--models-dir", type=str, required=True,
-        help="Directory containing saved models (e.g., results/models/)."
+        "--models-dir",
+        type=str,
+        required=True,
+        help="Directory containing saved models (e.g., results/models/).",
     )
     p.arg(
-        "--config", type=str, required=True,
-        help="Path to config.json from a MIST training run."
+        "--config",
+        type=str,
+        required=True,
+        help="Path to config.json from a MIST training run.",
     )
     p.arg(
-        "--paths-csv", type=str, required=True,
+        "--paths-csv",
+        type=str,
+        required=True,
         help=(
             "CSV with an 'id' column and one column per image type matching "
             "the dataset's image keys (e.g., 't1', 't2'). See docs for the "
@@ -38,17 +45,23 @@ def _parse_inference_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     p.arg(
-        "--output", type=str, required=True,
-        help="Directory to write predictions (NIfTI)."
+        "--output",
+        type=str,
+        required=True,
+        help="Directory to write predictions (NIfTI).",
     )
 
     # Optional.
     p.arg(
-        "--device", type=str, default="cuda",
-        help="Device to run inference on: 'cpu', 'cuda', or a CUDA index like '0'."
+        "--device",
+        type=str,
+        default="cuda",
+        help="Device to run inference on: 'cpu', 'cuda', or a CUDA index like '0'.",
     )
     p.arg(
-        "--postprocess-strategy", type=str, default=None,
+        "--postprocess-strategy",
+        type=str,
+        default=None,
         help="Path to postprocessing strategy JSON file.",
     )
     return p.parse_args(argv)
@@ -94,9 +107,7 @@ def _prepare_io(ns: argparse.Namespace) -> tuple[Path, Path, Path, Path]:
     if ns.postprocess_strategy is not None:
         pps = Path(ns.postprocess_strategy).expanduser().resolve()
         if not pps.exists():
-            raise FileNotFoundError(
-                f"Postprocess strategy file not found: {pps}"
-            )
+            raise FileNotFoundError(f"Postprocess strategy file not found: {pps}")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     return models_dir, config, paths_csv, output_dir
@@ -120,7 +131,8 @@ def run_inference(ns: argparse.Namespace) -> None:
         models_directory=str(models_dir),
         postprocessing_strategy_filepath=(
             str(Path(ns.postprocess_strategy).expanduser().resolve())
-            if ns.postprocess_strategy is not None else None
+            if ns.postprocess_strategy is not None
+            else None
         ),
         device=device,
     )

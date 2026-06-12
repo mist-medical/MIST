@@ -1,8 +1,10 @@
 """Entrypoint for averaging MIST fold checkpoint weights."""
+
 import argparse
 
 from mist.cli.args import ArgParser
 from mist.models.model_loader import average_fold_weights
+from mist.utils.console import print_success
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -21,7 +23,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         required=True,
         metavar="CHECKPOINT",
         help="Paths to fold checkpoint files (.pt or .pth). Provide all folds "
-             "from a cross-validation run, e.g. fold_0.pt fold_1.pt ...",
+        "from a cross-validation run, e.g. fold_0.pt fold_1.pt ...",
     )
     parser.arg(
         "--output",
@@ -36,7 +38,9 @@ def average_weights_entry(argv: list[str] | None = None) -> None:
     """Entrypoint for the mist_average_weights command."""
     ns = _parse_args(argv)
     average_fold_weights(ns.weights, output_path=ns.output)
-    print(f"Averaged weights from {len(ns.weights)} checkpoints saved to {ns.output}")
+    print_success(
+        f"Averaged weights from {len(ns.weights)} checkpoints saved to {ns.output}"
+    )
 
 
 if __name__ == "__main__":

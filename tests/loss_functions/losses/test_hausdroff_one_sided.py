@@ -1,6 +1,5 @@
 """Unit tests for the HDOneSidedLoss (HDOS) loss function."""
 
-
 import torch
 import pytest
 
@@ -19,9 +18,7 @@ def _make_mock_data(
         y_pred: (B, C, H, W, D)
         dtm:    (B, C, H, W, D)
     """
-    y_true = torch.randint(
-        0, n_classes, size=(batch_size, 1, size, size, size)
-    )
+    y_true = torch.randint(0, n_classes, size=(batch_size, 1, size, size, size))
     y_pred = torch.randn((batch_size, n_classes, size, size, size))
     dtm = torch.abs(torch.randn((batch_size, n_classes, size, size, size)))
     return y_true, y_pred, dtm
@@ -76,7 +73,7 @@ class TestHDOneSidedLoss:
         # Replicate math.
         # Formula: mean((diff ** 2) * (dtm ** 2))
         diff = y_true_fg - y_pred_fg
-        expected_hdos_loss = torch.mean((diff ** 2) * (dtm_fg ** 2))
+        expected_hdos_loss = torch.mean((diff**2) * (dtm_fg**2))
 
         assert torch.isclose(loss, expected_hdos_loss, atol=1e-5)
 
@@ -105,7 +102,7 @@ class TestHDOneSidedLoss:
 
         # Replicate math.
         diff = y_true_oh - y_pred_soft
-        expected_hdos_loss = torch.mean((diff ** 2) * (dtm_fg ** 2))
+        expected_hdos_loss = torch.mean((diff**2) * (dtm_fg**2))
 
         assert torch.isclose(loss, expected_hdos_loss, atol=1e-5)
 

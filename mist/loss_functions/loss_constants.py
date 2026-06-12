@@ -9,12 +9,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Dataclass containing constants for MIST loss functions."""
+
 import dataclasses
 
 
 @dataclasses.dataclass(frozen=True)
 class LossConstants:
     """Dataclass containing constants for MIST loss functions."""
+
     # Small constant to prevent division by zero in loss computations.
     AVOID_DIVISION_BY_ZERO_CONSTANT: float = 1e-6
 

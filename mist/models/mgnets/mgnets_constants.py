@@ -1,4 +1,5 @@
 """Constants for MGNet architectures."""
+
 import dataclasses
 
 

@@ -12,6 +12,7 @@ from mist.models.model_registry import get_model_from_registry
 # Shared fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def base_kwargs():
     return {
@@ -32,6 +33,7 @@ def small_input():
 # MistSwinUNETR construction
 # ---------------------------------------------------------------------------
 
+
 class TestMistSwinUNETRInit:
     """Tests for MistSwinUNETR.__init__."""
 
@@ -42,7 +44,8 @@ class TestMistSwinUNETRInit:
     def test_extra_kwargs_are_ignored(self):
         """Interface kwargs (patch_size, target_spacing, etc.) don't raise."""
         model = MistSwinUNETR(
-            in_channels=1, out_channels=2,
+            in_channels=1,
+            out_channels=2,
             patch_size=[64, 64, 64],
             target_spacing=[1.0, 1.0, 1.0],
         )
@@ -61,15 +64,14 @@ class TestMistSwinUNETRInit:
     @pytest.mark.parametrize("feature_size", [24, 48, 96])
     def test_feature_sizes_construct(self, feature_size):
         """All three standard feature sizes construct without error."""
-        model = MistSwinUNETR(
-            in_channels=1, out_channels=2, feature_size=feature_size
-        )
+        model = MistSwinUNETR(in_channels=1, out_channels=2, feature_size=feature_size)
         assert isinstance(model, torch.nn.Module)
 
 
 # ---------------------------------------------------------------------------
 # MistSwinUNETR forward
 # ---------------------------------------------------------------------------
+
 
 class TestMistSwinUNETRForward:
     """Tests for MistSwinUNETR.forward."""
@@ -118,6 +120,7 @@ class TestMistSwinUNETRForward:
 # create_swinunetr factory
 # ---------------------------------------------------------------------------
 
+
 class TestCreateSwinUNETR:
     """Tests for the create_swinunetr factory function."""
 
@@ -163,12 +166,13 @@ class TestCreateSwinUNETR:
 # Registry integration
 # ---------------------------------------------------------------------------
 
+
 class TestRegisteredModels:
     """Tests that all three variants are registered in the model registry."""
 
-    @pytest.mark.parametrize("name", [
-        "swinunetr-small", "swinunetr-base", "swinunetr-large"
-    ])
+    @pytest.mark.parametrize(
+        "name", ["swinunetr-small", "swinunetr-base", "swinunetr-large"]
+    )
     def test_variant_is_registered(self, base_kwargs, name):
         model = get_model_from_registry(name, **base_kwargs)
         assert isinstance(model, MistSwinUNETR)

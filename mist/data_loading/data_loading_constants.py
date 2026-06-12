@@ -6,6 +6,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class DataLoadingConstants:
     """Dataclass for constants used in data loading."""
+
     # Noise function constants.
     NOISE_FN_RANGE_MIN = 0.0
     NOISE_FN_RANGE_MAX = 0.33

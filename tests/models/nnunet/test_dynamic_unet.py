@@ -1,4 +1,5 @@
 """Tests for the DynamicUNet model in the MIST package."""
+
 import pytest
 import torch
 
@@ -6,8 +7,7 @@ from mist.models.nnunet.dynamic_unet import DynamicUNet
 
 
 def create_valid_params(
-        use_deep_supervision: bool = False,
-        num_deep_supervision_heads: int = 1
+    use_deep_supervision: bool = False, num_deep_supervision_heads: int = 1
 ) -> dict:
     """Helper to generate a valid set of parameters for a 3D UNet.
 
@@ -78,10 +78,7 @@ def test_invalid_kernel_stride():
     params["kernel_size"] = [3, 3]
     with pytest.raises(ValueError) as excinfo:
         DynamicUNet(**params)
-    assert (
-        "Length of kernel_size and strides should be the same"
-        in str(excinfo.value)
-    )
+    assert "Length of kernel_size and strides should be the same" in str(excinfo.value)
 
 
 def test_invalid_deep_supervision_heads():
@@ -90,12 +87,14 @@ def test_invalid_deep_supervision_heads():
     not less than the number of upsampling layers.
     Note: with strides length=3, there are 2 upsampling layers.
     """
-    params = create_valid_params(use_deep_supervision=True,
-                                 num_deep_supervision_heads=2)
+    params = create_valid_params(
+        use_deep_supervision=True, num_deep_supervision_heads=2
+    )
     with pytest.raises(ValueError) as excinfo:
         DynamicUNet(**params)
-    assert ("num_deep_supervision_heads should be less than the number of" in
-            str(excinfo.value))
+    assert "num_deep_supervision_heads should be less than the number of" in str(
+        excinfo.value
+    )
 
 
 def test_negative_deep_supervision_heads():
@@ -109,10 +108,7 @@ def test_negative_deep_supervision_heads():
     )
     with pytest.raises(ValueError) as excinfo:
         DynamicUNet(**params)
-    assert (
-        "num_deep_supervision_heads should be larger than 0."
-        in str(excinfo.value)
-    )
+    assert "num_deep_supervision_heads should be larger than 0." in str(excinfo.value)
 
 
 def test_invalid_filters_length():
@@ -125,9 +121,8 @@ def test_invalid_filters_length():
     params["filters"] = [16, 32]
     with pytest.raises(ValueError) as excinfo:
         DynamicUNet(**params)
-    assert (
-        "The length of filters should be no less than the length of strides"
-        in str(excinfo.value)
+    assert "The length of filters should be no less than the length of strides" in str(
+        excinfo.value
     )
 
 
@@ -137,10 +132,7 @@ def test_kernel_sequence_length_mismatch():
     params["kernel_size"] = [(3, 3), 3, 3]  # (3,3) has 2 dims, not 3
     with pytest.raises(ValueError) as excinfo:
         DynamicUNet(**params)
-    assert (
-        "Length of kernel_size in block 0 should be 3"
-        in str(excinfo.value)
-    )
+    assert "Length of kernel_size in block 0 should be 3" in str(excinfo.value)
 
 
 def test_stride_sequence_length_mismatch():
@@ -149,7 +141,4 @@ def test_stride_sequence_length_mismatch():
     params["strides"] = [(1, 1), 2, 2]  # (1,1) has 2 dims, not 3
     with pytest.raises(ValueError) as excinfo:
         DynamicUNet(**params)
-    assert (
-        "Length of stride in block 0 should be 3"
-        in str(excinfo.value)
-    )
+    assert "Length of stride in block 0 should be 3" in str(excinfo.value)

@@ -1,4 +1,5 @@
 """Tests for the MIST nnUNet model class."""
+
 import torch
 import pytest
 
@@ -46,9 +47,7 @@ def test_nnunet_non_3d_patch_size_raises(base_kwargs):
 def test_nnunet_mismatched_patch_spacing_raises(base_kwargs):
     """Mismatched patch_size / target_spacing lengths raises ValueError."""
     base_kwargs["target_spacing"] = [1.0, 1.0]
-    with pytest.raises(
-        ValueError, match="must have the same number of dimensions"
-    ):
+    with pytest.raises(ValueError, match="must have the same number of dimensions"):
         NNUNet(**base_kwargs)
 
 
@@ -84,17 +83,22 @@ def test_nnunet_forward_with_deep_supervision(base_kwargs):
 # Quasi-2D forward-pass regression: prostate snapping fix
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "patch_size,spacing,should_succeed",
     [
         # Snapped patch (20 is divisible by z_divisor=4) — must not crash.
         pytest.param(
-            [320, 320, 20], [0.625, 0.625, 3.6], True,
+            [320, 320, 20],
+            [0.625, 0.625, 3.6],
+            True,
             id="prostate_snapped_z20_ok",
         ),
         # Un-snapped patch (18 is NOT divisible by z_divisor=4) — must crash.
         pytest.param(
-            [320, 320, 18], [0.625, 0.625, 3.6], False,
+            [320, 320, 18],
+            [0.625, 0.625, 3.6],
+            False,
             id="prostate_unsnapped_z18_crashes",
         ),
     ],

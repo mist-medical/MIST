@@ -1,4 +1,5 @@
 """Registry for optimizers used in training."""
+
 from collections.abc import Callable, Iterable
 import torch
 from torch.optim import Optimizer
@@ -43,7 +44,7 @@ def _sgd_optimizer(
         lr=learning_rate,
         weight_decay=weight_decay,
         momentum=OptimizerConstants.SGD_MOMENTUM,
-        nesterov=OptimizerConstants.SGD_NESTEROV
+        nesterov=OptimizerConstants.SGD_NESTEROV,
     )
 
 
@@ -70,10 +71,7 @@ def get_optimizer(name: str, params: Iterable, **kwargs) -> Optimizer:
     """
     name = name.lower()
     if name not in OPTIMIZER_REGISTRY:
-        raise ValueError(
-            f"Unknown optimizer '{name}'. "
-            f"Available: {list_optimizers()}"
-        )
+        raise ValueError(f"Unknown optimizer '{name}'. Available: {list_optimizers()}")
     return OPTIMIZER_REGISTRY[name](params, **kwargs)
 
 

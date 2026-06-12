@@ -1,4 +1,5 @@
 """Tests for the MISTModel base class and encoder interface."""
+
 from collections import OrderedDict
 import pytest
 
@@ -13,6 +14,7 @@ from mist.models.swinunetr.mist_swinunetr import MistSwinUNETR
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def nnunet_model():
@@ -62,6 +64,7 @@ def swinunetr_model():
 # isinstance tests — all wrappers must inherit MISTModel
 # ---------------------------------------------------------------------------
 
+
 def test_nnunet_is_mist_model(nnunet_model):
     assert isinstance(nnunet_model, MISTModel)
 
@@ -81,6 +84,7 @@ def test_swinunetr_is_mist_model(swinunetr_model):
 # ---------------------------------------------------------------------------
 # Return type — all models must return a non-empty OrderedDict
 # ---------------------------------------------------------------------------
+
 
 def test_nnunet_encoder_state_dict_is_ordered_dict(nnunet_model):
     enc = nnunet_model.get_encoder_state_dict()
@@ -110,13 +114,14 @@ def test_swinunetr_encoder_state_dict_is_ordered_dict(swinunetr_model):
 # Key correctness — encoder keys present, decoder keys absent
 # ---------------------------------------------------------------------------
 
+
 def test_nnunet_encoder_keys_contain_only_encoder_prefixes(nnunet_model):
     enc = nnunet_model.get_encoder_state_dict()
-    encoder_prefixes = (
-        "unet.input_block.", "unet.encoder_layers.", "unet.bottleneck."
-    )
+    encoder_prefixes = ("unet.input_block.", "unet.encoder_layers.", "unet.bottleneck.")
     decoder_prefixes = (
-        "unet.decoder_layers.", "unet.output_block.", "unet.deep_supervision_heads."
+        "unet.decoder_layers.",
+        "unet.output_block.",
+        "unet.deep_supervision_heads.",
     )
     assert all(k.startswith(encoder_prefixes) for k in enc)
     assert not any(k.startswith(decoder_prefixes) for k in enc)
@@ -133,8 +138,11 @@ def test_mednext_encoder_keys_contain_only_encoder_prefixes(mednext_model):
 def test_mgnet_encoder_keys_contain_only_main_encoder(mgnet_model):
     enc = mgnet_model.get_encoder_state_dict()
     excluded_prefixes = (
-        "spikes.", "main_decoder_blocks.", "main_decoder_upsamples.",
-        "final_output_conv.", "deep_supervision_heads.",
+        "spikes.",
+        "main_decoder_blocks.",
+        "main_decoder_upsamples.",
+        "final_output_conv.",
+        "deep_supervision_heads.",
     )
     assert all(k.startswith("main_encoder.") for k in enc)
     assert not any(k.startswith(excluded_prefixes) for k in enc)
@@ -148,6 +156,7 @@ def test_swinunetr_encoder_keys_contain_only_swin_vit(swinunetr_model):
 # ---------------------------------------------------------------------------
 # Encoder keys are a strict subset of the full state dict
 # ---------------------------------------------------------------------------
+
 
 def test_nnunet_encoder_keys_subset_of_full_state_dict(nnunet_model):
     full_keys = set(nnunet_model.state_dict().keys())

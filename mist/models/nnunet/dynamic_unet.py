@@ -6,6 +6,7 @@ and is (in our opinion) more readable than the original MONAI implementation.
 This implementation is based on the original MONAI implementation, but has been
 modified to be compatible with the MIST.
 """
+
 from collections.abc import Sequence
 import torch
 from torch import nn
@@ -59,7 +60,8 @@ class DynamicUNet(nn.Module):
         self.act_name = act_name
         self.dropout = dropout
         self.conv_block = (
-            dynamic_unet_blocks.UnetResBlock if use_residual_blocks
+            dynamic_unet_blocks.UnetResBlock
+            if use_residual_blocks
             else dynamic_unet_blocks.UnetBasicBlock
         )
         self.trans_bias = trans_bias
@@ -88,9 +90,8 @@ class DynamicUNet(nn.Module):
                 0, num_upsample_layers - self.num_deep_supervision_heads - 1
             )
             self.deep_supervision_head_ids = [
-                id for id in range(
-                    deep_supervision_head_id_start, num_upsample_layers - 1
-                )
+                id
+                for id in range(deep_supervision_head_id_start, num_upsample_layers - 1)
             ]
             self.deep_supervision_heads = self.get_deep_supervision_heads()
 
@@ -101,13 +102,9 @@ class DynamicUNet(nn.Module):
     def check_kernel_stride(self):
         """Check that the kernel size and stride are valid."""
         error_message = (
-            "Length of kernel_size and strides should be the same, and no less "
-            "than 3."
+            "Length of kernel_size and strides should be the same, and no less than 3."
         )
-        if (
-            len(self.kernel_size) != len(self.strides) or
-            len(self.kernel_size) < 3
-        ):
+        if len(self.kernel_size) != len(self.strides) or len(self.kernel_size) < 3:
             raise ValueError(error_message)
 
         for idx, k_i in enumerate(self.kernel_size):
@@ -134,16 +131,13 @@ class DynamicUNet(nn.Module):
                 "upsampling layers."
             )
         if self.num_deep_supervision_heads < 1:
-            raise ValueError(
-                "num_deep_supervision_heads should be larger than 0."
-            )
+            raise ValueError("num_deep_supervision_heads should be larger than 0.")
 
     def check_filters(self):
         """Check that the number of filters is valid."""
         if len(self.filters) < len(self.strides):
             raise ValueError(
-                "The length of filters should be no less than the length of "
-                "strides."
+                "The length of filters should be no less than the length of strides."
             )
         else:
             self.filters = self.filters[: len(self.strides)]
@@ -181,15 +175,13 @@ class DynamicUNet(nn.Module):
             deep_supervision_head_inputs = []
             final_deep_supervision_output = []
 
-        for i, (skip, decoder_block) in enumerate(
-            zip(skips, self.decoder_layers)
-        ):
+        for i, (skip, decoder_block) in enumerate(zip(skips, self.decoder_layers)):
             x = decoder_block(x, skip)
 
             if (
-                self.use_deep_supervision and
-                self.training and
-                i in self.deep_supervision_head_ids
+                self.use_deep_supervision
+                and self.training
+                and i in self.deep_supervision_head_ids
             ):
                 deep_supervision_head_inputs.append(x)  # pylint: disable=possibly-used-before-assignment  # noqa: E501
 
@@ -202,8 +194,8 @@ class DynamicUNet(nn.Module):
             for i, deep_supervision_head_input in enumerate(
                 deep_supervision_head_inputs
             ):
-                deep_supervision_head_output = (
-                    self.deep_supervision_heads[i](deep_supervision_head_input)
+                deep_supervision_head_output = self.deep_supervision_heads[i](
+                    deep_supervision_head_input
                 )
                 final_deep_supervision_output.append(
                     F.interpolate(deep_supervision_head_output, x.shape[2:])
@@ -213,8 +205,7 @@ class DynamicUNet(nn.Module):
             return {
                 "prediction": self.output_block(x),
                 "deep_supervision": (
-                    final_deep_supervision_output if self.use_deep_supervision
-                    else None
+                    final_deep_supervision_output if self.use_deep_supervision else None
                 ),
             }
 
@@ -257,10 +248,7 @@ class DynamicUNet(nn.Module):
             The output block for the UNet.
         """
         return dynamic_unet_blocks.UnetOutBlock(
-            3,
-            self.filters[level],
-            self.out_channels,
-            dropout=self.dropout
+            3, self.filters[level], self.out_channels, dropout=self.dropout
         )
 
     def get_encoder_layers(self):
@@ -320,11 +308,7 @@ class DynamicUNet(nn.Module):
         list_of_layers = []
         if upsample_kernel_size is not None:
             for in_c, out_c, kernel, stride, up_kernel in zip(
-                    in_channels,
-                    out_channels,
-                    kernel_size,
-                    strides,
-                    upsample_kernel_size
+                in_channels, out_channels, kernel_size, strides, upsample_kernel_size
             ):
                 params = {
                     "spatial_dims": 3,
@@ -342,10 +326,7 @@ class DynamicUNet(nn.Module):
                 list_of_layers.append(layer)
         else:
             for in_c, out_c, kernel, stride in zip(
-                in_channels,
-                out_channels,
-                kernel_size,
-                strides
+                in_channels, out_channels, kernel_size, strides
             ):
                 params = {
                     "spatial_dims": 3,
@@ -378,8 +359,8 @@ class DynamicUNet(nn.Module):
         """
         return nn.ModuleList(
             [
-                self.get_output_block(i + 1) for
-                i in range(self.num_deep_supervision_heads)
+                self.get_output_block(i + 1)
+                for i in range(self.num_deep_supervision_heads)
             ]
         )
 

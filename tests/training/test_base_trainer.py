@@ -1,4 +1,5 @@
 """Tests for the BaseTrainer implementation."""
+
 import json
 import os
 import math
@@ -133,9 +134,7 @@ class DummyTrainer(BaseTrainer):
     def build_dataloaders(self, fold_data, rank, world_size):
         """Build dummy dataloaders for training and validation."""
         train_len = int(fold_data["steps_per_epoch"])
-        val_len = max(
-            1, math.ceil(len(fold_data["val_images"]) / max(1, world_size))
-        )
+        val_len = max(1, math.ceil(len(fold_data["val_images"]) / max(1, world_size)))
         batch = torch.zeros(1, 2)
         return DummyIter(batch, train_len), DummyIter(batch, val_len)
 
@@ -155,6 +154,7 @@ class DummyTrainer(BaseTrainer):
 @pytest.fixture(autouse=True)
 def patch_paths(monkeypatch):
     """Patch training_utils.get_npy_paths so tests don't hit the FS."""
+
     def fake_get_npy_paths(data_dir, patient_ids, **kwargs):
         base = Path(data_dir).resolve()
         # Return absolute-looking paths; existence isn't required by the tests.
@@ -167,17 +167,12 @@ def patch_paths(monkeypatch):
 @pytest.fixture(autouse=True)
 def patch_cuda_and_moves(monkeypatch):
     """Patch CUDA availability and device moves so tests run CPU-only."""
-    monkeypatch.setattr(torch.cuda, "is_available",
-                        lambda: True, raising=False)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True, raising=False)
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 1, raising=False)
-    monkeypatch.setattr(
-        torch.cuda, "set_device", lambda idx: None, raising=False
-    )
+    monkeypatch.setattr(torch.cuda, "set_device", lambda idx: None, raising=False)
 
     # Make .to(device) a no-op so models stay on CPU.
-    monkeypatch.setattr(
-        nn.Module, "to", lambda self, *a, **k: self, raising=False
-    )
+    monkeypatch.setattr(nn.Module, "to", lambda self, *a, **k: self, raising=False)
 
     # Inside the module under test, make torch.tensor(...) ignore device kwarg.
     _orig_tensor = torch.tensor
@@ -208,10 +203,7 @@ def tmp_pipeline(tmp_path: Path) -> tuple[Path, Path]:
             "patch_size": [16, 16, 16],
             "target_spacing": [1.0, 1.0, 1.0],
         },
-        "model": {
-            "architecture": "dummy",
-            "params": {}
-        },
+        "model": {"architecture": "dummy", "params": {}},
         "preprocessing": {},
         "training": {
             "nfolds": 2,
@@ -252,7 +244,7 @@ def tmp_pipeline(tmp_path: Path) -> tuple[Path, Path]:
                 "enabled": True,
                 "strategy": "all_flips",
             },
-        }
+        },
     }
     (results / "config.json").write_text(json.dumps(config))
 
@@ -286,6 +278,7 @@ def mist_args(tmp_pipeline):
 @pytest.fixture(autouse=True)
 def patch_path_resolver(monkeypatch):
     """Patch BaseTrainer's path builder to avoid real filesystem checks."""
+
     def fake_get_paths(data_dir, patient_ids):
         base = Path(data_dir)
         return [str(base / f"{pid}.npy") for pid in patient_ids]
@@ -303,6 +296,7 @@ def patch_path_resolver(monkeypatch):
 @pytest.fixture(autouse=True)
 def patch_registries(monkeypatch):
     """Patch registries: model, loss, optimizer, and LR scheduler."""
+
     def _fake_registry(arch, **p):
         assert "patch_size" in p, (
             "get_model_from_registry must receive patch_size from spatial_config"
@@ -311,6 +305,7 @@ def patch_registries(monkeypatch):
             "get_model_from_registry must receive target_spacing from spatial_config"
         )
         return DummyModel()
+
     monkeypatch.setattr(bt, "get_model_from_registry", _fake_registry)
     monkeypatch.setattr(bt, "get_loss", lambda name: DummyLoss)
     monkeypatch.setattr(bt, "get_alpha_scheduler", lambda cfg: object())
@@ -339,8 +334,9 @@ def patch_registries(monkeypatch):
             """Load state dict (no-op)."""
 
     monkeypatch.setattr(
-        bt, "get_lr_scheduler",
-        lambda name, optimizer, epochs, warmup_epochs=0: DummyScheduler()
+        bt,
+        "get_lr_scheduler",
+        lambda name, optimizer, epochs, warmup_epochs=0: DummyScheduler(),
     )
 
 
@@ -350,24 +346,19 @@ def patch_ddp_and_tb_and_save(monkeypatch):
     monkeypatch.setattr(bt, "DDP", DummyDDP)
     monkeypatch.setattr(bt, "SummaryWriter", DummySummaryWriter)
     monkeypatch.setattr(bt.progress_bar, "TrainProgressBar", DummyProgressCtx)
-    monkeypatch.setattr(
-        bt.progress_bar, "ValidationProgressBar", DummyProgressCtx
-    )
+    monkeypatch.setattr(bt.progress_bar, "ValidationProgressBar", DummyProgressCtx)
     monkeypatch.setattr(torch, "save", lambda *a, **k: None)
-    monkeypatch.setattr(
-        bt.BaseTrainer, "save_checkpoint", lambda *a, **k: None
-    )
+    monkeypatch.setattr(bt.BaseTrainer, "save_checkpoint", lambda *a, **k: None)
 
 
 @pytest.fixture(autouse=True)
 def patch_dist(monkeypatch):
     """Patch torch.distributed to be inert but count calls."""
-    calls = {
-        "init": 0, "destroy": 0, "all_reduce": 0, "broadcast": 0, "barrier": 0
-    }
+    calls = {"init": 0, "destroy": 0, "all_reduce": 0, "broadcast": 0, "barrier": 0}
 
     class FakeDist:
         """Fake distributed module to track calls."""
+
         _initialized = False
         _rank = 0
         _world_size = 1
@@ -483,10 +474,7 @@ def test_update_num_gpus_and_batchsize(tmp_pipeline, mist_args, monkeypatch):
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 1, raising=False)
     trainer = DummyTrainer(mist_args)
     assert trainer.config["training"]["hardware"]["num_gpus"] == 1
-    assert (
-        trainer.batch_size ==
-        trainer.config["training"]["batch_size_per_gpu"] * 1
-    )
+    assert trainer.batch_size == trainer.config["training"]["batch_size_per_gpu"] * 1
 
 
 def test_setup_folds_no_valsplit(tmp_pipeline, mist_args, monkeypatch):
@@ -502,9 +490,7 @@ def test_setup_folds_no_valsplit(tmp_pipeline, mist_args, monkeypatch):
     assert fold0["train_dtms"] is None
 
 
-def test_setup_folds_with_dtms_and_valsplit(
-    tmp_pipeline, mist_args, monkeypatch
-):
+def test_setup_folds_with_dtms_and_valsplit(tmp_pipeline, mist_args, monkeypatch):
     """Test setup_folds with DTM data and validation split."""
     results, _ = tmp_pipeline
     cfg = json.loads((Path(results) / "config.json").read_text())
@@ -554,9 +540,7 @@ def test_setup_initializes_process_group_once(
     assert patch_dist["init"] == 1
 
 
-def test_train_fold_runs_full_epoch(
-    tmp_pipeline, mist_args, monkeypatch, patch_dist
-):
+def test_train_fold_runs_full_epoch(tmp_pipeline, mist_args, monkeypatch, patch_dist):
     """Test that train_fold runs a full epoch with correct steps."""
     """With world_size=1, no collectives are called in the new code path."""
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 1, raising=False)
@@ -570,16 +554,12 @@ def test_train_fold_runs_full_epoch(
     assert patch_dist["all_reduce"] == 0
 
 
-def test_train_fold_early_stop_on_nan(
-    tmp_pipeline, mist_args, monkeypatch, patch_dist
-):
+def test_train_fold_early_stop_on_nan(tmp_pipeline, mist_args, monkeypatch, patch_dist):
     """NaN training loss should trigger early stop and cleanup (DDP case)."""
     # Use 2 GPUs so DDP is engaged, ensuring cleanup() destroys the process
     # group.
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 2, raising=False)
-    trainer = DummyTrainer(
-        mist_args, train_loss_value=float("nan"), val_loss_value=2.0
-    )
+    trainer = DummyTrainer(mist_args, train_loss_value=float("nan"), val_loss_value=2.0)
     trainer.train_fold(fold=0, rank=0, world_size=2)
     assert patch_dist["destroy"] >= 1
 
@@ -620,9 +600,7 @@ def test_overwrite_config_from_args(tmp_pipeline, mist_args, monkeypatch):
     assert cfg["training"]["val_percent"] == pytest.approx(0.025)
 
 
-def test_fit_single_gpu_calls_run_directly(
-    tmp_pipeline, mist_args, monkeypatch
-):
+def test_fit_single_gpu_calls_run_directly(tmp_pipeline, mist_args, monkeypatch):
     """Test that fit with single GPU calls run directly."""
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 1, raising=False)
     called = {"run": 0}
@@ -689,9 +667,7 @@ def test_update_num_gpus_raises_when_cuda_unavailable(
     tmp_pipeline, mist_args, monkeypatch
 ):
     """Test that update_num_gpus raises when CUDA is unavailable."""
-    monkeypatch.setattr(
-        torch.cuda, "is_available", lambda: False, raising=False
-    )
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False, raising=False)
 
     with pytest.raises(ValueError) as excinfo:
         DummyTrainer(mist_args)
@@ -700,12 +676,9 @@ def test_update_num_gpus_raises_when_cuda_unavailable(
     assert "CUDA is not available" in msg
 
 
-def test_update_num_gpus_raises_when_zero_devices(
-    tmp_pipeline, mist_args, monkeypatch
-):
+def test_update_num_gpus_raises_when_zero_devices(tmp_pipeline, mist_args, monkeypatch):
     """Test that update_num_gpus raises when device_count is zero."""
-    monkeypatch.setattr(torch.cuda, "is_available",
-                        lambda: True, raising=False)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True, raising=False)
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 0, raising=False)
 
     with pytest.raises(ValueError) as excinfo:
@@ -716,12 +689,9 @@ def test_update_num_gpus_raises_when_zero_devices(
     assert "CUDA_VISIBLE_DEVICES" in msg
 
 
-def test_update_num_gpus_sets_config_and_persists(
-    tmp_pipeline, mist_args, monkeypatch
-):
+def test_update_num_gpus_sets_config_and_persists(tmp_pipeline, mist_args, monkeypatch):
     """Test that update_num_gpus sets config and persists to disk."""
-    monkeypatch.setattr(torch.cuda, "is_available",
-                        lambda: True, raising=False)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True, raising=False)
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 2, raising=False)
 
     results, _ = tmp_pipeline
@@ -763,15 +733,10 @@ def test_train_loop_else_branch_rank_nonzero(
     tmp_pipeline, mist_args, monkeypatch, patch_dist
 ):
     """Test train_fold else branch for rank > 0."""
-    monkeypatch.setattr(torch.cuda, "is_available",
-                        lambda: True, raising=False)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True, raising=False)
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 2, raising=False)
-    monkeypatch.setattr(
-        torch.cuda, "set_device", lambda idx: None, raising=False
-    )
-    monkeypatch.setattr(
-        nn.Module, "to", lambda self, *a, **k: self, raising=False
-    )
+    monkeypatch.setattr(torch.cuda, "set_device", lambda idx: None, raising=False)
+    monkeypatch.setattr(nn.Module, "to", lambda self, *a, **k: self, raising=False)
 
     trainer = DummyTrainer(mist_args, train_loss_value=1.0, val_loss_value=2.0)
     trainer.folds[0]["steps_per_epoch"] = 2
@@ -791,15 +756,10 @@ def test_validation_else_branch_rank_nonzero(
     tmp_pipeline, mist_args, monkeypatch, patch_dist
 ):
     """Test validation step else branch for rank > 0."""
-    monkeypatch.setattr(torch.cuda, "is_available",
-                        lambda: True, raising=False)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True, raising=False)
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 2, raising=False)
-    monkeypatch.setattr(
-        torch.cuda, "set_device", lambda idx: None, raising=False
-    )
-    monkeypatch.setattr(
-        nn.Module, "to", lambda self, *a, **k: self, raising=False
-    )
+    monkeypatch.setattr(torch.cuda, "set_device", lambda idx: None, raising=False)
+    monkeypatch.setattr(nn.Module, "to", lambda self, *a, **k: self, raising=False)
 
     trainer = DummyTrainer(mist_args, train_loss_value=1.0, val_loss_value=2.0)
 
@@ -818,23 +778,14 @@ def test_validation_else_branch_rank_nonzero(
     assert patch_dist["barrier"] >= 1
 
 
-def test_validation_no_improvement_message(
-    tmp_pipeline, mist_args, monkeypatch
-):
+def test_validation_no_improvement_message(tmp_pipeline, mist_args, monkeypatch):
     """Test that validation step logs no improvement message."""
-    monkeypatch.setattr(torch.cuda, "is_available",
-                        lambda: True, raising=False)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True, raising=False)
     monkeypatch.setattr(torch.cuda, "device_count", lambda: 1, raising=False)
-    monkeypatch.setattr(
-        torch.cuda, "set_device", lambda idx: None, raising=False
-    )
-    monkeypatch.setattr(
-        nn.Module, "to", lambda self, *a, **k: self, raising=False
-    )
+    monkeypatch.setattr(torch.cuda, "set_device", lambda idx: None, raising=False)
+    monkeypatch.setattr(nn.Module, "to", lambda self, *a, **k: self, raising=False)
 
-    trainer = DummyTrainer(
-        mist_args, train_loss_value=1.0, val_loss_value=float("inf")
-    )
+    trainer = DummyTrainer(mist_args, train_loss_value=1.0, val_loss_value=float("inf"))
 
     trainer.folds[0]["steps_per_epoch"] = 1
     trainer.folds[0]["val_images"] = ["val0", "val1"]
@@ -842,9 +793,7 @@ def test_validation_no_improvement_message(
     monkeypatch.setattr(trainer, "setup", lambda *a, **k: None)
 
     out = []
-    monkeypatch.setattr(
-        console_mod.console, "print", lambda msg: out.append(str(msg))
-    )
+    monkeypatch.setattr(console_mod.console, "print", lambda msg: out.append(str(msg)))
 
     trainer.train_fold(fold=0, rank=0, world_size=1)
 
@@ -865,9 +814,7 @@ def test_run_cross_validation_rank0_prints_and_calls_all_folds(
     trainer = DummyTrainer(mist_args)
 
     out = []
-    monkeypatch.setattr(
-        console_mod.console, "print", lambda msg: out.append(str(msg))
-    )
+    monkeypatch.setattr(console_mod.console, "print", lambda msg: out.append(str(msg)))
 
     calls = []
 
@@ -896,9 +843,7 @@ def test_run_cross_validation_nonzero_rank_no_print_but_calls_folds(
     trainer = DummyTrainer(mist_args)
 
     out = []
-    monkeypatch.setattr(
-        console_mod.console, "print", lambda msg: out.append(str(msg))
-    )
+    monkeypatch.setattr(console_mod.console, "print", lambda msg: out.append(str(msg)))
 
     calls = []
 
@@ -913,10 +858,13 @@ def test_run_cross_validation_nonzero_rank_no_print_but_calls_folds(
     assert calls == [(0, 1, 2), (1, 1, 2)]
 
 
-@pytest.mark.parametrize("clw_cfg", [
-    None,
-    {"name": "linear", "params": {"init_pause": 5}},
-])
+@pytest.mark.parametrize(
+    "clw_cfg",
+    [
+        None,
+        {"name": "linear", "params": {"init_pause": 5}},
+    ],
+)
 def test_build_components_composite_loss_scheduler(
     tmp_pipeline, mist_args, monkeypatch, clw_cfg
 ):
@@ -1033,9 +981,7 @@ def test_resume_no_warning_when_no_overrides(tmp_pipeline, mist_args, monkeypatc
     assert not any("Warning" in s for s in printed)
 
 
-def test_save_and_load_checkpoint_roundtrip(
-    tmp_pipeline, mist_args, monkeypatch
-):
+def test_save_and_load_checkpoint_roundtrip(tmp_pipeline, mist_args, monkeypatch):
     """save_checkpoint followed by load_checkpoint restores state exactly."""
     # Use real torch.save/load for this test.
     monkeypatch.setattr(torch, "save", _real_torch_save)
@@ -1080,9 +1026,7 @@ def test_load_checkpoint_returns_false_when_missing(
     assert state["best_val_loss"] == pytest.approx(1.23)
 
 
-def test_train_fold_saves_checkpoint_each_epoch(
-    tmp_pipeline, mist_args, monkeypatch
-):
+def test_train_fold_saves_checkpoint_each_epoch(tmp_pipeline, mist_args, monkeypatch):
     """train_fold should call save_checkpoint once per completed epoch."""
     monkeypatch.setattr(torch, "save", _real_torch_save)
     monkeypatch.setattr(torch, "load", _real_torch_load)
@@ -1132,9 +1076,7 @@ def test_resume_loads_checkpoint_and_prints_message(
     assert any("Resuming fold 0" in s for s in out)
 
 
-def test_resume_warns_when_no_checkpoint(
-    tmp_pipeline, mist_args, monkeypatch
-):
+def test_resume_warns_when_no_checkpoint(tmp_pipeline, mist_args, monkeypatch):
     """With --resume but no checkpoint, train_fold warns and starts fresh."""
     mist_args.resume = True
     trainer = DummyTrainer(mist_args, train_loss_value=1.0, val_loss_value=0.5)
@@ -1222,9 +1164,7 @@ def test_validation_rank0_ddp_allreduce_and_mean(
     # Inspect the logged scalars. Validation mean should be val_loss/world_size.
     assert created_writers, "SummaryWriter was not instantiated"
     writer = created_writers[-1]
-    losses_entry = next(
-        (e for e in writer.scalars if e[0] == "losses"), None
-    )
+    losses_entry = next((e for e in writer.scalars if e[0] == "losses"), None)
     assert losses_entry is not None, "'losses' scalars were not logged"
     _, scalars, _ = losses_entry
     # With FakeDist all_reduce as a no-op, the code divides by world_size
@@ -1237,6 +1177,7 @@ def test_validation_rank0_ddp_allreduce_and_mean(
 # =============================================
 # Coverage gap: warmup_epochs CLI override
 # =============================================
+
 
 def test_init_warmup_epochs_override(tmp_pipeline, monkeypatch):
     """warmup_epochs CLI arg is applied to config when not None."""
@@ -1267,9 +1208,8 @@ def test_init_warmup_epochs_override(tmp_pipeline, monkeypatch):
 # Coverage gap: _check_resume_overrides warnings
 # =============================================
 
-def test_check_resume_overrides_warns_on_all_training_diffs(
-    tmp_pipeline, monkeypatch
-):
+
+def test_check_resume_overrides_warns_on_all_training_diffs(tmp_pipeline, monkeypatch):
     """All six warning branches fire when every overridable field differs."""
     results, numpy_dir = tmp_pipeline
     # Start with resume=True and overrides that differ from the saved config.
@@ -1281,13 +1221,13 @@ def test_check_resume_overrides_warns_on_all_training_diffs(
         folds=None,
         epochs=None,
         batch_size_per_gpu=None,
-        loss="cross_entropy",               # differs from "dummy_loss"
+        loss="cross_entropy",  # differs from "dummy_loss"
         composite_loss_weighting="linear",  # differs from None
-        optimizer="adam",                   # differs from "sgd"
-        l2_penalty=0.01,                    # differs from 0.0
-        learning_rate=0.001,                # differs from 0.01
-        lr_scheduler="cosine",              # differs from "constant"
-        warmup_epochs=3,                    # differs from missing/0
+        optimizer="adam",  # differs from "sgd"
+        l2_penalty=0.01,  # differs from 0.0
+        learning_rate=0.001,  # differs from 0.01
+        lr_scheduler="cosine",  # differs from "constant"
+        warmup_epochs=3,  # differs from missing/0
         val_percent=None,
         resume=True,
     )
@@ -1313,6 +1253,7 @@ def test_check_resume_overrides_warns_on_all_training_diffs(
 # Coverage gap: _validate_pretrained_config
 # =============================================
 
+
 def test_validate_pretrained_config_warns_when_no_config_path(
     tmp_pipeline, mist_args, monkeypatch
 ):
@@ -1335,13 +1276,17 @@ def test_validate_pretrained_config_calls_validator_when_both_set(
     source_cfg = {"model": {"architecture": "nnunet"}}
     _real_read = bt.io.read_json_file
     monkeypatch.setattr(
-        bt.io, "read_json_file",
-        lambda path: source_cfg if path == "/fake/source_config.json" else _real_read(path),
+        bt.io,
+        "read_json_file",
+        lambda path: (
+            source_cfg if path == "/fake/source_config.json" else _real_read(path)
+        ),
     )
 
     calls = []
     monkeypatch.setattr(
-        bt, "validate_encoder_compatibility",
+        bt,
+        "validate_encoder_compatibility",
         lambda src, dst: calls.append((src, dst)),
     )
 
@@ -1354,6 +1299,7 @@ def test_validate_pretrained_config_calls_validator_when_both_set(
 # =============================================
 # Coverage gap: build_components pretrained encoder loading
 # =============================================
+
 
 def test_build_components_loads_pretrained_encoder(
     tmp_pipeline, mist_args, monkeypatch
@@ -1371,16 +1317,16 @@ def test_build_components_loads_pretrained_encoder(
 
     _real_read = bt.io.read_json_file
     monkeypatch.setattr(
-        bt.io, "read_json_file",
+        bt.io,
+        "read_json_file",
         lambda path: {} if path == "/fake/source_config.json" else _real_read(path),
     )
     monkeypatch.setattr(
-        bt, "load_pretrained_encoder",
+        bt,
+        "load_pretrained_encoder",
         lambda model, path, strategy: (model, dummy_summary),
     )
-    monkeypatch.setattr(
-        bt, "validate_encoder_compatibility", lambda *a: None
-    )
+    monkeypatch.setattr(bt, "validate_encoder_compatibility", lambda *a: None)
 
     printed = []
     monkeypatch.setattr(
@@ -1392,13 +1338,14 @@ def test_build_components_loads_pretrained_encoder(
 
     combined = "\n".join(printed)
     assert "Pretrained encoder loaded" in combined
-    assert "10" in combined   # loaded count
-    assert "2" in combined    # channel_strategy_applied count
+    assert "10" in combined  # loaded count
+    assert "2" in combined  # channel_strategy_applied count
 
 
 # =============================================
 # Coverage gap: build_components spacing-aware loss
 # =============================================
+
 
 def test_build_components_spacing_aware_loss_injects_spacing(
     tmp_pipeline, mist_args, monkeypatch
@@ -1432,9 +1379,8 @@ def test_build_components_spacing_aware_loss_injects_spacing(
 # Coverage gap: alpha TensorBoard logging (line 934)
 # =============================================
 
-def test_train_fold_logs_alpha_for_composite_loss(
-    tmp_pipeline, mist_args, monkeypatch
-):
+
+def test_train_fold_logs_alpha_for_composite_loss(tmp_pipeline, mist_args, monkeypatch):
     """train_fold logs 'alpha' to TensorBoard when composite_loss_weighting is set.
 
     This covers the ``if state["composite_loss_weighting"] is not None`` branch
@@ -1455,8 +1401,7 @@ def test_train_fold_logs_alpha_for_composite_loss(
     # Stub get_alpha_scheduler to return a simple callable — no real scheduler
     # needed; we just need state["composite_loss_weighting"] to be non-None.
     monkeypatch.setattr(
-        bt, "get_alpha_scheduler",
-        lambda name, num_epochs, **kw: lambda epoch: 0.7
+        bt, "get_alpha_scheduler", lambda name, num_epochs, **kw: lambda epoch: 0.7
     )
 
     # Capture the SummaryWriter used during training.

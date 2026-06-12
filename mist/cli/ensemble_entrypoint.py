@@ -1,4 +1,5 @@
 """Command line tool to ensemble predictions from multiple MIST models."""
+
 import argparse
 from argparse import ArgumentDefaultsHelpFormatter
 from pathlib import Path
@@ -65,16 +66,12 @@ def _validate_prediction_dirs(prediction_dirs: list[str]) -> list[Path]:
         ValueError: If fewer than two directories are provided.
     """
     if len(prediction_dirs) < 2:
-        raise ValueError(
-            "mist_ensemble requires at least two prediction directories."
-        )
+        raise ValueError("mist_ensemble requires at least two prediction directories.")
     resolved = []
     for d in prediction_dirs:
         path = Path(d).expanduser().resolve()
         if not path.is_dir():
-            raise FileNotFoundError(
-                f"Prediction directory not found: {path}"
-            )
+            raise FileNotFoundError(f"Prediction directory not found: {path}")
         resolved.append(path)
     return resolved
 
@@ -94,10 +91,7 @@ def _get_patient_ids(dirs: list[Path]) -> list[str]:
     Raises:
         ValueError: If patient IDs do not match across directories.
     """
-    reference_ids = {
-        p.name.replace(".nii.gz", "")
-        for p in dirs[0].glob("*.nii.gz")
-    }
+    reference_ids = {p.name.replace(".nii.gz", "") for p in dirs[0].glob("*.nii.gz")}
     for d in dirs[1:]:
         ids = {p.name.replace(".nii.gz", "") for p in d.glob("*.nii.gz")}
         if ids != reference_ids:
@@ -134,8 +128,7 @@ def run_ensemble(ns: argparse.Namespace) -> None:
         for patient_id in pb.track(patient_ids):
             try:
                 label_maps = [
-                    sitk.ReadImage(str(d / f"{patient_id}.nii.gz"))
-                    for d in dirs
+                    sitk.ReadImage(str(d / f"{patient_id}.nii.gz")) for d in dirs
                 ]
                 consensus = ensembler(label_maps)
                 sitk.WriteImage(
@@ -143,9 +136,7 @@ def run_ensemble(ns: argparse.Namespace) -> None:
                     str(output_dir / f"{patient_id}.nii.gz"),
                 )
             except Exception as e:  # pylint: disable=broad-except
-                error_messages.append(
-                    f"Ensemble failed for {patient_id}: {str(e)}"
-                )
+                error_messages.append(f"Ensemble failed for {patient_id}: {str(e)}")
 
     if error_messages:
         for message in error_messages:

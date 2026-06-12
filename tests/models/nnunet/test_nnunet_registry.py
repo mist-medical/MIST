@@ -1,4 +1,5 @@
 """Unit tests for the nnUNet model factory function."""
+
 import pytest
 
 # MIST imports.
@@ -32,17 +33,18 @@ def test_create_nnunet_pocket_success(valid_config):
     assert isinstance(model, NNUNet)
 
 
-@pytest.mark.parametrize("missing_key", [
-    "in_channels",
-    "out_channels",
-    "patch_size",
-    "target_spacing",
-])
+@pytest.mark.parametrize(
+    "missing_key",
+    [
+        "in_channels",
+        "out_channels",
+        "patch_size",
+        "target_spacing",
+    ],
+)
 def test_create_nnunet_missing_keys(valid_config, missing_key):
     """Test create_nnunet raises ValueError if a required key is missing."""
     config = valid_config.copy()
     config.pop(missing_key)
-    with pytest.raises(
-        ValueError, match=f"Missing required key '{missing_key}'"
-    ):
+    with pytest.raises(ValueError, match=f"Missing required key '{missing_key}'"):
         create_nnunet(**config)

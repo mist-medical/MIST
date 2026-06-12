@@ -87,8 +87,7 @@ class SurfaceDilationLogic(nn.Module):
 
         if len(spacing_xyz) != 3:
             raise ValueError(
-                "sddl_spacing_xyz must be a 3-tuple (sx, sy, sz), got "
-                f"{spacing_xyz}"
+                f"sddl_spacing_xyz must be a 3-tuple (sx, sy, sz), got {spacing_xyz}"
             )
         self.spacing_xyz = tuple(float(s) for s in spacing_xyz)
 
@@ -207,9 +206,7 @@ class SurfaceDilationLogic(nn.Module):
         # 3. Dice score (sum over spatial dims D, H, W).
         spatial_dims = (2, 3, 4)
         overlap = (dilated_p * dilated_t).sum(dim=spatial_dims)
-        union = (
-            dilated_p.sum(dim=spatial_dims) + dilated_t.sum(dim=spatial_dims)
-        )
+        union = dilated_p.sum(dim=spatial_dims) + dilated_t.sum(dim=spatial_dims)
 
         s_hat = (2.0 * overlap) / (union + self.eps)
         return 1.0 - torch.mean(s_hat)
@@ -290,9 +287,7 @@ class VolumetricSDDL(DiceCELoss):
         y_true_oh, y_pred_prob = self.preprocess(y_true, y_pred)
 
         # Call the submodule
-        loss_surf = self.surface_logic(
-            y_true_oh, y_pred_prob, self.exclude_background
-        )
+        loss_surf = self.surface_logic(y_true_oh, y_pred_prob, self.exclude_background)
 
         return alpha * loss_vol + (1.0 - alpha) * loss_surf
 
@@ -371,8 +366,6 @@ class VesselSDDL(CLDice):
         y_true_oh, y_pred_prob = self.preprocess(y_true, y_pred)
 
         # Call the submodule
-        loss_surf = self.surface_logic(
-            y_true_oh, y_pred_prob, self.exclude_background
-        )
+        loss_surf = self.surface_logic(y_true_oh, y_pred_prob, self.exclude_background)
 
         return alpha * loss_cl + (1.0 - alpha) * loss_surf

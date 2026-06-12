@@ -1,4 +1,5 @@
 """Unit tests for MIST-compatible MedNeXt implementation."""
+
 import torch
 import pytest
 
@@ -9,6 +10,7 @@ from mist.models.mednext.mist_mednext import MedNeXt
 # ---------------------------------------------------------------------------
 # patch_size divisibility guard
 # ---------------------------------------------------------------------------
+
 
 class TestMedNeXtPatchSizeGuard:
     """Tests for patch_size divisibility guard in MedNeXt.__init__."""
@@ -32,9 +34,11 @@ class TestMedNeXtPatchSizeGuard:
         """2-stage architecture only needs divisibility by 4."""
         # 12 is not divisible by 16 (default 4-stage), but IS by 4 (2-stage).
         model = MedNeXt(
-            in_channels=1, out_channels=2,
+            in_channels=1,
+            out_channels=2,
             patch_size=[64, 64, 12],
-            blocks_down=(2, 2), blocks_up=(2, 2),
+            blocks_down=(2, 2),
+            blocks_up=(2, 2),
         )
         assert isinstance(model, torch.nn.Module)
 
@@ -42,15 +46,18 @@ class TestMedNeXtPatchSizeGuard:
         """2-stage architecture still rejects odd spatial sizes."""
         with pytest.raises(ValueError, match="divisible by 2 \\*\\* len"):
             MedNeXt(
-                in_channels=1, out_channels=2,
+                in_channels=1,
+                out_channels=2,
                 patch_size=[64, 64, 5],
-                blocks_down=(2, 2), blocks_up=(2, 2),
+                blocks_down=(2, 2),
+                blocks_up=(2, 2),
             )
 
     def test_extra_kwargs_ignored(self):
         """Unknown kwargs (e.g. target_spacing) do not raise."""
         model = MedNeXt(
-            in_channels=1, out_channels=2,
+            in_channels=1,
+            out_channels=2,
             patch_size=[32, 32, 32],
             target_spacing=[1.0, 1.0, 1.0],
         )
@@ -60,6 +67,7 @@ class TestMedNeXtPatchSizeGuard:
 # ---------------------------------------------------------------------------
 # Forward pass
 # ---------------------------------------------------------------------------
+
 
 def test_mednext_forward_eval_mode():
     """Test MedNeXt forward pass in eval mode (no deep supervision)."""
@@ -112,6 +120,5 @@ def test_mednext_forward_with_deep_supervision():
     assert "deep_supervision" in output
     assert isinstance(output["deep_supervision"], list)
     assert all(
-        ds.shape == output["prediction"].shape for
-        ds in output["deep_supervision"]
+        ds.shape == output["prediction"].shape for ds in output["deep_supervision"]
     )

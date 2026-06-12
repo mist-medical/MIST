@@ -1,4 +1,5 @@
 """Entrypoint for running the MIST training pipeline."""
+
 from argparse import ArgumentDefaultsHelpFormatter
 from pathlib import Path
 import argparse
@@ -48,9 +49,7 @@ def _ensure_required_artifacts(ns: argparse.Namespace) -> tuple[Path, bool]:
 
     # Results folder must already exist and contain required files.
     if not results_dir.is_dir():
-        raise FileNotFoundError(
-            f"Results directory does not exist: {results_dir}"
-        )
+        raise FileNotFoundError(f"Results directory does not exist: {results_dir}")
 
     required_files = ["config.json", "train_paths.csv", "fg_bboxes.csv"]
     missing = [f for f in required_files if not (results_dir / f).is_file()]
@@ -68,9 +67,7 @@ def _ensure_required_artifacts(ns: argparse.Namespace) -> tuple[Path, bool]:
         raise FileNotFoundError(f"NumPy directory does not exist: {numpy_dir}")
 
     required_np_subdirs = ["images", "labels"]  # 'dtms' is optional.
-    missing_np = [
-        d for d in required_np_subdirs if not (numpy_dir / d).is_dir()
-    ]
+    missing_np = [d for d in required_np_subdirs if not (numpy_dir / d).is_dir()]
     if missing_np:
         raise FileNotFoundError(
             "Missing required subfolder(s) in NumPy directory: "
@@ -111,8 +108,7 @@ def train_entry(argv: list[str] | None = None) -> None:
     results_csv = results_dir / "results.csv"
     if results_csv.exists() and not getattr(ns, "overwrite", False):
         raise FileExistsError(
-            f"Found existing results at {results_csv}. Use --overwrite to "
-            "replace them."
+            f"Found existing results at {results_csv}. Use --overwrite to replace them."
         )
 
     _create_train_dirs(results_dir, has_test_paths)
@@ -146,9 +142,7 @@ def train_entry(argv: list[str] | None = None) -> None:
             evaluation_config=config["evaluation"],
             output_csv_path=results_csv,
         )
-        evaluator.run(
-            max_workers=ns.num_workers_evaluate
-        )
+        evaluator.run(max_workers=ns.num_workers_evaluate)
 
     # Optional test inference
     if has_test_paths:

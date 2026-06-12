@@ -1,4 +1,5 @@
 """Unit tests for the _welford_merge and _percentile_from_histogram helpers."""
+
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 import pytest
@@ -10,6 +11,7 @@ from mist.analyze_data.analyzer_constants import AnalyzeConstants as constants
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_stats(arr: ArrayLike) -> tuple[int, float, float]:
     """Return (n, mean, M2) for a numpy array."""
@@ -36,6 +38,7 @@ def _make_hist(
 # ---------------------------------------------------------------------------
 # _welford_merge
 # ---------------------------------------------------------------------------
+
 
 class TestWelfordMerge:
     """Tests for _welford_merge."""
@@ -71,9 +74,7 @@ class TestWelfordMerge:
         """Groups with n == 0 do not affect the result."""
         data = np.array([10.0, 20.0, 30.0])
         empty = (0, 0.0, 0.0)
-        _, got_mean, got_std = _welford_merge(
-            [empty, _make_stats(data), empty]
-        )
+        _, got_mean, got_std = _welford_merge([empty, _make_stats(data), empty])
         assert got_mean == pytest.approx(np.mean(data))
         assert got_std == pytest.approx(np.std(data))
 
@@ -109,6 +110,7 @@ class TestWelfordMerge:
 # _percentile_from_histogram
 # ---------------------------------------------------------------------------
 
+
 class TestPercentileFromHistogram:
     """Tests for _percentile_from_histogram."""
 
@@ -126,7 +128,10 @@ class TestPercentileFromHistogram:
         result = _percentile_from_histogram(
             hist, bin_edges, constants.CT_GLOBAL_CLIP_MIN_PERCENTILE
         )
-        assert abs(result - np.percentile(data, constants.CT_GLOBAL_CLIP_MIN_PERCENTILE)) <= 2.0
+        assert (
+            abs(result - np.percentile(data, constants.CT_GLOBAL_CLIP_MIN_PERCENTILE))
+            <= 2.0
+        )
 
     def test_high_percentile_accuracy(self):
         """99.5th percentile estimate is within 2 HU of the exact value."""
@@ -135,7 +140,10 @@ class TestPercentileFromHistogram:
         result = _percentile_from_histogram(
             hist, bin_edges, constants.CT_GLOBAL_CLIP_MAX_PERCENTILE
         )
-        assert abs(result - np.percentile(data, constants.CT_GLOBAL_CLIP_MAX_PERCENTILE)) <= 2.0
+        assert (
+            abs(result - np.percentile(data, constants.CT_GLOBAL_CLIP_MAX_PERCENTILE))
+            <= 2.0
+        )
 
     def test_empty_histogram_returns_zero(self):
         """An all-zero histogram returns 0.0."""

@@ -1,4 +1,5 @@
 """Lesion-wise metrics for segmentation evaluation."""
+
 from typing import Any
 import numpy as np
 from scipy.ndimage import label, binary_dilation, generate_binary_structure
@@ -101,26 +102,20 @@ def compute_lesion_wise_metrics(
         ValueError: If an unsupported reduction mode is specified.
     """
     if reduction not in ("mean", "none"):
-        raise ValueError(
-            f"Unsupported reduction: '{reduction}'. Use 'mean' or 'none'."
-        )
+        raise ValueError(f"Unsupported reduction: '{reduction}'. Use 'mean' or 'none'.")
 
     struct = generate_binary_structure(3, 2)
 
     # Label GT connected components, then optionally consolidate nearby ones.
     labeled_gt, _ = label(gt, struct)
     if gt_consolidation_iters > 0:
-        labeled_gt = _consolidate_gt_lesions(
-            labeled_gt, struct, gt_consolidation_iters
-        )
+        labeled_gt = _consolidate_gt_lesions(labeled_gt, struct, gt_consolidation_iters)
 
     # Label prediction connected components.
     labeled_pred, num_pred = label(pred, struct)
 
     # Worst-case distance for HD95 FP / FN penalty: image diagonal in mm.
-    diagonal_mm = float(
-        np.linalg.norm(np.array(gt.shape) * np.array(spacing))
-    )
+    diagonal_mm = float(np.linalg.norm(np.array(gt.shape) * np.array(spacing)))
 
     # Unique non-zero GT lesion labels (after optional consolidation some
     # original labels may have merged, so use np.unique rather than a range).
@@ -161,7 +156,8 @@ def compute_lesion_wise_metrics(
         if "dice" in metrics:
             lesion_result["lesion_wise_dice"] = (
                 float(compute_dice_coefficient(gt_lesion, pred_lesion))
-                if detected else 0.0
+                if detected
+                else 0.0
             )
 
         # Compute surface distances once, shared by HD95 and surface Dice.
@@ -177,15 +173,19 @@ def compute_lesion_wise_metrics(
         if "haus95" in metrics:
             lesion_result["lesion_wise_haus95"] = (
                 float(compute_robust_hausdorff(surface_dist, percent=95.0))
-                if surface_dist is not None else diagonal_mm
+                if surface_dist is not None
+                else diagonal_mm
             )
 
         if "surface_dice" in metrics:
             lesion_result["lesion_wise_surf_dice"] = (
-                float(compute_surface_dice_at_tolerance(
-                    surface_dist, surface_dice_tolerance_mm
-                ))
-                if surface_dist is not None else 0.0
+                float(
+                    compute_surface_dice_at_tolerance(
+                        surface_dist, surface_dice_tolerance_mm
+                    )
+                )
+                if surface_dist is not None
+                else 0.0
             )
 
         results.append(lesion_result)
@@ -212,8 +212,8 @@ def compute_lesion_wise_metrics(
         haus_sum = sum(r["lesion_wise_haus95"] for r in results)
         # Each FP is penalized with the image diagonal distance.
         aggregate["lesion_wise_haus95"] = (
-            (haus_sum + num_fp * diagonal_mm) / denominator
-        )
+            haus_sum + num_fp * diagonal_mm
+        ) / denominator
 
     if "surface_dice" in metrics:
         aggregate["lesion_wise_surf_dice"] = (

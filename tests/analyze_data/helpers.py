@@ -1,4 +1,5 @@
 """Shared test helpers for tests/analyze_data."""
+
 import types
 from typing import Any
 

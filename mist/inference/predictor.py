@@ -1,4 +1,5 @@
 """Predictor class to chain together inference, TTA, and ensembling."""
+
 import contextlib
 from collections.abc import Callable
 

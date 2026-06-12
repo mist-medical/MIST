@@ -99,8 +99,6 @@ class DeepSupervisionLoss(nn.Module):
         ]
 
         # Calculate normalization factor (sum of weights).
-        total_weight = sum(
-            self.scaling_fn(k) for k in range(len(all_preds))
-        )
+        total_weight = sum(self.scaling_fn(k) for k in range(len(all_preds)))
 
         return sum(weighted_losses) / total_weight

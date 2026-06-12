@@ -100,9 +100,7 @@ class TestDeepSupervisionScaling:
     def test_custom_scaling_function(self):
         """Test using a user-defined scaling function (constant weights)."""
         # Force all weights to 1.0.
-        loss_fn = DeepSupervisionLoss(
-            DummySumLoss(), scaling_fn=lambda k: 1.0
-        )
+        loss_fn = DeepSupervisionLoss(DummySumLoss(), scaling_fn=lambda k: 1.0)
         y_true, y_pred, y_sup = _make_mock_data(num_supervisions=2)
 
         # (Sum(1s) + Sum(2s) + Sum(3s)) / 3.0.

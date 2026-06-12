@@ -46,13 +46,11 @@ class DiceLoss(SegmentationLoss):
         """
         y_true, y_pred = self.preprocess(y_true, y_pred)
 
-        numerator = torch.sum(
-            torch.square(y_true - y_pred), dim=self.spatial_dims_3d
-        )
+        numerator = torch.sum(torch.square(y_true - y_pred), dim=self.spatial_dims_3d)
         denominator = (
-            torch.sum(torch.square(y_true), dim=self.spatial_dims_3d) +
-            torch.sum(torch.square(y_pred), dim=self.spatial_dims_3d) +
-            self.avoid_division_by_zero
+            torch.sum(torch.square(y_true), dim=self.spatial_dims_3d)
+            + torch.sum(torch.square(y_pred), dim=self.spatial_dims_3d)
+            + self.avoid_division_by_zero
         )
 
         loss = numerator / denominator  # Per class.

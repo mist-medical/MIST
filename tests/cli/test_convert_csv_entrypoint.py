@@ -1,4 +1,5 @@
 """Tests for mist.cli.convert_csv_entrypoint."""
+
 import argparse
 from types import SimpleNamespace
 
@@ -11,50 +12,73 @@ from mist.cli import convert_csv_entrypoint as entry
 # _parse_convert_csv_args
 # ---------------------------------------------------------------------------
 
+
 class TestParseConvertCsvArgs:
     """Tests for convert_csv_entrypoint._parse_convert_csv_args."""
 
     def test_required_args_are_parsed(self, tmp_path):
         """--train-csv and --output are captured correctly."""
-        ns = entry._parse_convert_csv_args([
-            "--train-csv", str(tmp_path / "train.csv"),
-            "--output", str(tmp_path / "out"),
-        ])
+        ns = entry._parse_convert_csv_args(
+            [
+                "--train-csv",
+                str(tmp_path / "train.csv"),
+                "--output",
+                str(tmp_path / "out"),
+            ]
+        )
         assert ns.train_csv == str(tmp_path / "train.csv")
         assert ns.output == str(tmp_path / "out")
 
     def test_test_csv_defaults_to_none(self, tmp_path):
         """--test-csv is optional and defaults to None."""
-        ns = entry._parse_convert_csv_args([
-            "--train-csv", str(tmp_path / "train.csv"),
-            "--output", str(tmp_path / "out"),
-        ])
+        ns = entry._parse_convert_csv_args(
+            [
+                "--train-csv",
+                str(tmp_path / "train.csv"),
+                "--output",
+                str(tmp_path / "out"),
+            ]
+        )
         assert ns.test_csv is None
 
     def test_test_csv_is_parsed(self, tmp_path):
         """--test-csv is captured when provided."""
-        ns = entry._parse_convert_csv_args([
-            "--train-csv", str(tmp_path / "train.csv"),
-            "--output", str(tmp_path / "out"),
-            "--test-csv", str(tmp_path / "test.csv"),
-        ])
+        ns = entry._parse_convert_csv_args(
+            [
+                "--train-csv",
+                str(tmp_path / "train.csv"),
+                "--output",
+                str(tmp_path / "out"),
+                "--test-csv",
+                str(tmp_path / "test.csv"),
+            ]
+        )
         assert ns.test_csv == str(tmp_path / "test.csv")
 
     def test_num_workers_defaults_to_one(self, tmp_path):
         """--num-workers-conversion is optional and defaults to 1."""
-        ns = entry._parse_convert_csv_args([
-            "--train-csv", str(tmp_path / "train.csv"),
-            "--output", str(tmp_path / "out"),
-        ])
+        ns = entry._parse_convert_csv_args(
+            [
+                "--train-csv",
+                str(tmp_path / "train.csv"),
+                "--output",
+                str(tmp_path / "out"),
+            ]
+        )
         assert ns.num_workers_conversion == 1
 
     def test_num_workers_is_parsed(self, tmp_path):
         """--num-workers-conversion is captured as an integer."""
-        ns = entry._parse_convert_csv_args([
-            "--train-csv", str(tmp_path / "train.csv"),
-            "--output", str(tmp_path / "out"),
-            "--num-workers-conversion", "4",
-        ])
+        ns = entry._parse_convert_csv_args(
+            [
+                "--train-csv",
+                str(tmp_path / "train.csv"),
+                "--output",
+                str(tmp_path / "out"),
+                "--num-workers-conversion",
+                "4",
+            ]
+        )
         assert ns.num_workers_conversion == 4
 
     def test_missing_train_csv_exits(self, tmp_path):
@@ -65,14 +89,13 @@ class TestParseConvertCsvArgs:
     def test_missing_output_exits(self, tmp_path):
         """Omitting --output causes SystemExit."""
         with pytest.raises(SystemExit):
-            entry._parse_convert_csv_args(
-                ["--train-csv", str(tmp_path / "train.csv")]
-            )
+            entry._parse_convert_csv_args(["--train-csv", str(tmp_path / "train.csv")])
 
 
 # ---------------------------------------------------------------------------
 # run_convert_csv
 # ---------------------------------------------------------------------------
+
 
 class TestRunConvertCsv:
     """Tests for convert_csv_entrypoint.run_convert_csv."""
@@ -84,11 +107,11 @@ class TestRunConvertCsv:
         monkeypatch.setattr(
             entry,
             "convert_csv",
-            lambda train_csv, output, test_csv=None, max_workers=None: (
-                captured.update(
-                    train_csv=train_csv, output=output,
-                    test_csv=test_csv, max_workers=max_workers,
-                )
+            lambda train_csv, output, test_csv=None, max_workers=None: captured.update(
+                train_csv=train_csv,
+                output=output,
+                test_csv=test_csv,
+                max_workers=max_workers,
             ),
             raising=True,
         )
@@ -114,8 +137,8 @@ class TestRunConvertCsv:
         monkeypatch.setattr(
             entry,
             "convert_csv",
-            lambda train_csv, output, test_csv=None, max_workers=None: (
-                captured.update(test_csv=test_csv)
+            lambda train_csv, output, test_csv=None, max_workers=None: captured.update(
+                test_csv=test_csv
             ),
             raising=True,
         )
@@ -136,8 +159,8 @@ class TestRunConvertCsv:
         monkeypatch.setattr(
             entry,
             "convert_csv",
-            lambda train_csv, output, test_csv=None, max_workers=None: (
-                captured.update(max_workers=max_workers)
+            lambda train_csv, output, test_csv=None, max_workers=None: captured.update(
+                max_workers=max_workers
             ),
             raising=True,
         )
@@ -156,23 +179,24 @@ class TestRunConvertCsv:
 # convert_csv_entry (integration)
 # ---------------------------------------------------------------------------
 
+
 class TestConvertCsvEntry:
     """Tests for convert_csv_entrypoint.convert_csv_entry."""
 
     def test_parses_then_runs(self, monkeypatch):
         """convert_csv_entry calls _parse_convert_csv_args then run_convert_csv."""
         ns = SimpleNamespace(
-            train_csv="/train.csv", output="/out",
-            test_csv=None, num_workers_conversion=None,
+            train_csv="/train.csv",
+            output="/out",
+            test_csv=None,
+            num_workers_conversion=None,
         )
         called = {"parsed": False, "ran": False}
 
         monkeypatch.setattr(
             entry,
             "_parse_convert_csv_args",
-            lambda argv=None: (
-                called.__setitem__("parsed", True) or ns
-            ),
+            lambda argv=None: called.__setitem__("parsed", True) or ns,
             raising=True,
         )
         monkeypatch.setattr(
@@ -182,9 +206,7 @@ class TestConvertCsvEntry:
             raising=True,
         )
 
-        entry.convert_csv_entry(
-            ["--train-csv", "/train.csv", "--output", "/out"]
-        )
+        entry.convert_csv_entry(["--train-csv", "/train.csv", "--output", "/out"])
 
         assert called["parsed"] is True
         assert called["ran"] is True

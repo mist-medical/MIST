@@ -1,4 +1,5 @@
 """Utilities for the analyzer module."""
+
 import logging
 from pathlib import Path
 from typing import Any, Literal
@@ -14,9 +15,7 @@ from mist.models.nnunet.nnunet_utils import get_unet_params
 from mist.utils import io as io_utils
 
 
-def compare_headers(
-    header1: dict[str, Any], header2: dict[str, Any]
-) -> bool:
+def compare_headers(header1: dict[str, Any], header2: dict[str, Any]) -> bool:
     """Compare two image headers to see if they match.
 
     We compare the dimensions, origin, spacing, and direction of the two images.
@@ -35,9 +34,7 @@ def compare_headers(
         # origins don't match exactly, so floating-point tolerance here would
         # give a false sense of safety.
         is_valid = False
-    elif not np.allclose(
-        np.array(header1["spacing"]), np.array(header2["spacing"])
-    ):
+    elif not np.allclose(np.array(header1["spacing"]), np.array(header2["spacing"])):
         is_valid = False
     elif not np.allclose(header1["direction"], header2["direction"]):
         is_valid = False
@@ -148,10 +145,7 @@ def get_files_df(
 
         for image_type, identifying_strings in dataset_info["images"].items():
             matching_file = next(
-                (
-                    f for f in patient_files
-                    if any(s in f for s in identifying_strings)
-                ),
+                (f for f in patient_files if any(s in f for s in identifying_strings)),
                 None,
             )
             if matching_file:
@@ -167,18 +161,14 @@ def get_files_df(
 
         if train_or_test == "train":
             mask_file = next(
-                (
-                    f for f in patient_files
-                    if any(s in f for s in dataset_info["mask"])
-                ),
+                (f for f in patient_files if any(s in f for s in dataset_info["mask"])),
                 None,
             )
             if mask_file:
                 row_data["mask"] = mask_file
             else:
                 logging.warning(
-                    "Patient '%s': no mask file found "
-                    "(identifying strings: %s).",
+                    "Patient '%s': no mask file found (identifying strings: %s).",
                     patient_id,
                     dataset_info["mask"],
                 )
@@ -370,7 +360,7 @@ def get_best_patch_size(
         # Enforce MIN_LOW_RES_AXIS_PATCH_SIZE unless the image itself is
         # smaller, and never exceed the median image depth.
         min_lr = min(constants.MIN_LOW_RES_AXIS_PATCH_SIZE, median_lr)
-        lr_patch = int(np.clip(budget / (median_ip ** 2), min_lr, median_lr))
+        lr_patch = int(np.clip(budget / (median_ip**2), min_lr, median_lr))
 
         # Snap to the nearest multiple of the nnUNet cumulative low-res stride
         # so the decoder skip connections always match in spatial size.
@@ -405,7 +395,8 @@ def get_best_patch_size(
         target_mm = (remaining_budget * float(np.prod(free_spacings))) ** (1.0 / n)
 
         new_fixed = [
-            i for i in free_axes
+            i
+            for i in free_axes
             if (target_mm / target_spacing[i]) >= median_resampled_size[i]
         ]
         if not new_fixed:

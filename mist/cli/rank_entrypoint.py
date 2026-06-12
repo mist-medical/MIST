@@ -1,4 +1,5 @@
 """Command line tool to rank multiple evaluation result CSVs BraTS-style."""
+
 import argparse
 from argparse import ArgumentDefaultsHelpFormatter
 from pathlib import Path
@@ -21,7 +22,10 @@ def _parse_rank_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.arg(
-        "--results", type=str, nargs="+", required=True,
+        "--results",
+        type=str,
+        nargs="+",
+        required=True,
         help=(
             "Paths to two or more evaluation result CSVs (e.g., outputs of "
             "mist_evaluate). Each CSV must share the same id column and "
@@ -29,28 +33,37 @@ def _parse_rank_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.arg(
-        "--names", type=str, nargs="+", default=None,
+        "--names",
+        type=str,
+        nargs="+",
+        default=None,
         help=(
             "Optional friendly labels, one per --results CSV in the same "
             "order. Defaults to the file stem of each results CSV."
         ),
     )
     parser.arg(
-        "--output-csv", type=str, required=True,
+        "--output-csv",
+        type=str,
+        required=True,
         help=(
             "Path where the summary ranking CSV will be written. Columns: "
             "'strategy', 'average_rank'."
         ),
     )
     parser.arg(
-        "--output-detailed-csv", type=str, default=None,
+        "--output-detailed-csv",
+        type=str,
+        default=None,
         help=(
             "Optional path for a per-metric breakdown CSV containing mean "
             "ranks per strategy per metric column."
         ),
     )
     parser.arg(
-        "--metric-direction-overrides", type=str, default=None,
+        "--metric-direction-overrides",
+        type=str,
+        default=None,
         help=(
             "Optional path to a JSON file mapping metric column name to "
             "'higher' or 'lower'. Required only for columns whose suffix "
@@ -58,11 +71,15 @@ def _parse_rank_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.arg(
-        "--id-column", type=str, default="id",
+        "--id-column",
+        type=str,
+        default="id",
         help="Name of the column identifying each patient.",
     )
     parser.arg(
-        "--significance-csv", type=str, default=None,
+        "--significance-csv",
+        type=str,
+        default=None,
         help=(
             "Optional path for a pairwise significance matrix CSV. Entry "
             "[A, B] is the p-value for the one-sided Wilcoxon signed-rank "
@@ -84,9 +101,7 @@ def run_rank(ns: argparse.Namespace) -> None:
     """Load CSVs, run ranking, and write output(s)."""
     results_paths = [Path(p).expanduser().resolve() for p in ns.results]
     if len(results_paths) < 2:
-        raise ValueError(
-            "mist_rank requires at least two --results CSVs to rank."
-        )
+        raise ValueError("mist_rank requires at least two --results CSVs to rank.")
 
     if ns.names is not None:
         names = list(ns.names)
@@ -100,9 +115,7 @@ def run_rank(ns: argparse.Namespace) -> None:
 
     direction_overrides = None
     if ns.metric_direction_overrides is not None:
-        overrides_path = (
-            Path(ns.metric_direction_overrides).expanduser().resolve()
-        )
+        overrides_path = Path(ns.metric_direction_overrides).expanduser().resolve()
         direction_overrides = io.read_json_file(overrides_path)
         if not isinstance(direction_overrides, dict):
             raise ValueError(

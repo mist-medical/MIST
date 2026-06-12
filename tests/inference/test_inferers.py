@@ -1,4 +1,5 @@
 """Tests for MIST inferers."""
+
 from collections.abc import Callable
 from unittest.mock import patch, MagicMock
 import pytest
@@ -18,14 +19,14 @@ class DummyInferer(AbstractInferer):
     """Dummy Inferer for base class testing."""
 
     def infer(
-        self,
-        image: torch.Tensor, model: Callable[[torch.Tensor], torch.Tensor]
+        self, image: torch.Tensor, model: Callable[[torch.Tensor], torch.Tensor]
     ) -> torch.Tensor:
         return model(image)
 
 
 def test_dummy_inferer_call_and_repr():
     """Test __call__, __eq__, and __repr__ for AbstractInferer."""
+
     def model(x):
         return x + 1
 
@@ -51,9 +52,7 @@ def test_inferer_hash_and_eq():
 
 
 # SlidingWindowInferer tests.
-@patch(
-    "mist.inference.inferers.sliding_window.monai.inferers.sliding_window_inference"
-)
+@patch("mist.inference.inferers.sliding_window.monai.inferers.sliding_window_inference")
 def test_sliding_window_inferer_basic(mock_sw_inference):
     """Test basic functionality of SlidingWindowInferer."""
     image = torch.rand(1, 1, 32, 32, 32)
@@ -67,9 +66,7 @@ def test_sliding_window_inferer_basic(mock_sw_inference):
     mock_sw_inference.assert_called_once()
 
 
-@patch(
-    "mist.inference.inferers.sliding_window.monai.inferers.sliding_window_inference"
-)
+@patch("mist.inference.inferers.sliding_window.monai.inferers.sliding_window_inference")
 def test_sliding_window_inferer_sw_batch_size_passed_to_monai(mock_sw_inference):
     """sw_batch_size is forwarded to MONAI's sliding_window_inference."""
     image = torch.rand(1, 1, 32, 32, 32)
@@ -81,13 +78,25 @@ def test_sliding_window_inferer_sw_batch_size_passed_to_monai(mock_sw_inference)
     assert mock_sw_inference.call_args.kwargs["sw_batch_size"] == 4
 
 
-@pytest.mark.parametrize("kwargs,match", [
-    ({"patch_size": (16, 16)}, "patch_size must be a tuple of length 3"),
-    ({"patch_size": (16, -1, 16)}, "must be positive integers"),
-    ({"patch_size": (16, 16, 16), "sw_batch_size": 0}, "sw_batch_size must be a positive integer"),
-    ({"patch_size": (16, 16, 16), "patch_overlap": 1.5}, "patch_overlap must be in the range"),
-    ({"patch_size": (16, 16, 16), "patch_blend_mode": "linear"}, "Unsupported blend mode"),
-])
+@pytest.mark.parametrize(
+    "kwargs,match",
+    [
+        ({"patch_size": (16, 16)}, "patch_size must be a tuple of length 3"),
+        ({"patch_size": (16, -1, 16)}, "must be positive integers"),
+        (
+            {"patch_size": (16, 16, 16), "sw_batch_size": 0},
+            "sw_batch_size must be a positive integer",
+        ),
+        (
+            {"patch_size": (16, 16, 16), "patch_overlap": 1.5},
+            "patch_overlap must be in the range",
+        ),
+        (
+            {"patch_size": (16, 16, 16), "patch_blend_mode": "linear"},
+            "Unsupported blend mode",
+        ),
+    ],
+)
 def test_sliding_window_inferer_invalid_params(kwargs, match):
     """Test that invalid constructor arguments raise ValueError."""
     with pytest.raises(ValueError, match=match):
@@ -114,10 +123,12 @@ def test_registry_get_inferer_invalid_name():
 
 def test_registry_rejects_invalid_class():
     """Test that registering a non-Inferer class raises TypeError."""
+
     class NotAnInferer:
         pass
 
     with pytest.raises(TypeError, match="must inherit from AbstractInferer"):
+
         @register_inferer("invalid_class")
         class Invalid(NotAnInferer):
             pass
@@ -126,6 +137,7 @@ def test_registry_rejects_invalid_class():
 def test_registry_rejects_duplicate_name():
     """Test that duplicate registration raises KeyError."""
     with pytest.raises(KeyError, match="already registered"):
+
         @register_inferer("sliding_window")
         class DuplicateInferer(AbstractInferer):
             def infer(self, image, model):

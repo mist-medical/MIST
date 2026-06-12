@@ -48,7 +48,7 @@ def test_running_mean_reset_states():
 def test_running_mean_handles_ints_and_negatives():
     """Test that RunningMean handles integers and negatives correctly."""
     rm = tu.RunningMean()
-    for v in [2, -2, 4]:   # mix ints, negatives
+    for v in [2, -2, 4]:  # mix ints, negatives
         rm(v)
     # mean = (2 + (-2) + 4) / 3 = 4/3
     assert rm.count == 3
@@ -122,7 +122,6 @@ def test_raises_on_empty_split(tmp_path):
     with pytest.raises(ValueError, match="empty data"):
         tu.sanity_check_fold_data(
             fold=0,
-
             train_images=tr_img,
             train_labels=tr_lbl,
             val_images=va_img,
@@ -142,7 +141,6 @@ def test_raises_on_count_mismatch_train(tmp_path):
     with pytest.raises(ValueError, match="train_images .* != train_labels"):
         tu.sanity_check_fold_data(
             fold=0,
-
             train_images=tr_img,
             train_labels=tr_lbl,
             val_images=va_img,
@@ -157,7 +155,8 @@ def test_raises_on_duplicates_in_train_images(tmp_path):
     base.mkdir(parents=True, exist_ok=True)
     p1 = base / "p1.npy"
     p2 = base / "p2.npy"
-    p1.touch(); p2.touch()
+    p1.touch()
+    p2.touch()
 
     tr_img = [p1, p2, p1]  # Duplicate p1.
     tr_lbl = _make_paths(tmp_path, "labels/train", ["p1", "p2", "p1"])
@@ -168,7 +167,6 @@ def test_raises_on_duplicates_in_train_images(tmp_path):
     with pytest.raises(ValueError, match="duplicate entries in train_images"):
         tu.sanity_check_fold_data(
             fold=0,
-
             train_images=tr_img,
             train_labels=tr_lbl,
             val_images=va_img,
@@ -180,7 +178,7 @@ def test_raises_on_duplicates_in_train_images(tmp_path):
 def test_raises_on_train_val_image_leakage(tmp_path):
     """Test that train/val image leakage raises error."""
     # Same file appears in train and val images.
-    p_shared = (_make_paths(tmp_path, "images/train", ["p1"])[0])
+    p_shared = _make_paths(tmp_path, "images/train", ["p1"])[0]
     tr_img = [p_shared]
     tr_lbl = _make_paths(tmp_path, "labels/train", ["p1"])
     va_img = [p_shared]  # Intentional leak.
@@ -190,7 +188,6 @@ def test_raises_on_train_val_image_leakage(tmp_path):
     with pytest.raises(ValueError, match="overlap in images"):
         tu.sanity_check_fold_data(
             fold=0,
-
             train_images=tr_img,
             train_labels=tr_lbl,
             val_images=va_img,
@@ -211,7 +208,6 @@ def test_raises_on_label_stem_mismatch(tmp_path):
     with pytest.raises(ValueError, match="image/label stem mismatch.*training"):
         tu.sanity_check_fold_data(
             fold=0,
-
             train_images=tr_img,
             train_labels=tr_lbl,
             val_images=va_img,
@@ -251,7 +247,6 @@ def test_raises_on_dtm_count_mismatch(tmp_path):
     with pytest.raises(ValueError, match="train_dtms .* != train_images"):
         tu.sanity_check_fold_data(
             fold=0,
-
             train_images=tr_img,
             train_labels=tr_lbl,
             val_images=va_img,
@@ -274,7 +269,8 @@ def test_raises_on_dtm_duplicates(tmp_path):
     d_base.mkdir(parents=True, exist_ok=True)
     d1 = d_base / "p1.npy"
     d2 = d_base / "p2.npy"
-    d1.touch(); d2.touch()
+    d1.touch()
+    d2.touch()
 
     # Length matches train_images (2) but contains a duplicate.
     dtms = [d1, d1]
@@ -282,7 +278,6 @@ def test_raises_on_dtm_duplicates(tmp_path):
     with pytest.raises(ValueError, match="duplicate entries in DTMs"):
         tu.sanity_check_fold_data(
             fold=0,
-
             train_images=tr_img,
             train_labels=tr_lbl,
             val_images=va_img,
@@ -303,7 +298,6 @@ def test_raises_on_dtm_stem_mismatch(tmp_path):
     with pytest.raises(ValueError, match="image/DTM stem mismatch"):
         tu.sanity_check_fold_data(
             fold=0,
-
             train_images=tr_img,
             train_labels=tr_lbl,
             val_images=va_img,
@@ -325,12 +319,10 @@ def test_raises_on_val_image_label_count_mismatch(tmp_path):
     va_lbl = _make_paths(tmp_path, "labels/val", val_lbl_ids)
 
     with pytest.raises(
-        ValueError,
-        match=r"mismatch: val_images \(\d+\) != val_labels \(\d+\)"
+        ValueError, match=r"mismatch: val_images \(\d+\) != val_labels \(\d+\)"
     ):
         tu.sanity_check_fold_data(
             fold=0,
-
             train_images=tr_img,
             train_labels=tr_lbl,
             val_images=va_img,
@@ -351,7 +343,6 @@ def test_raises_on_duplicate_train_labels(tmp_path):
     with pytest.raises(ValueError, match="duplicate entries in train_labels"):
         tu.sanity_check_fold_data(
             fold=0,
-
             train_images=tr_img,
             train_labels=tr_lbl,
             val_images=va_img,
@@ -372,7 +363,6 @@ def test_raises_on_duplicate_val_images(tmp_path):
     with pytest.raises(ValueError, match="duplicate entries in val_images"):
         tu.sanity_check_fold_data(
             fold=0,
-
             train_images=tr_img,
             train_labels=tr_lbl,
             val_images=va_img,
@@ -393,7 +383,6 @@ def test_raises_on_duplicate_val_labels(tmp_path: Path):
     with pytest.raises(ValueError, match="duplicate entries in val_labels"):
         tu.sanity_check_fold_data(
             fold=0,
-
             train_images=tr_img,
             train_labels=tr_lbl,
             val_images=va_img,
@@ -420,7 +409,6 @@ def test_raises_on_label_overlap(tmp_path):
     with pytest.raises(ValueError, match=r"train/val overlap in labels"):
         tu.sanity_check_fold_data(
             fold=0,
-
             train_images=tr_img,
             train_labels=tr_lbl,
             val_images=va_img,
@@ -447,7 +435,6 @@ def test_raises_on_validation_stem_mismatch(tmp_path):
     ):
         tu.sanity_check_fold_data(
             fold=0,
-
             train_images=tr_img,
             train_labels=tr_lbl,
             val_images=va_img,

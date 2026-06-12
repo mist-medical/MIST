@@ -12,6 +12,7 @@ from mist.models.nnunet.nnunet_constants import NNUnetConstants as constants
 # Shared fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def base_kwargs():
     """Minimal valid kwargs for constructing an MGNet."""
@@ -35,6 +36,7 @@ def small_input():
 # _generate_sparse_w_sequence
 # ---------------------------------------------------------------------------
 
+
 class TestGenerateSparseWSequence:
     """Tests for MGNet._generate_sparse_w_sequence."""
 
@@ -55,7 +57,17 @@ class TestGenerateSparseWSequence:
 
     def test_max_height_four(self):
         assert self.model._generate_sparse_w_sequence(4) == [
-            1, 2, 1, 3, 1, 4, 1, 3, 1, 2, 1
+            1,
+            2,
+            1,
+            3,
+            1,
+            4,
+            1,
+            3,
+            1,
+            2,
+            1,
         ]
 
     @pytest.mark.parametrize("max_height", range(1, 6))
@@ -74,6 +86,7 @@ class TestGenerateSparseWSequence:
 # ---------------------------------------------------------------------------
 # __init__ — construction
 # ---------------------------------------------------------------------------
+
 
 class TestMGNetInit:
     """Tests for MGNet.__init__ covering topology and attribute setup."""
@@ -166,6 +179,7 @@ class TestMGNetInit:
 # _make_block
 # ---------------------------------------------------------------------------
 
+
 class TestMakeBlock:
     """Tests for MGNet._make_block."""
 
@@ -176,8 +190,10 @@ class TestMakeBlock:
     def test_returns_module_for_normal_channels(self):
         """Small in_channels produces a plain block (no projection)."""
         block = self.model._make_block(
-            in_channels=32, out_channels=32,
-            kernel_size=[3, 3, 3], stride=[1, 1, 1],
+            in_channels=32,
+            out_channels=32,
+            kernel_size=[3, 3, 3],
+            stride=[1, 1, 1],
         )
         assert isinstance(block, torch.nn.Module)
         assert not isinstance(block, torch.nn.Sequential)
@@ -223,6 +239,7 @@ class TestMakeBlock:
 # _make_upsample
 # ---------------------------------------------------------------------------
 
+
 class TestMakeUpsample:
     """Tests for MGNet._make_upsample."""
 
@@ -257,6 +274,7 @@ class TestMakeUpsample:
 # _init_weights
 # ---------------------------------------------------------------------------
 
+
 class TestInitWeights:
     """Tests for MGNet._init_weights (verified via model construction)."""
 
@@ -287,6 +305,7 @@ class TestInitWeights:
 # ---------------------------------------------------------------------------
 # forward
 # ---------------------------------------------------------------------------
+
 
 class TestMGNetForward:
     """Tests for MGNet.forward covering all return paths."""

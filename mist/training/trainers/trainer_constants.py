@@ -7,6 +7,7 @@ import dataclasses
 @dataclasses.dataclass(frozen=True)
 class TrainerConstants:
     """Configuration constants for base trainer."""
+
     # Epsilon value for numerical stability in optimizers.
     OPTIMIZER_EPS: float = 1e-8
 
