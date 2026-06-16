@@ -1,41 +1,59 @@
-# Copyright (c) MIST Imaging LLC.
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#     http://www.apache.org/licenses/LICENSE-2.0
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 name: Publish Docker Images
 
 on:
   workflow_dispatch:
+    inputs:
+      cuda_variant:
+        description: "CUDA variant to build"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - cuda12.8
+          - cuda13.2
   workflow_run:
     workflows: [Upload Python Package]
     types: [completed]
 
 jobs:
   push_to_registry:
-    name: Push Docker image to Docker Hub
+    name: Push Docker image (CUDA ${{ matrix.cuda_version }})
     runs-on: ubuntu-latest
+    if: |
+      (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') &&
+      (github.event.inputs.cuda_variant == '' || github.event.inputs.cuda_variant == 'all' || github.event.inputs.cuda_variant == format('cuda{0}', matrix.cuda_version))
+    strategy:
+      matrix:
+        include:
+          - cuda_version: "12.8"
+            pytorch_image: pytorch/pytorch:2.11.0-cuda12.8-cudnn9-runtime
+            tag_suffix: "-cuda12.8"
+            latest: "true"
+          - cuda_version: "13.2"
+            pytorch_image: pytorch/pytorch:2.12.0-cuda13.2-cudnn9-runtime
+            tag_suffix: "-cuda13.2"
+            latest: "false"
+
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: '3.x'
 
       - name: Extract and transform version from pyproject.toml
         id: extract_version
         run: |
           VERSION=$(grep -m 1 version ./pyproject.toml | tr -s ' ' | tr -d '"' | tr -d "'" | cut -d' ' -f3)
-          # Replace "-alpha" with "a0", "-beta" with "b0", and so on
           DOCKER_VERSION=$(echo $VERSION | sed 's/-alpha/a0/' | sed 's/-beta/b0/' | sed 's/-rc/rc0/')
           echo "DOCKER_VERSION=$DOCKER_VERSION" >> $GITHUB_ENV
+
+      - name: Set image tags
+        id: tags
+        run: |
+          TAGS="mistmedical/mist:${{ env.DOCKER_VERSION }}${{ matrix.tag_suffix }}"
+          if [ "${{ matrix.latest }}" = "true" ]; then
+            TAGS="${TAGS},mistmedical/mist:latest"
+          fi
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
 
       - name: Log in to Docker Hub
         uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
@@ -48,7 +66,7 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
+          build-args: |
+            PYTORCH_IMAGE=${{ matrix.pytorch_image }}
           push: true
-          tags: |
-            mistmedical/mist:${{ env.DOCKER_VERSION }}
-            mistmedical/mist:latest
+          tags: ${{ steps.tags.outputs.tags }}
