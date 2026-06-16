@@ -31,19 +31,10 @@ pip install -e ".[train]"    # full
 pip install -e .             # inference only
 ```
 
-**Docker** (NVIDIA GPU required):
+**Docker** (NVIDIA GPU required, driver ≥ 525.x):
 ```bash
-# CUDA 12.8 (recommended — widest driver compatibility)
 docker pull mistmedical/mist:latest
-
-# CUDA 13.2 (newer drivers — Blackwell / Hopper / Ada Lovelace)
-docker pull mistmedical/mist:latest-cuda13.2
 ```
-
-| Tag | PyTorch | CUDA | Min driver |
-|---|---|---|---|
-| `latest`, `<version>-cuda12.8` | 2.11.0 | 12.8 | 525.x |
-| `<version>-cuda13.2` | 2.12.0 | 13.2 | 570.x |
 
 ## Quick Start
 
@@ -146,11 +137,8 @@ Full documentation, including configuration reference and advanced topics, is at
 
 ## What's New
 
-* June 2026 — **Multi-CUDA Docker images** — official images now ship in two
-  variants: `latest` / `<version>-cuda12.8` (PyTorch 2.11.0, widest driver
-  compatibility) and `<version>-cuda13.2` (PyTorch 2.12.0, for newer Hopper /
-  Ada / Blackwell GPUs). Requires NVIDIA driver ≥ 525.x for CUDA 12.8 or
-  ≥ 570.x for CUDA 13.2.
+* June 2026 — **Official Docker image** — `mistmedical/mist:latest` ships
+  PyTorch 2.11.0 on CUDA 12.8. Requires NVIDIA driver ≥ 525.x.
 * June 2026 — **2.0.1 release candidate** — BF16 automatic mixed precision
   replaces FP16 throughout training and inference, reducing memory use and
   eliminating gradient loss scaling. Sliding-window inference gains a tunable
