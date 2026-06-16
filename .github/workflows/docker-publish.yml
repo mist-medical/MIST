@@ -20,9 +20,7 @@ jobs:
   push_to_registry:
     name: Push Docker image (CUDA ${{ matrix.cuda_version }})
     runs-on: ubuntu-latest
-    if: |
-      (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') &&
-      (github.event.inputs.cuda_variant == '' || github.event.inputs.cuda_variant == 'all' || github.event.inputs.cuda_variant == format('cuda{0}', matrix.cuda_version))
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     strategy:
       matrix:
         include:
@@ -39,14 +37,27 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v4
 
+      - name: Check variant filter
+        id: filter
+        run: |
+          VARIANT="${{ github.event.inputs.cuda_variant }}"
+          CUDA="${{ matrix.cuda_version }}"
+          if [ -z "$VARIANT" ] || [ "$VARIANT" = "all" ] || [ "$VARIANT" = "cuda${CUDA}" ]; then
+            echo "skip=false" >> $GITHUB_OUTPUT
+          else
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Skipping CUDA ${CUDA} — variant filter is '${VARIANT}'"
+          fi
+
       - name: Extract and transform version from pyproject.toml
-        id: extract_version
+        if: steps.filter.outputs.skip != 'true'
         run: |
           VERSION=$(grep -m 1 version ./pyproject.toml | tr -s ' ' | tr -d '"' | tr -d "'" | cut -d' ' -f3)
           DOCKER_VERSION=$(echo $VERSION | sed 's/-alpha/a0/' | sed 's/-beta/b0/' | sed 's/-rc/rc0/')
           echo "DOCKER_VERSION=$DOCKER_VERSION" >> $GITHUB_ENV
 
       - name: Set image tags
+        if: steps.filter.outputs.skip != 'true'
         id: tags
         run: |
           TAGS="mistmedical/mist:${{ env.DOCKER_VERSION }}${{ matrix.tag_suffix }}"
@@ -56,12 +67,14 @@ jobs:
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
 
       - name: Log in to Docker Hub
+        if: steps.filter.outputs.skip != 'true'
         uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build and push Docker image
+        if: steps.filter.outputs.skip != 'true'
         uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
         with:
           context: .
