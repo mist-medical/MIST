@@ -44,13 +44,30 @@ pip install mist-medical
 
 ## What's New
 
+* June 2026 — **Official Docker image** — `mistmedical/mist:latest` ships a
+  CUDA 12.8 build. Requires NVIDIA driver ≥ 525.x.
+* June 2026 — **2.0.1 release candidate** — BF16 automatic mixed precision
+  replaces FP16 throughout training and inference, reducing memory use and
+  eliminating gradient loss scaling. Sliding-window inference gains a tunable
+  `sw_batch_size` parameter. `mist_rank` adds pairwise Wilcoxon significance
+  testing via `--significance-csv`. Several targeted memory-reduction fixes
+  land across the inference stack.
+* June 2026 — **Multi-model ensembling** — `mist_ensemble` combines discrete
+  NIfTI predictions from two or more separately trained models into a single
+  consensus segmentation via STAPLE (`--ensemble-backend staple`, default) or
+  majority vote (`--ensemble-backend majority_vote`). Works for single-class and
+  multi-class label maps.
+* May 2026 — **2.0.0 release candidate** — BraTS-style multi-strategy ranking
+  (`mist_rank`), a structured postprocessing transform registry with LLM-readable
+  metadata (`describe_transforms`), and full pathlib + PEP 585/604 modernization
+  across the codebase.
 * April 2026 — **CPU inference support** — `mist_predict` now runs on any
   machine, including Macs and laptops without an NVIDIA GPU. Install with
   `pip install mist-medical` (no GPU required).
-* March 2026 — **Resume training** — interrupted runs can be continued from the
-  last checkpoint with `--resume`, with atomic checkpointing to prevent corruption.
-* March 2026 — **GPU-aware automatic patch size** — the analysis step now derives
-  the patch size from available GPU memory, so the default configuration is
+* March 2026 — **Resume training** — interrupted runs can be continued from the last
+  checkpoint with `--resume`, with atomic checkpointing to prevent corruption.
+* March 2026 — **GPU-aware automatic patch size** — the analysis step now derives the
+  patch size from available GPU memory, so the default configuration is
   hardware-appropriate without manual tuning.
 * March 2026 — **Transfer learning** — initialize encoders from pretrained weights
   with `--pretrained-weights`, and average model weights across folds with
