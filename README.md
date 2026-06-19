@@ -1,8 +1,8 @@
 Medical Imaging Segmentation Toolkit
 ===
 
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/mist-medical/MIST/python-publish.yml)
-[![Documentation Status](https://readthedocs.org/projects/mist-medical/badge/?version=latest)](https://mist-medical.readthedocs.io/en/latest/?badge=latest)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/mist-medical/MIST/python-publish.yml?style=flat)
+[![Docs](https://img.shields.io/badge/docs-passing-brightgreen?style=flat)](https://mist-medical.readthedocs.io/en/latest/)
 ![GitHub Repo stars](https://img.shields.io/github/stars/mist-medical/MIST?style=flat)
 ![Coverage](coverage.svg)
 
