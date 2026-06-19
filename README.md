@@ -137,8 +137,8 @@ Full documentation, including configuration reference and advanced topics, is at
 
 ## What's New
 
-* June 2026 — **Official Docker image** — `mistmedical/mist:latest` ships
-  PyTorch 2.11.0 on CUDA 12.8. Requires NVIDIA driver ≥ 525.x.
+* June 2026 — **Official Docker image** — `mistmedical/mist:latest` ships a
+  CUDA 12.8 build. Requires NVIDIA driver ≥ 525.x.
 * June 2026 — **2.0.1 release candidate** — BF16 automatic mixed precision
   replaces FP16 throughout training and inference, reducing memory use and
   eliminating gradient loss scaling. Sliding-window inference gains a tunable
