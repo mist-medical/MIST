@@ -264,7 +264,9 @@ def add_train_args(parser: ArgParser) -> None:
         type=str,
         default=None,
         help="Path to the source model's config.json for encoder compatibility "
-        "validation. Required when --pretrained-weights is set.",
+        "validation. Strongly recommended with --pretrained-weights; if "
+        "omitted, MIST warns and skips the compatibility check (weights still "
+        "load - incompatible tensors are skipped).",
     )
     g.add_argument(
         "--input-channel-strategy",
