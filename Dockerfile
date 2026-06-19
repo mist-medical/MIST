@@ -1,4 +1,4 @@
-ARG PYTORCH_IMAGE=pytorch/pytorch:2.11.0-cuda12.8-cudnn9-runtime
+ARG PYTORCH_IMAGE=pytorch/pytorch:2.9.1-cuda12.8-cudnn9-runtime
 FROM ${PYTORCH_IMAGE}
 
 # Set environment variables for non-interactive installation.
