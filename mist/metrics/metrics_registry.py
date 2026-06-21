@@ -212,3 +212,37 @@ class LesionWiseSurfaceDice(Metric):
             ),
         )
         return result.get("lesion_wise_surf_dice", self.best)
+
+
+@register_metric
+class LesionWiseF1(Metric):
+    """Lesion detection F1 score (harmonic mean of precision and recall).
+
+    A GT lesion above the volume threshold is a true positive when a predicted
+    component overlaps its dilated footprint; undetected GT lesions are false
+    negatives and unmatched predicted components are false positives.
+    """
+
+    name = "lesion_wise_f1"
+    best = 1.0
+    worst = 0.0
+
+    def __call__(self, truth, prediction, spacing, **kwargs):
+        result = lesion_wise_metrics.compute_lesion_wise_metrics(
+            prediction,
+            truth,
+            spacing=spacing,
+            metrics=["f1"],
+            reduction="mean",
+            min_lesion_volume=kwargs.get(
+                "min_lesion_volume", LesionWiseMetricsConstants.MIN_LESION_VOLUME
+            ),
+            dilation_iters=kwargs.get(
+                "dilation_iters", LesionWiseMetricsConstants.DILATION_ITERS
+            ),
+            gt_consolidation_iters=kwargs.get(
+                "gt_consolidation_iters",
+                LesionWiseMetricsConstants.GT_CONSOLIDATION_ITERS,
+            ),
+        )
+        return result.get("lesion_wise_f1", self.best)

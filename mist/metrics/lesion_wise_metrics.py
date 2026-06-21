@@ -76,7 +76,10 @@ def compute_lesion_wise_metrics(
         gt: Binary ground truth mask.
         spacing: Voxel spacing in mm (dx, dy, dz).
         metrics: Metrics to compute. Supported values: 'dice', 'haus95',
-            'surface_dice'.
+            'surface_dice', 'f1'. 'f1' is the lesion *detection* F1 score
+            (2*TP / (2*TP + FP + FN), where TP are detected GT lesions, FN are
+            undetected GT lesions, and FP are unmatched predicted components);
+            it is only produced under reduction='mean'.
         min_lesion_volume: Minimum GT lesion volume in mm³ to include.
             Lesions below this threshold are excluded from analysis.
         surface_dice_tolerance_mm: Tolerance in mm for surface Dice.
@@ -218,6 +221,16 @@ def compute_lesion_wise_metrics(
     if "surface_dice" in metrics:
         aggregate["lesion_wise_surf_dice"] = (
             sum(r["lesion_wise_surf_dice"] for r in results) / denominator
+        )
+
+    if "f1" in metrics:
+        # Lesion detection F1. TP = detected GT lesions, FN = undetected GT
+        # lesions, FP = predicted components matched to no GT lesion.
+        true_positives = sum(1 for r in results if r["detected"])
+        false_negatives = num_gt_above_thresh - true_positives
+        f1_denominator = 2 * true_positives + num_fp + false_negatives
+        aggregate["lesion_wise_f1"] = (
+            2 * true_positives / f1_denominator if f1_denominator > 0 else 0.0
         )
 
     return aggregate

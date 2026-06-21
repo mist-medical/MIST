@@ -669,6 +669,7 @@ include and which metrics to compute, along with any metric-specific parameters:
 | `lesion_wise_dice`     | BraTS-style lesion-wise Dice                  | see below |
 | `lesion_wise_haus95`   | BraTS-style lesion-wise HD95 (mm)             | see below |
 | `lesion_wise_surf_dice`| BraTS-style lesion-wise surface Dice          | see below |
+| `lesion_wise_f1`       | Lesion **detection** F1 (harmonic mean of precision/recall) | see below |
 
 #### Lesion-wise metric parameters
 
@@ -677,6 +678,14 @@ and aggregate using `sum(scores) / (num_gt_above_thresh + num_fp)` — the same
 formula used by the BraTS (Brain Tumor Segmentation) challenge. This scoring
 penalizes both missed lesions and spurious predictions equally, regardless of
 lesion size.
+
+`lesion_wise_f1` instead scores lesion **detection**: a GT lesion above the
+volume threshold is a true positive (TP) when a predicted component overlaps its
+dilated footprint, undetected GT lesions are false negatives (FN), and unmatched
+predicted components are false positives (FP), giving `F1 = 2·TP / (2·TP + FP +
+FN)`. It uses the same `min_lesion_volume`, `dilation_iters`, and
+`gt_consolidation_iters` parameters below (but not `tolerance`), and is the
+detection metric used by the BraTS 2026 Brain Metastases challenge.
 
 | Parameter                 | Default | Description |
 |---------------------------|---------|-------------|

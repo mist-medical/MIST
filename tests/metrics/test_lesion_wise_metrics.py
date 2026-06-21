@@ -471,3 +471,88 @@ def test_surface_distance_value_error_falls_back_to_worst_case():
     assert result["lesion_wise_haus95"] == pytest.approx(diagonal)
     # Surface Dice: 0.0 fallback / 1
     assert result["lesion_wise_surf_dice"] == pytest.approx(0.0)
+
+
+# ---------------------------------------------------------------------------
+# Lesion detection F1
+# ---------------------------------------------------------------------------
+
+LESION_C = (slice(8, 11), slice(8, 11), slice(8, 11))
+
+
+def test_f1_perfect_detection_is_one():
+    """All GT lesions detected with no FP → F1 == 1.0."""
+    gt = make_vol(LESION_A, LESION_B)
+    pred = make_vol(LESION_A, LESION_B)
+    result = compute_lesion_wise_metrics(
+        pred, gt, SPACING, metrics=["f1"], min_lesion_volume=0.0, dilation_iters=1,
+    )
+    # TP=2, FP=0, FN=0 → 2*2 / (2*2 + 0 + 0) = 1.0
+    assert result["lesion_wise_f1"] == pytest.approx(1.0)
+
+
+def test_f1_false_negative():
+    """One undetected GT lesion lowers F1 (TP=1, FN=1, FP=0)."""
+    gt = make_vol(LESION_A, LESION_B)
+    pred = make_vol(LESION_A)
+    result = compute_lesion_wise_metrics(
+        pred, gt, SPACING, metrics=["f1"], min_lesion_volume=0.0, dilation_iters=1,
+    )
+    # 2*1 / (2*1 + 0 + 1) = 2/3
+    assert result["lesion_wise_f1"] == pytest.approx(2.0 / 3.0)
+
+
+def test_f1_false_positive():
+    """One spurious predicted lesion lowers F1 (TP=1, FP=1, FN=0)."""
+    gt = make_vol(LESION_A)
+    pred = make_vol(LESION_A, LESION_B)
+    result = compute_lesion_wise_metrics(
+        pred, gt, SPACING, metrics=["f1"], min_lesion_volume=0.0, dilation_iters=1,
+    )
+    # 2*1 / (2*1 + 1 + 0) = 2/3
+    assert result["lesion_wise_f1"] == pytest.approx(2.0 / 3.0)
+
+
+def test_f1_false_negative_and_false_positive():
+    """FN and FP together: TP=1, FN=1, FP=1 → F1 = 0.5."""
+    gt = make_vol(LESION_A, LESION_B)
+    pred = make_vol(LESION_A, LESION_C)  # detects A, misses B, FP at C
+    result = compute_lesion_wise_metrics(
+        pred, gt, SPACING, metrics=["f1"], min_lesion_volume=0.0, dilation_iters=1,
+    )
+    # 2*1 / (2*1 + 1 + 1) = 0.5
+    assert result["lesion_wise_f1"] == pytest.approx(0.5)
+
+
+def test_f1_all_false_positive_is_zero():
+    """No detectable GT but a predicted lesion → all FP → F1 == 0.0."""
+    gt = make_vol(LESION_A)
+    pred = make_vol(LESION_B)
+    result = compute_lesion_wise_metrics(
+        pred, gt, SPACING, metrics=["f1"],
+        min_lesion_volume=1000.0,  # filter all GT lesions
+        dilation_iters=1,
+    )
+    # num_gt_above_thresh=0 → TP=0, FN=0, FP=1 → 0 / (0 + 1 + 0) = 0.0
+    assert result["lesion_wise_f1"] == pytest.approx(0.0)
+
+
+def test_f1_empty_gt_and_pred_returns_empty():
+    """No GT and no prediction → {} (metric excluded, no penalty)."""
+    result = compute_lesion_wise_metrics(
+        make_vol(), make_vol(), SPACING, metrics=["f1"], min_lesion_volume=0.0,
+    )
+    assert result == {}
+    assert "lesion_wise_f1" not in result
+
+
+def test_f1_alongside_other_metrics():
+    """F1 is reported together with overlap metrics in one call."""
+    gt = make_vol(LESION_A, LESION_B)
+    pred = make_vol(LESION_A)
+    result = compute_lesion_wise_metrics(
+        pred, gt, SPACING, metrics=["dice", "f1"],
+        min_lesion_volume=0.0, dilation_iters=1,
+    )
+    assert result["lesion_wise_dice"] == pytest.approx(0.5)
+    assert result["lesion_wise_f1"] == pytest.approx(2.0 / 3.0)
