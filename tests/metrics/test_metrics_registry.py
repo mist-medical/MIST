@@ -48,6 +48,7 @@ def test_registry_contains_all_metrics():
         "lesion_wise_dice",
         "lesion_wise_haus95",
         "lesion_wise_surf_dice",
+        "lesion_wise_f1",
     }
     assert expected_names.issubset(set(METRIC_REGISTRY.keys()))
 
@@ -163,6 +164,36 @@ def test_lesion_wise_surf_dice_perfect_overlap(lesion_masks):
     metric = get_metric("lesion_wise_surf_dice")
     result = metric(gt, pred, spacing, min_lesion_volume=0.0, dilation_iters=1)
     assert result == pytest.approx(1.0)
+
+
+def test_lesion_wise_f1_registered():
+    """lesion_wise_f1 should be in the metric registry."""
+    assert "lesion_wise_f1" in METRIC_REGISTRY
+
+
+def test_lesion_wise_f1_perfect_overlap(lesion_masks):
+    """lesion_wise_f1 returns 1.0 when every GT lesion is detected with no FP."""
+    gt, pred, spacing = lesion_masks
+    metric = get_metric("lesion_wise_f1")
+    result = metric(gt, pred, spacing, min_lesion_volume=0.0, dilation_iters=1)
+    assert result == pytest.approx(1.0)
+
+
+def test_lesion_wise_f1_all_gt_filtered_with_fp_returns_zero(lesion_masks):
+    """All GT filtered but pred non-empty → all FP → F1 = 0.0."""
+    gt, pred, spacing = lesion_masks
+    metric = get_metric("lesion_wise_f1")
+    result = metric(gt, pred, spacing, min_lesion_volume=10000.0, dilation_iters=1)
+    assert result == pytest.approx(0.0)
+
+
+def test_lesion_wise_f1_empty_returns_best(lesion_masks):
+    """Empty GT and pred → {} → registry returns best (no-penalty convention)."""
+    _, pred, spacing = lesion_masks
+    metric = get_metric("lesion_wise_f1")
+    empty = np.zeros_like(pred)
+    result = metric(empty, empty, spacing, min_lesion_volume=0.0, dilation_iters=1)
+    assert result == metric.best
 
 
 def test_lesion_wise_dice_min_volume_kwarg_forwarded(lesion_masks):

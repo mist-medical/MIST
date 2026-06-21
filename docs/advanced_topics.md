@@ -1294,6 +1294,7 @@ and parameters — there is no requirement to evaluate every class the same way.
 | BraTS-style lesion-wise Dice | `lesion_wise_dice` | see [lesion-wise parameters](usage.md#lesion-wise-metric-parameters) |
 | BraTS-style lesion-wise HD95 | `lesion_wise_haus95` | see [lesion-wise parameters](usage.md#lesion-wise-metric-parameters) |
 | BraTS-style lesion-wise surface Dice | `lesion_wise_surf_dice` | see [lesion-wise parameters](usage.md#lesion-wise-metric-parameters) |
+| Lesion detection F1 | `lesion_wise_f1` | see [lesion-wise parameters](usage.md#lesion-wise-metric-parameters) |
 
 ### Example: different metrics per class
 
