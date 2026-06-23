@@ -33,8 +33,10 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          build-args: |
-            PYTORCH_IMAGE=pytorch/pytorch:2.11.0-cuda12.8-cudnn9-runtime
+          # PYTORCH_IMAGE is intentionally not overridden here so the base image
+          # stays pinned in a single place: the ARG default in ./Dockerfile
+          # (torch 2.9.1). torch 2.11.0 crashes multi-GPU DDP startup, so do not
+          # bump the base image from this workflow.
           push: true
           tags: |
             mistmedical/mist:${{ env.DOCKER_VERSION }}
