@@ -2,8 +2,8 @@
 
 from unittest import mock
 
-import torch
 import pytest
+import torch
 
 from mist.loss_functions.losses.cl_dice import CLDice
 

@@ -1,7 +1,7 @@
 """Registry for inference strategies in MIST."""
 
-from typing import TypeVar
 from collections.abc import Callable
+from typing import TypeVar
 
 from mist.inference.inferers.base import AbstractInferer
 

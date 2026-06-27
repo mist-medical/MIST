@@ -1,14 +1,14 @@
 """Base trainer class for MIST."""
 
-from typing import Any
-from abc import ABC, abstractmethod
-from pathlib import Path
 import contextlib
 import copy
-import os
 import math
+import os
 import random
 import warnings
+from abc import ABC, abstractmethod
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -21,30 +21,30 @@ from torch import nn
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
 
-from mist.utils import io, progress_bar
-from mist.utils.console import (
-    print_section_header,
-    print_info,
-    print_warning,
-    print_error,
-    print_success,
-)
-from mist.models.model_registry import get_model_from_registry
-from mist.models.model_loader import (
-    load_pretrained_encoder,
-    validate_encoder_compatibility,
-)
-from mist.loss_functions.loss_registry import get_loss
-from mist.loss_functions.deep_supervision_wrapper import DeepSupervisionLoss
-from mist.loss_functions.losses.dice import DiceLoss
 from mist.loss_functions.alpha_schedulers import (
     get_alpha_scheduler,
     get_default_scheduler_config,
 )
+from mist.loss_functions.deep_supervision_wrapper import DeepSupervisionLoss
+from mist.loss_functions.loss_registry import get_loss
+from mist.loss_functions.losses.dice import DiceLoss
+from mist.models.model_loader import (
+    load_pretrained_encoder,
+    validate_encoder_compatibility,
+)
+from mist.models.model_registry import get_model_from_registry
+from mist.training import training_utils
 from mist.training.lr_schedulers.lr_scheduler_registry import get_lr_scheduler
 from mist.training.optimizers.optimizer_registry import get_optimizer
-from mist.training import training_utils
 from mist.training.trainers.trainer_constants import TrainerConstants
+from mist.utils import io, progress_bar
+from mist.utils.console import (
+    print_error,
+    print_info,
+    print_section_header,
+    print_success,
+    print_warning,
+)
 
 
 class BaseTrainer(ABC):
@@ -381,7 +381,7 @@ class BaseTrainer(ABC):
         if not pretrained_config_path:
             warnings.warn(
                 "--pretrained-weights is set but --pretrained-config was not "
-                "provided. Skipping encoder compatibility validation."
+                "provided. Skipping encoder compatibility validation.", stacklevel=2
             )
             return
 

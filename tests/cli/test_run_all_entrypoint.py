@@ -2,11 +2,11 @@
 
 import argparse
 from pathlib import Path
+
 import pytest
 
 # MIST imports.
 import mist.cli.run_all_entrypoint as entry
-
 
 # pylint: disable=protected-access
 # =============================================================================

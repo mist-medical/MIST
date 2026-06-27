@@ -1,19 +1,20 @@
 """Entrypoint for running the MIST training pipeline."""
 
+import argparse
 from argparse import ArgumentDefaultsHelpFormatter
 from pathlib import Path
-import argparse
+
 import pandas as pd
 import torch
 
 # MIST imports.
 from mist.cli import args as argmod
-from mist.utils import io
-from mist.utils.console import print_warning, print_error
-from mist.training.trainers.patch_3d_trainer import Patch3DTrainer
-from mist.inference.inference_runners import test_on_fold, infer_from_dataframe
 from mist.evaluation import evaluation_utils
 from mist.evaluation.evaluator import Evaluator
+from mist.inference.inference_runners import infer_from_dataframe, test_on_fold
+from mist.training.trainers.patch_3d_trainer import Patch3DTrainer
+from mist.utils import io
+from mist.utils.console import print_error, print_warning
 
 
 def _parse_train_args(argv: list[str] | None = None) -> argparse.Namespace:

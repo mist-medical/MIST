@@ -1,8 +1,9 @@
 """MIST-compatible base implementation of MedNeXt."""
 
 from collections import OrderedDict
-from typing import Any
 from collections.abc import Sequence
+from typing import Any
+
 import torch
 import torch.nn as nn
 
@@ -11,8 +12,8 @@ from mist.models.base_model import MISTModel
 from mist.models.mednext.mednext_blocks import (
     MedNeXtBlock,
     MedNeXtDownBlock,
-    MedNeXtUpBlock,
     MedNeXtOutBlock,
+    MedNeXtUpBlock,
 )
 
 
@@ -235,7 +236,7 @@ class MedNeXt(MISTModel):
         x = self.stem(x)
         enc_outputs = []
 
-        for enc_stage, down_block in zip(self.enc_stages, self.down_blocks):
+        for enc_stage, down_block in zip(self.enc_stages, self.down_blocks, strict=False):
             x = enc_stage(x)
             enc_outputs.append(x)
             x = down_block(x)
@@ -247,7 +248,7 @@ class MedNeXt(MISTModel):
         if self.use_deep_supervision:
             ds_outputs = []
 
-        for i, (up_block, dec_stage) in enumerate(zip(self.up_blocks, self.dec_stages)):
+        for i, (up_block, dec_stage) in enumerate(zip(self.up_blocks, self.dec_stages, strict=False)):
             if self.use_deep_supervision and i < len(self.out_blocks):
                 ds_outputs.append(self.out_blocks[i](x))  # pylint: disable=used-before-assignment  # noqa: E501
 

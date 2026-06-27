@@ -1,9 +1,19 @@
+# =============================================================================
+# Publish Python package to PyPI
+#
+# Builds the mist-medical sdist + wheel and uploads them to PyPI. Runs whenever
+# a GitHub Release is published, so cutting a release is what ships the package.
+# A successful run here also triggers the "Publish Docker Images" workflow.
+#
+# Requires repo secret: PYPI_API_TOKEN.
+# =============================================================================
 name: Upload Python Package
 
 on:
   release:
     types: [published]
 
+# Only needs to read the source to build it; publishing uses the PyPI token.
 permissions:
   contents: read
 
@@ -13,17 +23,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Python
-      uses: actions/setup-python@v3
+      uses: actions/setup-python@v5
       with:
         python-version: '3.x'
+    # Install the PEP 517 build frontend used to produce the sdist and wheel.
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install build
+    # Build both sdist and wheel into dist/.
     - name: Build package
       run: python -m build
+    # Upload dist/* to PyPI. The action is pinned to a commit SHA for supply
+    # chain safety.
     - name: Publish package
       uses: pypa/gh-action-pypi-publish@27b31702a0e7fc50959f5ad993c78deac1bdfc29
       with:

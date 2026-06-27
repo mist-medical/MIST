@@ -1,20 +1,21 @@
 """Tests for the BaseTrainer implementation."""
 
 import json
-import os
 import math
+import os
 import pickle
-import rich
-from mist.utils import console as console_mod
 from pathlib import Path
 from types import SimpleNamespace
+
 import pandas as pd
 import pytest
+import rich
 import torch
 from torch import nn
 
 # MIST imports.
 from mist.training.trainers import base_trainer as bt
+from mist.utils import console as console_mod
 
 # Setup base trainer for tests.
 BaseTrainer = bt.BaseTrainer

@@ -1,3 +1,19 @@
+# =============================================================================
+# Publish Docker images
+#
+# Builds the MIST container from ./Dockerfile and pushes it to Docker Hub as
+# mistmedical/mist:<version> and mistmedical/mist:latest. The image version is
+# derived from pyproject.toml; the PyTorch base image is pinned inside
+# ./Dockerfile and must NOT be overridden here (a 2.11.0 override previously
+# shipped images that crashed multi-GPU DDP startup).
+#
+# Triggers:
+#   - workflow_run: after "Upload Python Package" completes successfully, so a
+#     PyPI release is immediately followed by a matching container image.
+#   - workflow_dispatch: manual rebuild from the Actions tab.
+#
+# Requires repo secrets: DOCKER_USERNAME, DOCKER_PASSWORD.
+# =============================================================================
 name: Publish Docker Images
 
 on:
@@ -5,6 +21,11 @@ on:
   workflow_run:
     workflows: [Upload Python Package]
     types: [completed]
+
+# Only reads the repo; the image is pushed to Docker Hub via secrets, not the
+# GITHUB_TOKEN.
+permissions:
+  contents: read
 
 jobs:
   push_to_registry:
@@ -15,13 +36,20 @@ jobs:
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
+        with:
+          # When triggered by the release publish workflow, check out the exact
+          # commit that was released so the image matches the PyPI wheel rather
+          # than whatever later landed on the default branch. Falls back to the
+          # triggering ref for manual (workflow_dispatch) runs.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Extract and transform version from pyproject.toml
         run: |
-          VERSION=$(grep -m 1 version ./pyproject.toml | tr -s ' ' | tr -d '"' | tr -d "'" | cut -d' ' -f3)
-          DOCKER_VERSION=$(echo $VERSION | sed 's/-alpha/a0/' | sed 's/-beta/b0/' | sed 's/-rc/rc0/')
-          echo "DOCKER_VERSION=$DOCKER_VERSION" >> $GITHUB_ENV
+          VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          DOCKER_VERSION=$(echo "$VERSION" | sed 's/-alpha/a0/; s/-beta/b0/; s/-rc/rc0/')
+          echo "DOCKER_VERSION=$DOCKER_VERSION" >> "$GITHUB_ENV"
 
+      # Authenticate to Docker Hub so the build-push step can push the image.
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:

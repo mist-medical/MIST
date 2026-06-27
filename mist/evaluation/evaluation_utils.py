@@ -238,7 +238,7 @@ def compute_results_stats(results_df: pd.DataFrame) -> pd.DataFrame:
             "id": label,
             **{col: safe_stat(func, results_df[col]) for col in results_df.columns[1:]},
         }
-        for label, func in zip(stats_labels, stats_functions)
+        for label, func in zip(stats_labels, stats_functions, strict=False)
     ]
 
     results_df = pd.concat([results_df, pd.DataFrame(stats_rows)], ignore_index=True)
@@ -274,6 +274,6 @@ def crop_to_union(
     max_coords = coords.max(axis=0) + 1  # +1 because slicing is exclusive
 
     # 4. Generate slices dynamically for N-dimensions (works for 2D or 3D).
-    slices = tuple(slice(min_c, max_c) for min_c, max_c in zip(min_coords, max_coords))
+    slices = tuple(slice(min_c, max_c) for min_c, max_c in zip(min_coords, max_coords, strict=False))
 
     return mask[slices], prediction[slices]

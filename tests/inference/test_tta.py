@@ -1,19 +1,20 @@
 """Tests for MIST TTA transforms and strategies."""
 
-import torch
 import pytest
+import torch
+
+from mist.inference.tta.strategies import (
+    TTAStrategy,
+    get_strategy,
+    list_strategies,
+    register_strategy,
+)
 
 # MIST imports.
 from mist.inference.tta.transforms import (
     AbstractTransform,
     get_transform,
     register_transform,
-)
-from mist.inference.tta.strategies import (
-    TTAStrategy,
-    get_strategy,
-    list_strategies,
-    register_strategy,
 )
 
 

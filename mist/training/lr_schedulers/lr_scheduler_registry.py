@@ -1,6 +1,7 @@
 """Registry for learning rate schedulers used in training."""
 
 from collections.abc import Callable
+
 import torch
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler

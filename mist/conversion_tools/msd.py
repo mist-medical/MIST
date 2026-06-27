@@ -3,13 +3,15 @@
 import concurrent.futures
 from pathlib import Path
 from typing import Any
+
 import numpy as np
 import SimpleITK as sitk
+
+from mist.conversion_tools import conversion_utils
 
 # MIST imports.
 from mist.utils import io, progress_bar
 from mist.utils.console import console, print_info, print_warning
-from mist.conversion_tools import conversion_utils
 
 
 def _copy_single_patient_msd(

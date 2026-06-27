@@ -30,7 +30,6 @@ from scipy.stats import rankdata, wilcoxon
 
 from mist.metrics.metrics_registry import METRIC_REGISTRY
 
-
 # Summary-row IDs added by mist.evaluation.evaluation_utils.compute_results_stats.
 # These are stripped before ranking so aggregate rows do not contaminate the
 # per-patient ranking.

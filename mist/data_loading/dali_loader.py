@@ -3,16 +3,13 @@
 from collections.abc import Sequence
 
 import numpy as np
-
-
-from nvidia.dali import fn
-from nvidia.dali import types
-from nvidia.dali.tensors import TensorCPU, TensorGPU
+from nvidia.dali import fn, types
 from nvidia.dali.pipeline import Pipeline
 from nvidia.dali.plugin.pytorch import DALIGenericIterator
+from nvidia.dali.tensors import TensorCPU, TensorGPU
 
-from mist.data_loading.data_loading_constants import DataLoadingConstants as constants
 import mist.data_loading.data_loading_utils as utils
+from mist.data_loading.data_loading_constants import DataLoadingConstants as constants
 
 
 class GenericPipeline(Pipeline):

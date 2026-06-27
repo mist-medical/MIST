@@ -1,14 +1,15 @@
 """Sliding window inferer implementation using MONAI."""
 
 from collections.abc import Callable
-import torch
+
 import monai
+import torch
 
 # MIST imports.
 from mist.inference.inference_constants import InferenceConstants as ic
+from mist.inference.inference_utils import get_default_device
 from mist.inference.inferers.base import AbstractInferer
 from mist.inference.inferers.inferer_registry import register_inferer
-from mist.inference.inference_utils import get_default_device
 
 
 @register_inferer("sliding_window")

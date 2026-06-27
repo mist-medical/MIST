@@ -1,10 +1,11 @@
 """Tests for mist.scripts.postprocess_entrypoint."""
 
-from pathlib import Path
-from types import SimpleNamespace
 import argparse
 import csv
 import json
+from pathlib import Path
+from types import SimpleNamespace
+
 import pytest
 
 # MIST imports.

@@ -1,17 +1,17 @@
 """Command line tool MIST inference on a given dataset."""
 
-from argparse import ArgumentDefaultsHelpFormatter
-from pathlib import Path
 import argparse
 import warnings
+from argparse import ArgumentDefaultsHelpFormatter
+from pathlib import Path
+
 import pandas as pd
 import torch
 
 # MIST imports
 from mist.cli.args import ArgParser
+from mist.inference import inference_runners, inference_utils
 from mist.utils import io
-from mist.inference import inference_utils
-from mist.inference import inference_runners
 
 
 def _parse_inference_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -82,7 +82,7 @@ def _resolve_device(device_str: str) -> torch.device:
     if torch.cuda.is_available() and idx < torch.cuda.device_count():
         return torch.device(f"cuda:{idx}")
 
-    warnings.warn(f"CUDA device {idx} not available; falling back to CPU.")
+    warnings.warn(f"CUDA device {idx} not available; falling back to CPU.", stacklevel=2)
     return torch.device("cpu")
 
 

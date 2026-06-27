@@ -1,7 +1,7 @@
 """Wrapper for deep supervision loss in segmentation tasks."""
 
-from typing import Any
 from collections.abc import Callable
+from typing import Any
 
 import torch
 from torch import nn

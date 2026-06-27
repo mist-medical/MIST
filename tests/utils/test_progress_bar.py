@@ -2,6 +2,7 @@
 
 from typing import Any
 from unittest.mock import patch
+
 import numpy as np
 from rich.progress import (
     BarColumn,

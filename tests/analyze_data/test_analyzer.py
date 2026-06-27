@@ -2,20 +2,22 @@
 
 import argparse
 import json
-from pathlib import Path
 from importlib import metadata
+from pathlib import Path
 
+import ants
 import numpy as np
 import pandas as pd
 import pytest
-import ants
+
+from mist.analyze_data import analyzer_utils as au
 
 # MIST imports.
 from mist.analyze_data.analyzer import Analyzer
 from mist.analyze_data.data_dumper import DataDumper
-from mist.utils import io as io_mod, progress_bar
 from mist.preprocessing import preprocessing_utils
-from mist.analyze_data import analyzer_utils as au
+from mist.utils import io as io_mod
+from mist.utils import progress_bar
 
 # Shared test helpers.
 from tests.analyze_data.helpers import (

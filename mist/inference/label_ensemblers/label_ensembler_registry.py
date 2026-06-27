@@ -1,7 +1,7 @@
 """Registry for label-space ensemblers in MIST."""
 
-from typing import TypeVar
 from collections.abc import Callable
+from typing import TypeVar
 
 from mist.inference.label_ensemblers.base import AbstractLabelEnsembler
 

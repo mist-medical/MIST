@@ -3,8 +3,8 @@
 import types
 from typing import Any
 
-import numpy as np
 import ants
+import numpy as np
 
 
 class FakePB:

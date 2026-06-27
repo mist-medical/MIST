@@ -1,8 +1,9 @@
 """Tests for mist.utils.io."""
 
+import json
 from pathlib import Path
 from typing import Any
-import json
+
 import pytest
 
 # MIST imports.

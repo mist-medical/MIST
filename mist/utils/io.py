@@ -1,8 +1,8 @@
 """Input output utilities for MIST runtime IO operations."""
 
-from typing import Any
-from pathlib import Path
 import json
+from pathlib import Path
+from typing import Any
 
 
 def read_json_file(json_file: str | Path) -> dict[str, Any]:

@@ -1,7 +1,8 @@
 """Registry and implementations of postprocessing transforms for MIST."""
 
-from typing import Any
 from collections.abc import Callable
+from typing import Any
+
 import numpy as np
 import numpy.typing as npt
 from scipy import ndimage

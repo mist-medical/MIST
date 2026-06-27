@@ -1,18 +1,19 @@
 """Tests for MIST inferers."""
 
 from collections.abc import Callable
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 import pytest
 import torch
 
 # MIST imports.
 from mist.inference.inferers.base import AbstractInferer
-from mist.inference.inferers.sliding_window import SlidingWindowInferer
 from mist.inference.inferers.inferer_registry import (
     get_inferer,
     list_inferers,
     register_inferer,
 )
+from mist.inference.inferers.sliding_window import SlidingWindowInferer
 
 
 class DummyInferer(AbstractInferer):

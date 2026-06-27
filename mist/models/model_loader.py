@@ -1,7 +1,8 @@
 """Unified interface for validating, building, and loading MIST models."""
 
-from collections import OrderedDict
 import warnings
+from collections import OrderedDict
+
 import torch
 
 # MIST imports.

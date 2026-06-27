@@ -1,15 +1,15 @@
 """Tests for the MISTModel base class and encoder interface."""
 
 from collections import OrderedDict
+
 import pytest
 
 # MIST imports.
 from mist.models.base_model import MISTModel
-from mist.models.nnunet.mist_nnunet import NNUNet
 from mist.models.mednext.mist_mednext import MedNeXt
 from mist.models.mgnets.mist_mgnets import MGNet
+from mist.models.nnunet.mist_nnunet import NNUNet
 from mist.models.swinunetr.mist_swinunetr import MistSwinUNETR
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

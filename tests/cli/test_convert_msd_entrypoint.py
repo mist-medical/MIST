@@ -7,7 +7,6 @@ import pytest
 
 from mist.cli import convert_msd_entrypoint as entry
 
-
 # ---------------------------------------------------------------------------
 # _parse_convert_msd_args
 # ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 """Tests for the MIST nnUNet model class."""
 
-import torch
 import pytest
+import torch
 
 # MIST imports.
 from mist.models.nnunet.mist_nnunet import NNUNet

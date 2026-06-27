@@ -4,8 +4,8 @@ import pytest
 
 from mist.loss_functions.alpha_schedulers import (
     ConstantScheduler,
-    LinearScheduler,
     CosineScheduler,
+    LinearScheduler,
     get_alpha_scheduler,
     get_default_scheduler_config,
     list_alpha_schedulers,

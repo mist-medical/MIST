@@ -2,12 +2,12 @@
 
 from collections import OrderedDict
 from collections.abc import Sequence
+
 import torch
 
 # MIST imports.
 from mist.models.base_model import MISTModel
-from mist.models.nnunet import dynamic_unet
-from mist.models.nnunet import nnunet_utils
+from mist.models.nnunet import dynamic_unet, nnunet_utils
 from mist.models.nnunet.nnunet_constants import NNUnetConstants as constants
 
 

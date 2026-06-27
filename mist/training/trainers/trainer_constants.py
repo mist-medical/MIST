@@ -1,7 +1,7 @@
 """Constants for base trainer configurations in MIST."""
 
-from collections.abc import Sequence
 import dataclasses
+from collections.abc import Sequence
 
 
 @dataclasses.dataclass(frozen=True)

@@ -4,24 +4,26 @@ import concurrent.futures
 import shutil
 from pathlib import Path
 from typing import cast
+
 import ants
 import numpy as np
 from rich.table import Table
+
+from mist.postprocessing.postprocessing_utils import StrategyStep
+from mist.postprocessing.transform_registry import (
+    POSTPROCESSING_TRANSFORMS,
+    get_transform,
+)
 
 # MIST imports.
 from mist.utils import io, progress_bar
 from mist.utils.console import (
     console,
-    print_section_header,
     print_info,
-    print_warning,
+    print_section_header,
     print_success,
+    print_warning,
 )
-from mist.postprocessing.transform_registry import (
-    get_transform,
-    POSTPROCESSING_TRANSFORMS,
-)
-from mist.postprocessing.postprocessing_utils import StrategyStep
 
 
 def _postprocess_single_file(
@@ -56,7 +58,7 @@ def _postprocess_single_file(
     messages = []
 
     for transform_name, per_label_flag, label_group, kwargs in zip(
-        transforms, per_label, apply_to_labels, transform_kwargs
+        transforms, per_label, apply_to_labels, transform_kwargs, strict=False
     ):
         try:
             transform_fn = get_transform(transform_name)
@@ -205,7 +207,7 @@ class Postprocessor:
         table.add_column("Target Labels", justify="center")
 
         for name, per_label_flag, label_group in zip(
-            self.transforms, self.per_label, self.apply_to_labels
+            self.transforms, self.per_label, self.apply_to_labels, strict=False
         ):
             labels = ", ".join(map(str, label_group))
             table.add_row(name, str(per_label_flag), labels)
@@ -226,7 +228,7 @@ class Postprocessor:
         messages: list[str] = []
 
         for transform_name, per_label_flag, label_group, kwargs in zip(
-            self.transforms, self.per_label, self.apply_to_labels, self.transform_kwargs
+            self.transforms, self.per_label, self.apply_to_labels, self.transform_kwargs, strict=False
         ):
             try:
                 transform_fn = get_transform(transform_name)

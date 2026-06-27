@@ -1,11 +1,11 @@
 """Tests for MIST arguments handling."""
 
 import argparse
+
 import pytest
 
 # MIST imports.
 import mist.cli.args as args_mod
-
 
 # =============================================================================
 # Converters / Validators.

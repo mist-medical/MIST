@@ -1,0 +1,47 @@
+# =============================================================================
+# Lint
+#
+# Static checks for the codebase, run as a status check on pushes/PRs to main
+# and on demand from the Actions tab:
+#   - ruff:      style + correctness lint (config: [tool.ruff] in pyproject.toml)
+#   - codespell: spell-check           (config: [tool.codespell] in pyproject.toml)
+#
+# Both are check-only here (no auto-fix). Contributors can run the same checks
+# locally via pre-commit (.pre-commit-config.yaml) so PRs arrive clean.
+# =============================================================================
+name: Lint
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install linters
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff codespell
+
+      # ruff reads [tool.ruff] from pyproject.toml.
+      - name: Run ruff
+        run: ruff check .
+
+      # codespell reads [tool.codespell] from pyproject.toml.
+      - name: Run codespell
+        run: codespell

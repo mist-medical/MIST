@@ -1,16 +1,17 @@
 """Command line tool for postprocessing predictions from MIST output."""
 
-from argparse import ArgumentDefaultsHelpFormatter
-from pathlib import Path
 import argparse
 import shutil
+from argparse import ArgumentDefaultsHelpFormatter
+from pathlib import Path
 
 import pandas as pd
 
+from mist.cli.args import ArgParser, positive_int
+from mist.evaluation.evaluator import Evaluator
+
 # MIST imports.
 from mist.postprocessing.postprocessor import Postprocessor
-from mist.evaluation.evaluator import Evaluator
-from mist.cli.args import ArgParser, positive_int
 from mist.utils import io
 
 

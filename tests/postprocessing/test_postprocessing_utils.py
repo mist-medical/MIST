@@ -1,7 +1,7 @@
 """Tests for the MIST postprocessing utilities."""
 
-import pytest
 import numpy as np
+import pytest
 
 # MIST imports.
 from mist.postprocessing import postprocessing_utils as utils

@@ -1,8 +1,8 @@
 """Create variants of nnUNet model."""
 
 # MIST imports.
-from mist.models.nnunet.mist_nnunet import NNUNet
 from mist.models.model_registry import register_model
+from mist.models.nnunet.mist_nnunet import NNUNet
 
 
 def _create_nnunet_base(use_pocket_model: bool, **kwargs) -> NNUNet:

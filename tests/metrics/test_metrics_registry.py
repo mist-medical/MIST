@@ -5,11 +5,11 @@ import pytest
 
 # MIST imports.
 from mist.metrics.metrics_registry import (
-    get_metric,
-    list_registered_metrics,
-    Metric,
     METRIC_REGISTRY,
     DiceCoefficient,
+    Metric,
+    get_metric,
+    list_registered_metrics,
 )
 
 # pylint: disable=redefined-outer-name

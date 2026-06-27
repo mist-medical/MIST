@@ -1,9 +1,9 @@
 """Tests for MIST preprocessing utilities."""
 
+import ants
 import numpy as np
 import pytest
 import SimpleITK as sitk
-import ants
 
 # MIST imports.
 from mist.preprocessing import preprocessing_utils as pu

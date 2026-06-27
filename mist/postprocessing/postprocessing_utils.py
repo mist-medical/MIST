@@ -1,6 +1,7 @@
 """Postprocessing utilities for MIST predictions."""
 
 from typing import Any, TypedDict, cast
+
 import numpy as np
 import numpy.typing as npt
 import skimage

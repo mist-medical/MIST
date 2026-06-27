@@ -1,7 +1,7 @@
 """Unit tests for the BoundaryLoss function."""
 
-import torch
 import pytest
+import torch
 
 from mist.loss_functions.losses.boundary import BoundaryLoss
 

@@ -1,16 +1,16 @@
 """Tests for MIST ensemblers."""
 
-import torch
 import pytest
+import torch
 
 # MIST imports.
 from mist.inference.ensemblers.base import AbstractEnsembler
-from mist.inference.ensemblers.mean import MeanEnsembler
 from mist.inference.ensemblers.ensembler_registry import (
     get_ensembler,
     list_ensemblers,
     register_ensembler,
 )
+from mist.inference.ensemblers.mean import MeanEnsembler
 
 
 class DummyEnsembler(AbstractEnsembler):

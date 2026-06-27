@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from mist.cli.args import ArgParser
-from mist.evaluation.ranking import rank_results, compute_pairwise_significance
+from mist.evaluation.ranking import compute_pairwise_significance, rank_results
 from mist.utils import io
 
 

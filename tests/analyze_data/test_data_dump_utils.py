@@ -1,18 +1,17 @@
 """Tests for mist.analyze_data.data_dump_utils."""
 
-from typing import Any
 from pathlib import Path
+from typing import Any
 
+import ants
 import numpy as np
 import pandas as pd
 import pytest
-import ants
 
 from mist.analyze_data import data_dump_utils as ddu
 from mist.analyze_data.analyzer_constants import AnalyzeConstants as constants
 from mist.utils import progress_bar as pb_mod
 from tests.analyze_data.helpers import FakePB
-
 
 # ---------------------------------------------------------------------------
 # Shared helpers

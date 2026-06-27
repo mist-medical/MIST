@@ -1,0 +1,20 @@
+# Keeps GitHub Actions and Python dependencies current via automated PRs.
+# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+version: 2
+updates:
+  # Action versions pinned in .github/workflows/*. Catches deprecations (e.g.
+  # the Node 20 runner sunset) and security fixes without manual bumps.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+
+  # Python dependencies declared in pyproject.toml.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: deps

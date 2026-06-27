@@ -136,7 +136,7 @@ def _sort_distances_surfels(
     Returns:
         A tuple of the sorted (distances, surfel_areas).
     """
-    sorted_surfels = np.array(sorted(zip(distances, surfel_areas)))
+    sorted_surfels = np.array(sorted(zip(distances, surfel_areas, strict=False)))
     return sorted_surfels[:, 0], sorted_surfels[:, 1]
 
 

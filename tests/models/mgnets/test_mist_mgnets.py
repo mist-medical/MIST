@@ -1,12 +1,11 @@
 """Tests for the MGNet (FMGNet / W-Net) model implementation."""
 
-import torch
 import pytest
+import torch
 
-from mist.models.mgnets.mist_mgnets import MGNet
 from mist.models.mgnets.mgnets_constants import MGNetConstants as mgnet_constants
+from mist.models.mgnets.mist_mgnets import MGNet
 from mist.models.nnunet.nnunet_constants import NNUnetConstants as constants
-
 
 # ---------------------------------------------------------------------------
 # Shared fixtures

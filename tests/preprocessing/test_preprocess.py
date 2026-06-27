@@ -1,12 +1,13 @@
 """Tests for mist.preprocessing.preprocess."""
 
+import argparse
+import json
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-import argparse
-import json
-import warnings
+
 import numpy as np
 import pandas as pd
 import pytest

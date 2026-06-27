@@ -1,7 +1,8 @@
 """Tests for mist.scripts.preprocess_entrypoint."""
 
-from pathlib import Path
 import argparse
+from pathlib import Path
+
 import pytest
 
 # MIST imports.

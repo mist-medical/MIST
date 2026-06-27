@@ -1,7 +1,7 @@
 """Factory functions for SwinUNETR-V2 model variants."""
 
-from mist.models.swinunetr.mist_swinunetr import MistSwinUNETR
 from mist.models.model_registry import register_model
+from mist.models.swinunetr.mist_swinunetr import MistSwinUNETR
 
 
 def create_swinunetr(variant: str, **kwargs) -> MistSwinUNETR:

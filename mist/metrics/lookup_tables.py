@@ -2,6 +2,7 @@
 # ruff: noqa: E501  — long lines are numerical data arrays; reformatting harms readability
 
 import math
+
 import numpy as np
 import numpy.typing as npt
 

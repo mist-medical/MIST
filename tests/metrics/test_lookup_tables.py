@@ -4,8 +4,8 @@ import numpy as np
 
 # MIST imports.
 from mist.metrics.lookup_tables import (
-    create_table_neighbour_code_to_surface_area,
     create_table_neighbour_code_to_contour_length,
+    create_table_neighbour_code_to_surface_area,
 )
 
 

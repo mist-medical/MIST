@@ -1,16 +1,16 @@
 """Unit tests for lesion-wise metric computation."""
 
+from unittest.mock import patch
+
 import numpy as np
 import pytest
-from unittest.mock import patch
+from scipy.ndimage import generate_binary_structure, label
 
 # MIST imports.
 from mist.metrics.lesion_wise_metrics import (
     _consolidate_gt_lesions,
     compute_lesion_wise_metrics,
 )
-from scipy.ndimage import label, generate_binary_structure
-
 
 # ---------------------------------------------------------------------------
 # Helpers

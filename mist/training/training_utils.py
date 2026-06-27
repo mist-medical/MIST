@@ -1,7 +1,7 @@
 """Utility functions for MIST trainers."""
 
-from pathlib import Path
 from collections.abc import Sequence
+from pathlib import Path
 
 
 class RunningMean:

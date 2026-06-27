@@ -1,10 +1,11 @@
 """Tests for the DALI data loading module in MIST."""
 
-import pytest
 from unittest import mock
 
-from mist.data_loading import dali_loader
+import pytest
+
 import mist.data_loading.data_loading_utils as utils
+from mist.data_loading import dali_loader
 
 
 @pytest.fixture(autouse=True)
