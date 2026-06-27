@@ -1,61 +1,83 @@
+# =============================================================================
+# Test suite + coverage badge
+#
+# Runs the MIST pytest suite under coverage across every supported Python
+# version. Acts as the required status check on pull requests and keeps the
+# coverage badge (coverage.svg) in the repo up to date.
+#
+# Triggers:
+#   - push to main          (badge is refreshed and committed)
+#   - pull_request to main  (status check only; no commit)
+#   - workflow_dispatch      (manual "Run workflow" button / `gh workflow run`)
+# =============================================================================
 name: Run Tests and Generate Coverage Badge
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
     branches: [main]
 
+# Cancel an in-progress run when a newer commit is pushed to the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# contents: write is required by the coverage-badge commit step below. Every
+# other step only needs read access.
+permissions:
+  contents: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.10'
+        python-version: ${{ matrix.python-version }}
 
+    # Install the package itself so dependencies come from pyproject.toml
+    # (single source of truth — including the torch version constraint) rather
+    # than a hand-maintained list that can drift. Only the test-time tools that
+    # are not runtime dependencies are listed explicitly.
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install \
-          torch \
-          monai \
-          antspyx \
-          simpleitk \
-          numpy \
-          pandas \
-          rich \
-          scipy \
-          scikit-learn \
-          scikit-image \
-          einops \
-          pytest \
-          pytest-cov \
-          coverage-badge \
-          tensorboard \
+        pip install -e . pytest-cov coverage-badge
 
+    # Run the full suite under coverage. term-missing prints uncovered lines in
+    # the log; the xml report feeds coverage-badge, which renders coverage.svg.
     - name: Run tests and generate coverage report
       run: |
         pytest --cov=mist --cov-report=term-missing --cov-report=xml
         coverage-badge -o coverage.svg -f
 
+    # Publish the badge and commit it back only from a single matrix leg so the
+    # three jobs don't collide on the artifact name or race on the git push.
     - name: Upload coverage badge
+      if: matrix.python-version == '3.12'
       uses: actions/upload-artifact@v4
       with:
         name: coverage-badge
         path: coverage.svg
 
     - name: Commit coverage badge to repo (optional)
-      if: github.ref == 'refs/heads/main'
+      if: github.ref == 'refs/heads/main' && matrix.python-version == '3.12'
       run: |
         git config --global user.name "github-actions"
         git config --global user.email "github-actions@github.com"
         git add coverage.svg
-        git commit -m "Update coverage badge"
+        # [skip ci] keeps this commit from re-triggering the workflow.
+        git commit -m "chore: update coverage badge [skip ci]" || exit 0
         git push
       continue-on-error: true
