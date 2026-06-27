@@ -1,0 +1,16 @@
+# Configuration for the new-issue chooser.
+# https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/configuring-issue-templates-for-your-repository#configuring-the-template-chooser
+
+# Require contributors to pick a template (bug report or feature request)
+# rather than opening a blank issue.
+blank_issues_enabled: false
+
+# Links shown alongside the templates for things that aren't bug reports or
+# feature requests.
+contact_links:
+  - name: Documentation
+    url: https://mist-medical.readthedocs.io/
+    about: Check the docs first — installation, usage, and configuration are covered here.
+  - name: Questions & usage help
+    url: https://github.com/mist-medical/MIST/discussions
+    about: Ask usage questions or start a discussion instead of opening an issue.
