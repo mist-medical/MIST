@@ -3,12 +3,13 @@
 import argparse
 from argparse import ArgumentParser
 
+from mist.loss_functions.alpha_schedulers import list_alpha_schedulers
+from mist.loss_functions.loss_registry import list_registered_losses
+
 # MIST imports.
 from mist.models.model_registry import list_registered_models
 from mist.training.lr_schedulers.lr_scheduler_registry import list_lr_schedulers
 from mist.training.optimizers.optimizer_registry import list_optimizers
-from mist.loss_functions.loss_registry import list_registered_losses
-from mist.loss_functions.alpha_schedulers import list_alpha_schedulers
 
 
 def positive_int(value: str | int) -> int:

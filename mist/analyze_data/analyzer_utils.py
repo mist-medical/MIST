@@ -6,8 +6,8 @@ from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import KFold
 import torch
+from sklearn.model_selection import KFold
 
 # MIST imports.
 from mist.analyze_data.analyzer_constants import AnalyzeConstants as constants

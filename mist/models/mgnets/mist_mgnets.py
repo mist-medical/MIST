@@ -1,18 +1,18 @@
 """Implement adaptive Multi-Grid Network (MGNet) architectures."""
 
 from collections import OrderedDict
-from typing import Any
 from collections.abc import Sequence
+from typing import Any
 
 import torch
+from monai.networks.blocks.dynunet_block import UnetBasicBlock, UnetResBlock
 from torch import nn
 from torch.nn import functional as F
-from monai.networks.blocks.dynunet_block import UnetBasicBlock, UnetResBlock
 
 from mist.models.base_model import MISTModel
+from mist.models.mgnets.mgnets_constants import MGNetConstants as mgnet_constants
 from mist.models.nnunet import nnunet_utils
 from mist.models.nnunet.nnunet_constants import NNUnetConstants as constants
-from mist.models.mgnets.mgnets_constants import MGNetConstants as mgnet_constants
 
 
 class MGNet(MISTModel):
@@ -436,7 +436,7 @@ class MGNet(MISTModel):
         for spike_module in self.spikes:
             # A. UPWARD PATH.
             for i, (block, upsample) in enumerate(
-                zip(spike_module["up_blocks"], spike_module["up_samples"])
+                zip(spike_module["up_blocks"], spike_module["up_samples"], strict=False)
             ):
                 target_depth_idx = self.bottleneck_layer_idx - 1 - i
 
@@ -469,7 +469,7 @@ class MGNet(MISTModel):
         decoder_features_for_deep_supervision = []
 
         for i, (block, upsample) in enumerate(
-            zip(self.main_decoder_blocks, self.main_decoder_upsamples)
+            zip(self.main_decoder_blocks, self.main_decoder_upsamples, strict=False)
         ):
             target_depth_idx = self.bottleneck_layer_idx - 1 - i
 

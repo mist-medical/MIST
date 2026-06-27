@@ -1,9 +1,10 @@
 """Tests for mist.scripts.inference_entrypoint."""
 
-from pathlib import Path
-from types import SimpleNamespace
 import argparse
 import json
+from pathlib import Path
+from types import SimpleNamespace
+
 import pandas as pd
 import pytest
 

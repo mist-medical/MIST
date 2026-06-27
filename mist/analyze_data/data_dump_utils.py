@@ -3,13 +3,13 @@
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import ants
+import numpy as np
 import pandas as pd
 from skimage.morphology import skeletonize
 
-from mist.utils import progress_bar as progress_bar_utils
 from mist.analyze_data.analyzer_constants import AnalyzeConstants as constants
+from mist.utils import progress_bar as progress_bar_utils
 
 
 def get_dataset_size_gb(paths_df: pd.DataFrame) -> float:

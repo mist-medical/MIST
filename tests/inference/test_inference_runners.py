@@ -1,21 +1,22 @@
 """Tests for mist.inference.inference_runners."""
 
-from types import SimpleNamespace
-from pathlib import Path
-from unittest.mock import MagicMock, patch
 import copy
 import importlib
 import os
 import sys
-import pytest
-import torch
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
+
 import numpy as np
 import pandas as pd
+import pytest
+import torch
+
+from mist.inference import inference_runners as ir
 
 # MIST imports.
 from mist.training import training_utils
-from mist.inference import inference_runners as ir
-
 
 # =========================
 # Shared fixtures & helpers

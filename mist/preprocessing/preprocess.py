@@ -4,18 +4,20 @@ import argparse
 import concurrent.futures
 from pathlib import Path
 from typing import Any
+
 import ants
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import SimpleITK as sitk
 
-# MIST imports.
-from mist.utils import io, progress_bar
-from mist.utils.console import print_section_header, print_warning, print_success
 from mist.analyze_data import analyzer_utils
 from mist.preprocessing import preprocessing_utils
 from mist.preprocessing.preprocessing_constants import PreprocessingConstants as pc
+
+# MIST imports.
+from mist.utils import io, progress_bar
+from mist.utils.console import print_section_header, print_success, print_warning
 
 
 def resample_image(

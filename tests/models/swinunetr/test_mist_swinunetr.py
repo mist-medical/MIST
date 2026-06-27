@@ -1,12 +1,11 @@
 """Tests for the MistSwinUNETR wrapper and SwinUNETR-V2 registry."""
 
-import torch
 import pytest
+import torch
 
+from mist.models.model_registry import get_model_from_registry
 from mist.models.swinunetr.mist_swinunetr import MistSwinUNETR
 from mist.models.swinunetr.swinunetr_registry import create_swinunetr
-from mist.models.model_registry import get_model_from_registry
-
 
 # ---------------------------------------------------------------------------
 # Shared fixtures

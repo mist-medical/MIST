@@ -69,5 +69,29 @@ mist_convert_csv = "mist.cli.convert_csv_entrypoint:convert_csv_entry"
 mist_average_weights = "mist.cli.average_weights_entrypoint:average_weights_entry"
 mist_ensemble = "mist.cli.ensemble_entrypoint:ensemble_entry"
 
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes (unused imports, undefined names)
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long — handled by formatter, not enforced here
+    "B008",  # do not perform function calls in default arguments
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B"]  # bugbear rules are too noisy in test files
+
 [tool.codespell]
 skip = ".git"
+# Domain terms / abbreviations that are not misspellings:
+#   strat = "strategy" (used in test names); lits = LiTS (Liver Tumor Segmentation dataset)
+ignore-words-list = "strat,lits"

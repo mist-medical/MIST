@@ -7,7 +7,6 @@ import pytest
 
 from mist.cli import convert_csv_entrypoint as entry
 
-
 # ---------------------------------------------------------------------------
 # _parse_convert_csv_args
 # ---------------------------------------------------------------------------

@@ -7,8 +7,8 @@ import torch
 from mist.models.mednext.mednext_blocks import (
     MedNeXtBlock,
     MedNeXtDownBlock,
-    MedNeXtUpBlock,
     MedNeXtOutBlock,
+    MedNeXtUpBlock,
 )
 
 

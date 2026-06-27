@@ -5,13 +5,12 @@ import pytest
 import SimpleITK as sitk
 
 from mist.cli.ensemble_entrypoint import (
+    _get_patient_ids,
     _parse_ensemble_args,
     _validate_prediction_dirs,
-    _get_patient_ids,
-    run_ensemble,
     ensemble_entry,
+    run_ensemble,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

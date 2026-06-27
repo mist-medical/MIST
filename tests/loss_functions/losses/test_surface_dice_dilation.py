@@ -4,19 +4,18 @@ import math
 import warnings
 from unittest import mock
 
+import pytest
 import torch
 import torch.nn.functional as F
-import pytest
 
+from mist.loss_functions.loss_registry import get_loss
+from mist.loss_functions.losses.cl_dice import CLDice
+from mist.loss_functions.losses.dice_cross_entropy import DiceCELoss
 from mist.loss_functions.losses.surface_dice_dilation import (
     SurfaceDilationLogic,
-    VolumetricSDDL,
     VesselSDDL,
+    VolumetricSDDL,
 )
-from mist.loss_functions.losses.dice_cross_entropy import DiceCELoss
-from mist.loss_functions.losses.cl_dice import CLDice
-from mist.loss_functions.loss_registry import get_loss
-
 
 # ---------------------------------------------------------------------------
 # Shared helpers

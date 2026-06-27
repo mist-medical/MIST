@@ -1,16 +1,17 @@
 """Lesion-wise metrics for segmentation evaluation."""
 
 from typing import Any
+
 import numpy as np
-from scipy.ndimage import label, binary_dilation, generate_binary_structure
+from scipy.ndimage import binary_dilation, generate_binary_structure, label
 
 # MIST imports.
 from mist.metrics.metrics_constants import LesionWiseMetricsConstants
 from mist.metrics.segmentation_metrics import (
     compute_dice_coefficient,
-    compute_surface_distances,
     compute_robust_hausdorff,
     compute_surface_dice_at_tolerance,
+    compute_surface_distances,
 )
 
 

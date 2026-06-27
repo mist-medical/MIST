@@ -11,15 +11,14 @@ import pytest
 from mist.analyze_data import analyzer_utils
 from mist.evaluation import evaluation_utils
 from mist.evaluation.evaluator import Evaluator
-from mist.utils import progress_bar as pb_mod
 from mist.utils import console as console_mod
+from mist.utils import progress_bar as pb_mod
 from tests.evaluation.helpers import (
     FakeExecutor,
     fake_get_progress_bar,
     make_ants_image,
     make_eval_config,
 )
-
 
 # ---------------------------------------------------------------------------
 # Module-level helpers

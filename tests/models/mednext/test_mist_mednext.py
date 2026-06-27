@@ -1,11 +1,10 @@
 """Unit tests for MIST-compatible MedNeXt implementation."""
 
-import torch
 import pytest
+import torch
 
 # MIST imports.
 from mist.models.mednext.mist_mednext import MedNeXt
-
 
 # ---------------------------------------------------------------------------
 # patch_size divisibility guard

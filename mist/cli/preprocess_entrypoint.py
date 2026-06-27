@@ -1,8 +1,8 @@
 """Entrypoint for the preprocessing pipeline."""
 
+import argparse
 from argparse import ArgumentDefaultsHelpFormatter
 from pathlib import Path
-import argparse
 
 # MIST imports.
 from mist.cli import args as argmod

@@ -1,9 +1,9 @@
 """Preprocessing utilities for MIST."""
 
-import numpy as np
-import skimage
 import ants
+import numpy as np
 import SimpleITK as sitk
+import skimage
 
 # MIST imports.
 from mist.preprocessing.preprocessing_constants import PreprocessingConstants as pc

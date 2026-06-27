@@ -1,8 +1,8 @@
 """Command line tool for converting MSD datasets to MIST format."""
 
+import argparse
 from argparse import ArgumentDefaultsHelpFormatter
 from pathlib import Path
-import argparse
 
 from mist.cli.args import ArgParser, positive_int
 from mist.conversion_tools.msd import convert_msd

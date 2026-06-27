@@ -1,12 +1,11 @@
 """Unit tests for the _welford_merge and _percentile_from_histogram helpers."""
 
 import numpy as np
-from numpy.typing import ArrayLike, NDArray
 import pytest
+from numpy.typing import ArrayLike, NDArray
 
-from mist.analyze_data.analyzer import _welford_merge, _percentile_from_histogram
+from mist.analyze_data.analyzer import _percentile_from_histogram, _welford_merge
 from mist.analyze_data.analyzer_constants import AnalyzeConstants as constants
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -1,6 +1,7 @@
 import re
-import pytest
 from pathlib import Path
+
+import pytest
 
 # MIST imports.
 from mist.training import training_utils as tu

@@ -5,10 +5,10 @@ import pytest
 # MIST imports.
 from mist.models.mednext.mednext_registry import (
     create_mednext,
-    create_mednext_small,
     create_mednext_base,
-    create_mednext_medium,
     create_mednext_large,
+    create_mednext_medium,
+    create_mednext_small,
 )
 from mist.models.mednext.mist_mednext import MedNeXt
 

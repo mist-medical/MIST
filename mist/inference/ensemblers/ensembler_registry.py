@@ -1,7 +1,7 @@
 """Registry for ensembling strategies in MIST."""
 
-from typing import TypeVar
 from collections.abc import Callable
+from typing import TypeVar
 
 from mist.inference.ensemblers.base import AbstractEnsembler
 

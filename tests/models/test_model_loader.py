@@ -1,17 +1,18 @@
 """Unit tests for model construction and loading utilities."""
 
 from collections import OrderedDict
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 import pytest
 import torch
 
 # MIST imports.
 from mist.models.model_loader import (
     average_fold_weights,
-    validate_encoder_compatibility,
-    load_pretrained_encoder,
-    validate_mist_config_for_model_loading,
     load_model_from_config,
+    load_pretrained_encoder,
+    validate_encoder_compatibility,
+    validate_mist_config_for_model_loading,
 )
 from mist.models.model_registry import get_model_from_registry
 from mist.models.nnunet.mist_nnunet import NNUNet

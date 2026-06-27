@@ -1,8 +1,8 @@
 """Utility functions for MIST inference modules."""
 
-from typing import Any
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import ants
 import numpy as np
@@ -11,9 +11,9 @@ import pandas as pd
 import torch
 
 from mist.analyze_data import analyzer_utils
-from mist.preprocessing import preprocess
 from mist.inference.inference_constants import InferenceConstants as ic
 from mist.models import model_loader
+from mist.preprocessing import preprocess
 
 
 def get_default_device() -> str:

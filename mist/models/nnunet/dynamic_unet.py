@@ -8,12 +8,14 @@ modified to be compatible with the MIST.
 """
 
 from collections.abc import Sequence
+
 import torch
-from torch import nn
 import torch.nn.functional as F
 
 # MONAI imports.
 from monai.networks.blocks import dynunet_block as dynamic_unet_blocks
+from torch import nn
+
 from mist.models.nnunet.nnunet_constants import NNUnetConstants as constants
 
 
@@ -175,7 +177,7 @@ class DynamicUNet(nn.Module):
             deep_supervision_head_inputs = []
             final_deep_supervision_output = []
 
-        for i, (skip, decoder_block) in enumerate(zip(skips, self.decoder_layers)):
+        for i, (skip, decoder_block) in enumerate(zip(skips, self.decoder_layers, strict=False)):
             x = decoder_block(x, skip)
 
             if (
@@ -308,7 +310,7 @@ class DynamicUNet(nn.Module):
         list_of_layers = []
         if upsample_kernel_size is not None:
             for in_c, out_c, kernel, stride, up_kernel in zip(
-                in_channels, out_channels, kernel_size, strides, upsample_kernel_size
+                in_channels, out_channels, kernel_size, strides, upsample_kernel_size, strict=False
             ):
                 params = {
                     "spatial_dims": 3,
@@ -326,7 +328,7 @@ class DynamicUNet(nn.Module):
                 list_of_layers.append(layer)
         else:
             for in_c, out_c, kernel, stride in zip(
-                in_channels, out_channels, kernel_size, strides
+                in_channels, out_channels, kernel_size, strides, strict=False
             ):
                 params = {
                     "spatial_dims": 3,

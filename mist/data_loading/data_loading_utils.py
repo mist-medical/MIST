@@ -4,10 +4,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from nvidia.dali import fn
-from nvidia.dali import math
-from nvidia.dali import ops
-from nvidia.dali import types
+from nvidia.dali import fn, math, ops, types
 from nvidia.dali.tensors import TensorGPU
 
 from mist.data_loading.data_loading_constants import DataLoadingConstants as constants

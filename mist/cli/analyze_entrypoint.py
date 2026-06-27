@@ -1,8 +1,8 @@
 """Entrypoint for the analyze command."""
 
+import argparse
 from argparse import ArgumentDefaultsHelpFormatter
 from pathlib import Path
-import argparse
 
 # MIST imports.
 from mist.analyze_data.analyzer import Analyzer

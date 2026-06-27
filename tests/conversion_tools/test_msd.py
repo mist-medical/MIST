@@ -2,15 +2,17 @@
 
 import json
 import shutil
+from pathlib import Path
+
 import numpy as np
 import pytest
 import SimpleITK as sitk
-from pathlib import Path
+
+from mist.conversion_tools import conversion_utils
+from mist.conversion_tools.msd import convert_msd, copy_msd_data
 
 # MIST imports.
 from mist.utils import io, progress_bar
-from mist.conversion_tools import conversion_utils
-from mist.conversion_tools.msd import convert_msd, copy_msd_data
 from tests.conversion_tools.helpers import DummyProgressBar
 
 

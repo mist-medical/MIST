@@ -3,12 +3,14 @@
 import concurrent.futures
 from pathlib import Path
 from typing import Any
+
 import pandas as pd
+
+from mist.conversion_tools import conversion_utils
 
 # MIST imports.
 from mist.utils import io, progress_bar
 from mist.utils.console import console, print_info, print_warning
-from mist.conversion_tools import conversion_utils
 
 
 def _validate_csv_columns(df: pd.DataFrame, mode: str) -> None:
@@ -82,7 +84,7 @@ def _copy_single_patient_csv(
     image_keys = list(patient_dict.keys())[image_start_idx:]
     image_list = list(patient_dict.values())[image_start_idx:]
 
-    for image_key, image_path in zip(image_keys, image_list):
+    for image_key, image_path in zip(image_keys, image_list, strict=False):
         image_source = Path(image_path).resolve()
         if not image_source.exists():
             errors.append(f"Image {image_source} does not exist!")

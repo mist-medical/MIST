@@ -1,6 +1,7 @@
 """Utility functions for nnUNet."""
 
 from collections.abc import Sequence
+
 import numpy as np
 
 # MIST imports.
@@ -124,7 +125,7 @@ def get_unet_params(
                 and size >= constants.MIN_SIZE_FOR_STRIDE
             )
             else constants.ANISOTROPIC_STRIDE
-            for (ratio, size) in zip(spacing_ratio, final_encoded_dimension)
+            for (ratio, size) in zip(spacing_ratio, final_encoded_dimension, strict=False)
         ]
 
         # If the spacing ratio is less than or equal to 2 for a given dimension,
@@ -142,11 +143,11 @@ def get_unet_params(
 
         # Update the final encoded dimension and spacings based on the stride.
         final_encoded_dimension = [
-            i // j for i, j in zip(final_encoded_dimension, stride)
+            i // j for i, j in zip(final_encoded_dimension, stride, strict=False)
         ]
 
         # Update the spacings based on the stride.
-        spacings = [i * j for i, j in zip(spacings, stride)]
+        spacings = [i * j for i, j in zip(spacings, stride, strict=False)]
 
         # Append the kernel and stride to the list.
         kernels.append(kernel)

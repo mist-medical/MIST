@@ -8,10 +8,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mist.analyze_data.data_dumper import DataDumper
 from mist.analyze_data import data_dump_utils as ddu
+from mist.analyze_data.data_dumper import DataDumper
 from mist.utils import io as io_mod
-
 
 # ---------------------------------------------------------------------------
 # Shared helpers / fixtures

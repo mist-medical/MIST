@@ -3,16 +3,16 @@
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from unittest.mock import patch, MagicMock
-import numpy as np
+from unittest.mock import MagicMock, patch
+
 import ants
+import numpy as np
 import pytest
 
 # MIST imports.
 from mist.postprocessing import postprocessor as pp_mod
 from mist.postprocessing.postprocessor import Postprocessor
 from mist.utils import console as console_mod
-
 
 # ---------------------------------------------------------------------------
 # Strategy fixtures

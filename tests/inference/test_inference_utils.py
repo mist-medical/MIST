@@ -1,7 +1,8 @@
 """Tests for MIST inference utilities."""
 
-from unittest.mock import patch, MagicMock
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 import ants
 import numpy as np
 import pandas as pd

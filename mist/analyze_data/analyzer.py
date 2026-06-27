@@ -13,25 +13,26 @@ be used for preprocessing and training models.
 import argparse
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from pathlib import Path
 from importlib import metadata
+from pathlib import Path
 
 import ants
-import pandas as pd
 import numpy as np
+import pandas as pd
+
+from mist.analyze_data import analyzer_utils
+from mist.analyze_data.analyzer_constants import AnalyzeConstants as constants
+from mist.analyze_data.data_dumper import DataDumper
+from mist.preprocessing import preprocessing_utils
 
 # MIST imports.
 from mist.utils import io, progress_bar
 from mist.utils.console import (
-    print_section_header,
-    print_warning,
     print_error,
+    print_section_header,
     print_success,
+    print_warning,
 )
-from mist.preprocessing import preprocessing_utils
-from mist.analyze_data import analyzer_utils
-from mist.analyze_data.analyzer_constants import AnalyzeConstants as constants
-from mist.analyze_data.data_dumper import DataDumper
 
 
 def _welford_merge(

@@ -5,9 +5,9 @@ import pytest
 # MIST imports.
 from mist.models.model_registry import (
     MODEL_REGISTRY,
-    register_model,
     get_model_from_registry,
     list_registered_models,
+    register_model,
 )
 
 

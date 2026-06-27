@@ -8,11 +8,12 @@ from typing import Any
 import ants
 import numpy as np
 import pandas as pd
+
 from mist.analyze_data import analyzer_utils
 from mist.evaluation import evaluation_utils
 from mist.metrics.metrics_registry import get_metric
 from mist.utils import progress_bar
-from mist.utils.console import print_warning, print_success, print_error
+from mist.utils.console import print_error, print_success, print_warning
 
 
 class Evaluator:

@@ -1,18 +1,19 @@
 """Tests for mist.analyze_data.analyze_utils."""
 
 import logging
-from typing import Any
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from typing import Any
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
 import pytest
 import torch
 
+from mist.analyze_data import analyzer_constants as constants
+
 # MIST imports.
 from mist.analyze_data import analyzer_utils as au
-from mist.analyze_data import analyzer_constants as constants
 from mist.models.nnunet.nnunet_utils import get_unet_params
 
 _C = constants.AnalyzeConstants()

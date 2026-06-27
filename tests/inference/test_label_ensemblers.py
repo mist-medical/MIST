@@ -5,14 +5,13 @@ import pytest
 import SimpleITK as sitk
 
 from mist.inference.label_ensemblers.base import AbstractLabelEnsembler
-from mist.inference.label_ensemblers.staple import STAPLEEnsembler
-from mist.inference.label_ensemblers.majority_vote import MajorityVoteEnsembler
 from mist.inference.label_ensemblers.label_ensembler_registry import (
     get_label_ensembler,
     list_label_ensemblers,
     register_label_ensembler,
 )
-
+from mist.inference.label_ensemblers.majority_vote import MajorityVoteEnsembler
+from mist.inference.label_ensemblers.staple import STAPLEEnsembler
 
 # ---------------------------------------------------------------------------
 # Helpers

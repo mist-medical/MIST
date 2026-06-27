@@ -1,6 +1,7 @@
 """Constants for MIST data preprocessing."""
 
 import dataclasses
+
 import numpy as np
 
 

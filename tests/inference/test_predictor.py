@@ -2,6 +2,7 @@
 
 import pytest
 import torch
+
 from mist.inference.predictor import Predictor
 
 

@@ -1,12 +1,11 @@
 """Tests for the transform registry in MIST postprocessing module."""
 
-import pytest
 import numpy as np
+import pytest
 
 # MIST imports.
 from mist.postprocessing import transform_registry as registry
 from mist.postprocessing.postprocessing_constants import PostprocessingConstants as pc
-
 
 # ---------------------------------------------------------------------------
 # describe_transforms

@@ -16,17 +16,17 @@ Implementation Note:
     complex loss hierarchies (like SegmentationLoss -> Dice -> DiceCELoss).
 """
 
-from collections.abc import Sequence
 import math
 import warnings
+from collections.abc import Sequence
 
 import torch
 from torch import nn
 from torch.nn import functional as F
 
 from mist.loss_functions.loss_registry import register_loss
-from mist.loss_functions.losses.dice_cross_entropy import DiceCELoss
 from mist.loss_functions.losses.cl_dice import CLDice
+from mist.loss_functions.losses.dice_cross_entropy import DiceCELoss
 
 
 class SurfaceDilationLogic(nn.Module):

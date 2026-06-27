@@ -1,11 +1,11 @@
 """Registry for segmentation metrics used in evaluation."""
 
 from abc import ABC, abstractmethod
+
 import numpy as np
 
 # MIST imports.
-from mist.metrics import segmentation_metrics
-from mist.metrics import lesion_wise_metrics
+from mist.metrics import lesion_wise_metrics, segmentation_metrics
 from mist.metrics.metrics_constants import LesionWiseMetricsConstants
 
 

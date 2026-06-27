@@ -2,12 +2,13 @@
 
 import pytest
 
+from mist.models.nnunet.mist_nnunet import NNUNet
+
 # MIST imports.
 from mist.models.nnunet.nnunet_registry import (
     create_nnunet,
     create_nnunet_pocket,
 )
-from mist.models.nnunet.mist_nnunet import NNUNet
 
 
 @pytest.fixture

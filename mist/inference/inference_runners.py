@@ -14,12 +14,12 @@ import numpy as np
 import pandas as pd
 import torch
 
-from mist.utils import progress_bar, io
-from mist.utils.console import print_section_header, print_error, print_success
 from mist.inference import inference_utils
 from mist.inference.inference_constants import InferenceConstants as ic
 from mist.inference.predictor import Predictor
 from mist.models import model_loader
+from mist.utils import io, progress_bar
+from mist.utils.console import print_error, print_section_header, print_success
 
 # DALI is a training-only dependency (nvidia-dali-cuda120). Guard the import
 # so that inference_runners can be imported on CPU-only machines where only
@@ -29,11 +29,10 @@ try:
 except ImportError:
     dali_loader = None  # type: ignore[assignment]
 from mist.inference.ensemblers.ensembler_registry import get_ensembler
-from mist.inference.tta.strategies import get_strategy
 from mist.inference.inferers.inferer_registry import get_inferer
+from mist.inference.tta.strategies import get_strategy
 from mist.postprocessing.postprocessor import Postprocessor
-from mist.preprocessing import preprocess
-from mist.preprocessing import preprocessing_utils
+from mist.preprocessing import preprocess, preprocessing_utils
 from mist.training import training_utils
 
 

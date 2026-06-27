@@ -1,6 +1,7 @@
 """Registry for optimizers used in training."""
 
 from collections.abc import Callable, Iterable
+
 import torch
 from torch.optim import Optimizer
 

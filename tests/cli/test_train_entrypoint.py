@@ -3,13 +3,13 @@
 import argparse
 import json
 from pathlib import Path
+
 import pandas as pd
 import pytest
 
 # MIST imports.
 import mist.cli.train_entrypoint as entry
 from mist.utils import console as console_mod
-
 
 # =============================================================================
 # Helpers and minimal patching for ArgParser.

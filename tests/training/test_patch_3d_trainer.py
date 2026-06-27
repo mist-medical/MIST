@@ -3,17 +3,19 @@
 import json
 from contextlib import contextmanager
 from pathlib import Path
-from unittest.mock import patch
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import patch
+
 import pandas as pd
 import pytest
 import torch
 from torch import nn
 
+from mist.data_loading import dali_loader as dl
+
 # MIST imports.
 from mist.training.trainers import base_trainer as bt
-from mist.data_loading import dali_loader as dl
 from mist.training.trainers.patch_3d_trainer import Patch3DTrainer
 
 

@@ -17,8 +17,8 @@ import numpy as np
 import pandas as pd
 import rich
 
-from mist.utils import io as io_utils
 from mist.analyze_data import data_dump_utils
+from mist.utils import io as io_utils
 
 
 class DataDumper:

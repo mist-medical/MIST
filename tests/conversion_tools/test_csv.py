@@ -2,17 +2,19 @@
 
 import json
 import shutil
+
 import pandas as pd
 import pytest
 
-# MIST imports.
-from mist.utils import io, progress_bar
 from mist.conversion_tools import conversion_utils
 from mist.conversion_tools.csv import (
     _validate_csv_columns,
     convert_csv,
     copy_csv_data,
 )
+
+# MIST imports.
+from mist.utils import io, progress_bar
 from tests.conversion_tools.helpers import DummyProgressBar
 
 

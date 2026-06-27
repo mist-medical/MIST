@@ -1,8 +1,8 @@
 """Abstract base class for all inferers in MIST."""
 
 from abc import ABC, abstractmethod
-from typing import Any
 from collections.abc import Callable
+from typing import Any
 
 import torch
 

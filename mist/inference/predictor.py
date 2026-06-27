@@ -5,10 +5,10 @@ from collections.abc import Callable
 
 import torch
 
-from mist.inference.inferers.base import AbstractInferer
 from mist.inference.ensemblers.base import AbstractEnsembler
-from mist.inference.tta.transforms import AbstractTransform
 from mist.inference.inference_utils import get_default_device
+from mist.inference.inferers.base import AbstractInferer
+from mist.inference.tta.transforms import AbstractTransform
 
 
 class Predictor:

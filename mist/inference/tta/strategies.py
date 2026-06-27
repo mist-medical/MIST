@@ -8,8 +8,8 @@ then undergo an inverse transformation to obtain the final prediction.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, TypeVar
 from collections.abc import Callable
+from typing import Any, TypeVar
 
 from mist.inference.tta.transforms import AbstractTransform, get_transform
 

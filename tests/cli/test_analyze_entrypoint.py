@@ -1,11 +1,11 @@
 """Tests for the analyze command entrypoint."""
 
 import argparse
+
 import pytest
 
 # MIST imports.
 import mist.cli.analyze_entrypoint as entry
-
 
 # ============================================================================
 # Helpers.
