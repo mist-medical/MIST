@@ -35,7 +35,7 @@ jobs:
 
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # When triggered by the release publish workflow, check out the exact
           # commit that was released so the image matches the PyPI wheel rather
