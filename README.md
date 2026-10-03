@@ -183,7 +183,7 @@ Full documentation, including configuration reference and advanced topics, is at
   probability-level and parallel ensembling, and the removal of the ANTs
   dependency. `pip install --upgrade mist-medical` to get it, or
   `pip install --upgrade "mist-medical[dali]"` for DALI-accelerated data loading
-  on NVIDIA GPUs.
+  on NVIDIA GPUs (highly recommended).
 - September 2026 — **CPU and AMD ROCm training support** — the full pipeline,
   including `mist_train`, now runs on CPU-only machines and AMD ROCm GPUs via
   a new generic, pure-PyTorch data loader, auto-selected whenever NVIDIA
