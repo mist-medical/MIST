@@ -177,6 +177,13 @@ Full documentation, including configuration reference and advanced topics, is at
 
 ## What's New
 
+- October 2026 — **MIST 2.3.0, the first stable release** — MIST drops its
+  release-candidate tag. 2.3.0 rolls up everything below since 2.0.2-rc: CPU and
+  AMD ROCm training, `mist_finalize` for per-fold distributed training,
+  probability-level and parallel ensembling, and the removal of the ANTs
+  dependency. `pip install --upgrade mist-medical` to get it, or
+  `pip install --upgrade "mist-medical[dali]"` for DALI-accelerated data loading
+  on NVIDIA GPUs (highly recommended).
 - September 2026 — **CPU and AMD ROCm training support** — the full pipeline,
   including `mist_train`, now runs on CPU-only machines and AMD ROCm GPUs via
   a new generic, pure-PyTorch data loader, auto-selected whenever NVIDIA
